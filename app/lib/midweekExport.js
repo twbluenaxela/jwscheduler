@@ -417,10 +417,13 @@ export function renderWeekToCanvas(week, getAssign) {
   if (!ctx) throw new Error('無法建立繪圖畫布。');
 
   const contentWidth = EXPORT_WIDTH - LEFT - RIGHT;
-  const timeWidth = 130;
-  const assignWidth = 300;
-  const gap = 26;
-  const itemWidth = contentWidth - timeWidth - assignWidth - gap * 3;
+  const innerPad = 38;
+  const innerRight = 30;
+  const timeCol = 110;
+  const metaCol = 190;
+  const assignCol = 270;
+  const colGap = 20;
+  const itemCol = contentWidth - innerPad - innerRight - timeCol - metaCol - assignCol - colGap * 2;
 
   const titleFont = '700 24px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
   const metaFont = '600 17px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
@@ -428,11 +431,11 @@ export function renderWeekToCanvas(week, getAssign) {
 
   const rowHeights = rows.map((row) => {
     ctx.font = titleFont;
-    const titleLines = wrapText(ctx, row.item, itemWidth).slice(0, 2);
+    const titleLines = wrapText(ctx, row.item, itemCol).slice(0, 2);
     ctx.font = metaFont;
-    const metaLines = wrapText(ctx, row.meta || '', itemWidth * 0.55).slice(0, 2);
+    const metaLines = wrapText(ctx, row.meta || '', metaCol).slice(0, 2);
     ctx.font = assignFont;
-    const assignLines = wrapText(ctx, row.assign || '', assignWidth).slice(0, 2);
+    const assignLines = wrapText(ctx, row.assign || '', assignCol).slice(0, 2);
     const titleHeight = Math.max(1, titleLines.length) * 30;
     const metaHeight = Math.max(1, metaLines.length) * 22;
     const assignHeight = Math.max(1, assignLines.length) * 24;
@@ -548,10 +551,10 @@ export function renderWeekToCanvas(week, getAssign) {
     drawRoundedRect(ctx, cardX + 18, rowY, cardW - 36, rowHeight, 18);
     ctx.stroke();
 
-    const timeX = cardX + 38;
-    const itemX = timeX + timeWidth;
-    const metaX = itemX + itemWidth + gap;
-    const assignX = metaX + assignWidth + gap;
+    const timeX = cardX + innerPad;
+    const itemX = timeX + timeCol;
+    const metaX = itemX + itemCol + colGap;
+    const assignX = metaX + metaCol + colGap;
 
     ctx.font = '700 18px "SFMono-Regular", "Roboto Mono", "Noto Sans TC", monospace';
     ctx.fillStyle = '#8c877f';
@@ -559,7 +562,7 @@ export function renderWeekToCanvas(week, getAssign) {
 
     ctx.fillStyle = '#211f1c';
     ctx.font = '700 23px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-    const itemLines = wrapText(ctx, row.item || '', itemWidth).slice(0, 2);
+    const itemLines = wrapText(ctx, row.item || '', itemCol).slice(0, 2);
     itemLines.forEach((line, lineIndex) => {
       ctx.fillText(line, itemX, rowY + 28 + lineIndex * 30);
     });
@@ -567,16 +570,16 @@ export function renderWeekToCanvas(week, getAssign) {
     if (row.meta) {
       ctx.fillStyle = '#8c877f';
       ctx.font = '600 17px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-      const metaLines = wrapText(ctx, row.meta, itemWidth * 0.65).slice(0, 2);
+      const metaLines = wrapText(ctx, row.meta, metaCol).slice(0, 2);
       metaLines.forEach((line, lineIndex) => {
-        ctx.fillText(line, metaX - 4, rowY + 28 + lineIndex * 22);
+        ctx.fillText(line, metaX, rowY + 28 + lineIndex * 22);
       });
     }
 
     if (row.assign) {
       ctx.fillStyle = '#2f6f8f';
       ctx.font = '700 18px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-      const assignLines = wrapText(ctx, row.assign, assignWidth).slice(0, 2);
+      const assignLines = wrapText(ctx, row.assign, assignCol).slice(0, 2);
       assignLines.forEach((line, lineIndex) => {
         ctx.fillText(line, assignX, rowY + 28 + lineIndex * 24);
       });

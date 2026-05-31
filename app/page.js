@@ -102,10 +102,31 @@ export default function App() {
           {page === 'people' && <PeoplePage />}
           {page === 'import' && (
             <ImportPage
+              existingWeeks={midweekWeeks}
               onImportWeeks={(weeks) => {
-                setMidweekWeeks(weeks);
+                setMidweekWeeks((prev) => {
+                  const result = [...prev];
+                  let nextId = Math.max(...prev.map((w) => (typeof w.id === 'number' ? w.id : 0))) + 1;
+                  for (const w of weeks) {
+                    const idx = result.findIndex((e) => e.date === w.date);
+                    if (idx >= 0) {
+                      result[idx] = { ...w, id: result[idx].id };
+                    } else {
+                      result.push({ ...w, id: nextId++ });
+                    }
+                  }
+                  result.sort((a, b) => {
+                    const parse = (d) => { const m = String(d ?? '').match(/(\d+)月\s*(\d+)日/); return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0; };
+                    return parse(a.date) - parse(b.date);
+                  });
+                  return result;
+                });
                 setWeek(0);
                 setPage('meetings');
+              }}
+              onResetWeeks={() => {
+                setMidweekWeeks(seedWeeks);
+                setWeek(0);
               }}
             />
           )}

@@ -63,12 +63,18 @@ function WeekReviewCard({ week, idx }) {
   );
 }
 
-export default function ImportPage({ onImportWeeks }) {
+export default function ImportPage({ onImportWeeks, onResetWeeks, existingWeeks = [] }) {
   const [stage, setStage] = useState('upload'); // upload | parsing | review | done
   const [parsedWeeks, setParsedWeeks] = useState([]);
   const [error, setError] = useState(null);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef(null);
+
+  const existingDates = new Set(existingWeeks.map((w) => w.date));
+  const mergeStats = {
+    update: parsedWeeks.filter((w) => existingDates.has(w.date)).length,
+    add: parsedWeeks.filter((w) => !existingDates.has(w.date)).length,
+  };
 
   const processFile = useCallback(async (file) => {
     if (!file) return;
@@ -195,7 +201,10 @@ export default function ImportPage({ onImportWeeks }) {
                 解析完成 — 找到 {parsedWeeks.length} 週節目
               </div>
               <div className="rev-stage__sub">
-                請確認節目內容正確，然後點選「匯入」套用至編排系統
+                {mergeStats.update > 0 && <span>更新 {mergeStats.update} 週</span>}
+                {mergeStats.update > 0 && mergeStats.add > 0 && <span>　·　</span>}
+                {mergeStats.add > 0 && <span>新增 {mergeStats.add} 週</span>}
+                {mergeStats.update === 0 && mergeStats.add === 0 && <span>請確認節目內容正確，然後點選「匯入」套用至編排系統</span>}
               </div>
             </div>
             <div className="rev-stage__acts">
@@ -220,9 +229,27 @@ export default function ImportPage({ onImportWeeks }) {
           <div className="imp-done__ic">✓</div>
           <div className="imp-done__title">匯入成功！</div>
           <div className="imp-done__sub">
-            已載入 {parsedWeeks.length} 週節目。前往「聚會」頁面開始指派人員。
+            {mergeStats.update > 0 && `更新 ${mergeStats.update} 週、`}
+            {`新增 ${mergeStats.add} 週節目。可繼續上傳其他期手冊，資料會自動合併。`}
           </div>
-          <button className="btn" onClick={handleReset}>再次匯入</button>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn--primary" onClick={handleReset}>再次匯入</button>
+            {onResetWeeks && (
+              <button className="btn" onClick={() => { onResetWeeks(); handleReset(); }}>
+                重置為示範資料
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── RESET FOOTER (always visible on upload screen) ── */}
+      {stage === 'upload' && onResetWeeks && existingWeeks.length > 0 && (
+        <div className="imp-reset-row">
+          <button className="btn btn--ghost" onClick={() => { onResetWeeks(); }}>
+            重置為示範資料
+          </button>
+          <span className="imp-reset-label">目前已載入 {existingWeeks.length} 週</span>
         </div>
       )}
     </section>

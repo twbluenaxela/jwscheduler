@@ -137,7 +137,7 @@ body { padding-bottom: 64px; }
 .toolbar__spacer { flex: 1; }
 
 /* ── Midweek container: nav strip + card as one unit ── */
-.mw-container { max-width: 880px; }
+.mw-container { max-width: 880px; width: 100%; }
 .mw-navstrip {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border: 1px solid var(--line);
@@ -145,6 +145,7 @@ body { padding-bottom: 64px; }
   padding: 10px 14px;
 }
 .mw-container .card {
+  width: 100%;
   border-top: none;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
@@ -847,7 +848,11 @@ body.editing .week-edit__input { background: #fff; }
 .imp-done { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 60px 20px; text-align: center; }
 .imp-done__ic { font-size: 48px; color: #2f7a4d; }
 .imp-done__title { font-size: 20px; font-weight: 800; }
-.imp-done__sub { font-size: 14px; color: var(--ink-2); font-weight: 600; max-width: 360px; }
+.imp-done__sub { font-size: 14px; color: var(--ink-2); font-weight: 600; max-width: 420px; }
+.imp-reset-row { display: flex; align-items: center; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.imp-reset-label { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.btn--ghost { background: transparent; border-color: var(--line); color: var(--ink-2); }
+.btn--ghost:hover { background: var(--surface-2); color: var(--ink-1); }
 
 @media (max-width: 860px) {
   .imp-grid { grid-template-columns: 1fr; }

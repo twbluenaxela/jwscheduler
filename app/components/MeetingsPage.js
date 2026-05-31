@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import MidweekWeek from './MidweekWeek';
 import WeekendView from './WeekendView';
 import {
-  copyWeekImageToClipboard,
-  downloadWeekJpeg,
+  getMidweekExportFilename,
   downloadWeekXlsx,
   openWeekPrintWindow,
 } from '../lib/midweekExport';
@@ -84,15 +83,28 @@ function WeekPicker({ weeks, currentWeek, onSelect }) {
   );
 }
 
-function ExportMenu({ week, getAssign, exportOpen, setExportOpen, menuRef }) {
+function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, menuRef }) {
   const handleExport = async (type) => {
     if (!week) return;
     setExportOpen(false);
     try {
+      const captureOpts = { pixelRatio: 2, skipFonts: false };
       if (type === 'jpg') {
-        await downloadWeekJpeg(week, getAssign);
+        const { toJpeg } = await import('html-to-image');
+        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = getMidweekExportFilename(week, 'jpg');
+        a.click();
       } else if (type === 'copy') {
-        await copyWeekImageToClipboard(week, getAssign);
+        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+          throw new Error('目前瀏覽器不支援圖片剪貼簿。');
+        }
+        const { toPng } = await import('html-to-image');
+        const dataUrl = await toPng(captureRef.current, captureOpts);
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       } else if (type === 'xlsx') {
         await downloadWeekXlsx(week, getAssign);
       } else if (type === 'pdf' || type === 'print') {
@@ -143,6 +155,7 @@ export default function MeetingsPage({
   getAssign, openSheet, updateMidweekWeek,
 }) {
   const menuRef = useRef(null);
+  const captureRef = useRef(null);
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -184,6 +197,7 @@ export default function MeetingsPage({
             <ExportMenu
               week={midweekWeeks[week]}
               getAssign={getAssign}
+              captureRef={captureRef}
               exportOpen={exportOpen}
               setExportOpen={setExportOpen}
               menuRef={menuRef}
@@ -209,6 +223,7 @@ export default function MeetingsPage({
             getAssign={getAssign}
             openSheet={openSheet}
             updateMidweekWeek={updateMidweekWeek}
+            cardRef={captureRef}
           />
         </div>
       )}

@@ -161,7 +161,7 @@ function PartRow({
   );
 }
 
-export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek }) {
+export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, cardRef }) {
   const wId = `mw${week.id}`;
   const ctx = week.date;
   const [draftWeek, setDraftWeek] = useState(week);
@@ -186,7 +186,7 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
   };
 
   return (
-    <article className="card">
+    <article className="card" ref={cardRef}>
       <div className="mw-head">
         <div className="mw-head__date">
           <TextField
