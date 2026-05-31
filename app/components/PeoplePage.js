@@ -1,6 +1,6 @@
 'use client';
-import { useMemo, useState } from 'react';
-import { midweekWeeks, peopleData, weekendData } from '../data/index';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { getToken } from '../lib/auth-context';
 
 const QUAL_OPTIONS = [
   '主席',
@@ -23,16 +23,7 @@ const OFFICE_OPTIONS = {
 
 const DEFAULT_OFFICE = '傳道員';
 
-function clonePeople() {
-  return peopleData.map((person, index) => ({
-    ...person,
-    id: `person-${index + 1}`,
-    appt: person.appt && person.appt !== '—' ? person.appt : DEFAULT_OFFICE,
-    recent: person.recent ?? [],
-  }));
-}
-
-function collectUpcomingAssignments(name) {
+function collectUpcomingAssignments(name, midweekWeeks, weekendRows) {
   const items = [];
 
   midweekWeeks.forEach((week) => {
@@ -62,7 +53,7 @@ function collectUpcomingAssignments(name) {
     });
   });
 
-  weekendData.forEach((row) => {
+  weekendRows.forEach((row) => {
     if (row.type === 'event') return;
     if (row.speaker === name) items.push({ date: row.date, label: '公眾演講', context: row.topic });
     if (row.chair === name) items.push({ date: row.date, label: '主席', context: row.topic });
@@ -76,8 +67,8 @@ function collectUpcomingAssignments(name) {
 
 function createBlankPerson(nextId) {
   return {
-    id: `person-${nextId}`,
-    name: '',
+    id: `new-${nextId}`,
+    name: `未命名人員 ${nextId}`,
     g: 'M',
     appt: DEFAULT_OFFICE,
     quals: [],
@@ -85,11 +76,13 @@ function createBlankPerson(nextId) {
   };
 }
 
-export default function PeoplePage() {
-  const [people, setPeople] = useState(() => clonePeople());
+export default function PeoplePage({ people, setPeople, midweekWeeks = [], weekendRows = [], loading = false }) {
   const [query, setQuery] = useState('');
-  const [selectedId, setSelectedId] = useState(() => `person-1`);
-  const [nextId, setNextId] = useState(peopleData.length + 1);
+  const [selectedId, setSelectedId] = useState('');
+  const [nextId, setNextId] = useState(1);
+  const [error, setError] = useState('');
+  const [localName, setLocalName] = useState('');
+  const prevSelectedIdRef = useRef('');
 
   const filteredPeople = useMemo(() => {
     return people.filter((person) => !query || person.name.includes(query));
@@ -97,14 +90,38 @@ export default function PeoplePage() {
 
   const selectedPerson = people.find((person) => person.id === selectedId) ?? filteredPeople[0] ?? people[0];
 
+  // Sync localName only when the selected person changes, not on every API response
+  useEffect(() => {
+    const currentId = selectedPerson?.id ?? '';
+    if (prevSelectedIdRef.current !== currentId) {
+      prevSelectedIdRef.current = currentId;
+      setLocalName(selectedPerson?.name ?? '');
+    }
+  });
+
   const upcoming = useMemo(() => {
     if (!selectedPerson?.name) return [];
-    return collectUpcomingAssignments(selectedPerson.name);
-  }, [selectedPerson]);
+    return collectUpcomingAssignments(selectedPerson.name, midweekWeeks, weekendRows);
+  }, [selectedPerson, midweekWeeks, weekendRows]);
+
+  async function persistPerson(person, changes) {
+    if (!person || String(person.id).startsWith('new-')) return;
+    const token = await getToken();
+    const res = await fetch(`/api/people/${person.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '儲存人員失敗');
+    setPeople((prev) => prev.map((item) => (item.id === person.id ? data.person : item)));
+  }
 
   function updateSelected(changes) {
     if (!selectedPerson) return;
+    setError('');
     setPeople((prev) => prev.map((person) => (person.id === selectedPerson.id ? { ...person, ...changes } : person)));
+    persistPerson(selectedPerson, changes).catch((err) => setError(err.message));
   }
 
   function toggleQualification(qual) {
@@ -124,12 +141,32 @@ export default function PeoplePage() {
     });
   }
 
-  function addPerson() {
-    const fresh = createBlankPerson(nextId);
+  async function addPerson() {
+    setError('');
+    const names = new Set(people.map((person) => person.name));
+    let candidateId = nextId;
+    while (names.has(`未命名人員 ${candidateId}`)) candidateId += 1;
+
+    const fresh = createBlankPerson(candidateId);
     setPeople((prev) => [fresh, ...prev]);
     setSelectedId(fresh.id);
-    setNextId((value) => value + 1);
+    setNextId(candidateId + 1);
     setQuery('');
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/people', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(fresh),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '新增人員失敗');
+      setPeople((prev) => prev.map((person) => (person.id === fresh.id ? data.person : person)));
+      setSelectedId(data.person.id);
+    } catch (err) {
+      setPeople((prev) => prev.filter((person) => person.id !== fresh.id));
+      setError(err.message);
+    }
   }
 
   return (
@@ -154,9 +191,15 @@ export default function PeoplePage() {
         </div>
       </div>
 
+      {error && <div className="imp-error">{error}</div>}
+
       <div className="people-subtitle">
-        {query ? (
+        {loading ? (
+          <span>正在載入會眾人員資料…</span>
+        ) : query ? (
           <span>搜尋「{query}」· 找到 {filteredPeople.length} 位</span>
+        ) : people.length === 0 ? (
+          <span>目前這個會眾還沒有建立人員資料。</span>
         ) : (
           <span>以名單為核心的卡片檢視，適合快速查看資格與個人安排。</span>
         )}
@@ -214,8 +257,11 @@ export default function PeoplePage() {
                   <span className="field__label">姓名</span>
                   <input
                     className="field__input"
-                    value={selectedPerson.name}
-                    onChange={(e) => updateSelected({ name: e.target.value })}
+                    value={localName}
+                    onChange={(e) => setLocalName(e.target.value)}
+                    onBlur={() => {
+                      if (localName !== selectedPerson.name) updateSelected({ name: localName });
+                    }}
                     placeholder="輸入中文姓名"
                   />
                 </label>

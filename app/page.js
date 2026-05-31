@@ -30,6 +30,33 @@ function dateKey(dateStr) {
   return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0;
 }
 
+function parseChineseDate(dateStr) {
+  const m = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
+  if (!m) return null;
+  const mo = parseInt(m[1]), day = parseInt(m[2]);
+  const now = new Date();
+  let year = now.getFullYear();
+  if (mo < now.getMonth() + 1 - 6) year++;
+  else if (mo > now.getMonth() + 1 + 6) year--;
+  return new Date(year, mo - 1, day);
+}
+
+function findCurrentWeekIndex(weeks) {
+  if (!weeks.length) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let fallback = 0;
+  for (let i = 0; i < weeks.length; i++) {
+    const start = parseChineseDate(weeks[i].weekStart || weeks[i].date);
+    if (!start) continue;
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    if (today >= start && today <= end) return i;
+    if (start <= today) fallback = i;
+  }
+  return fallback;
+}
+
 function getEffectiveSchedule(weekStart, settings) {
   const key = dateKey(weekStart);
   for (const exc of settings.exceptions ?? []) {
@@ -146,6 +173,8 @@ export default function App() {
   const [week, setWeek] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [congSettings, setCongSettings] = useState({ dayOffset: 2, time: '19:30' });
+  const [people, setPeople] = useState([]);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem('jwscheduler_congSettings');
@@ -164,6 +193,45 @@ export default function App() {
   const [assignments, setAssignments] = useState({});
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!dbUser?.congregationId) return;
+    let cancelled = false;
+
+    async function loadWorkspace() {
+      setWorkspaceLoading(true);
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/congregations/data', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '載入會眾資料失敗');
+        if (cancelled) return;
+
+        setPeople(data.people ?? []);
+        const loadedWeeks = data.midweekWeeks ?? [];
+        setMidweekWeeks(loadedWeeks);
+        setWeek(findCurrentWeekIndex(loadedWeeks));
+        setWeekendRows(data.weekendRows ?? []);
+        nextWeekendId.current = (data.weekendRows ?? []).reduce((max, row) => Math.max(max, Number(row._id) || 0), 0) + 1;
+        if (data.congregation) {
+          setCongSettings({
+            dayOffset: data.congregation.meetingDayOffset ?? 2,
+            time: data.congregation.meetingTime ?? '19:30',
+            exceptions: data.congregation.exceptions ?? [],
+          });
+        }
+      } catch (err) {
+        if (!cancelled) setToast({ msg: err.message });
+      } finally {
+        if (!cancelled) setWorkspaceLoading(false);
+      }
+    }
+
+    loadWorkspace();
+    return () => { cancelled = true; };
+  }, [dbUser?.congregationId]);
 
   // Sync edit-mode body class for CSS
   useEffect(() => {
@@ -196,6 +264,18 @@ export default function App() {
     setWeekendRows(prev => prev.map(r => r._id === rowId ? { ...r, [field]: value } : r));
   }, []);
 
+  const saveImportedWeeks = useCallback(async (weeks) => {
+    const token = await getToken();
+    const res = await fetch('/api/midweek-weeks/import', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weeks }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '儲存匯入資料失敗');
+    return data.weeks ?? [];
+  }, []);
+
   const openSheet = useCallback((slotId, catKey, ctxLabel, currentName) => {
     setSheet({ slotId, catKey, ctxLabel, defaultName: currentName });
   }, []);
@@ -219,6 +299,32 @@ export default function App() {
   const sharedProps = { getAssign, openSheet, updateMidweekWeek };
   const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow };
 
+  const scheduleStats = (() => {
+    if (!midweekWeeks.length) return null;
+    const upcoming = midweekWeeks.slice(week);
+    let vacancies = 0;
+    for (const w of upcoming) {
+      const fixed = ['chairman', 'openPrayer', 'closePrayer'];
+      for (const key of fixed) {
+        if (!(assignments[`mw${w.id}_${key}`] ?? w[key] ?? '')) vacancies++;
+      }
+      for (const section of ['treasures', 'ministry', 'living']) {
+        for (const part of (w[section] ?? [])) {
+          const primary = assignments[`mw${w.id}_${part.id}_0`] ?? part.assign?.[0] ?? '';
+          if (!primary) vacancies++;
+        }
+      }
+    }
+    const currentWeek = midweekWeeks[week];
+    return {
+      weekCount: midweekWeeks.length,
+      nextDate: currentWeek?.date ?? null,
+      meetingTime: congSettings.time ?? '19:30',
+      vacancies,
+      upcomingWeeks: upcoming.length,
+    };
+  })();
+
   // ── Auth gating ──────────────────────────────────────────────────────────────
   if (firebaseUser === undefined) {
     return <div className="login-shell"><div className="login-card" style={{alignItems:'center'}}><div className="spin" style={{fontSize:28}}>⟳</div><div className="login-brand__sub">載入中…</div></div></div>;
@@ -237,7 +343,7 @@ export default function App() {
   return (
     <>
       <div className="shell">
-        <Sidebar page={page} setPage={setPage} congName={congName} />
+        <Sidebar page={page} setPage={setPage} congName={congName} scheduleStats={scheduleStats} />
         <TopBar page={page} />
         <div className="content">
           {page === 'meetings' && (
@@ -248,12 +354,27 @@ export default function App() {
               editMode={editMode} setEditMode={setEditMode}
               exportOpen={exportOpen} setExportOpen={setExportOpen}
               weekendFilter={weekendFilter} setWeekendFilter={setWeekendFilter}
+              {...weekendProps}
               setPage={setPage}
               {...sharedProps}
             />
           )}
-          {page === 'overview' && <OverviewPage />}
-          {page === 'people' && <PeoplePage />}
+          {page === 'overview' && (
+            <OverviewPage
+              midweekWeeks={midweekWeeks}
+              weekendRows={weekendRows}
+              loading={workspaceLoading}
+            />
+          )}
+          {page === 'people' && (
+            <PeoplePage
+              people={people}
+              setPeople={setPeople}
+              midweekWeeks={midweekWeeks}
+              weekendRows={weekendRows}
+              loading={workspaceLoading}
+            />
+          )}
           {page === 'settings' && (
             <SettingsPage
               congSettings={congSettings}
@@ -280,38 +401,34 @@ export default function App() {
                   return { ...w, date: shiftDate(w.weekStart, dayOffset), weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}` };
                 }));
               }}
-              onImportWeeks={(weeks) => {
+              onImportWeeks={async (weeks) => {
                 const adjusted = weeks.map(w => {
                   const weekStart = w.date; // EPUB date is always the Monday
                   const { dayOffset, time } = getEffectiveSchedule(weekStart, congSettings);
                   return { ...w, weekStart, date: shiftDate(weekStart, dayOffset), weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}` };
                 });
-                setMidweekWeeks((prev) => {
-                  const result = [...prev];
-                  let nextId = Math.max(...prev.map((w) => (typeof w.id === 'number' ? w.id : 0))) + 1;
-                  for (const w of adjusted) {
-                    const idx = result.findIndex((e) => e.date === w.date);
-                    if (idx >= 0) {
-                      result[idx] = { ...w, id: result[idx].id };
-                    } else {
-                      result.push({ ...w, id: nextId++ });
-                    }
-                  }
-
-                  result.sort((a, b) => {
-                    const parse = (d) => { const m = String(d ?? '').match(/(\d+)月\s*(\d+)日/); return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0; };
-                    return parse(a.date) - parse(b.date);
-                  });
-                  return result;
+                const savedWeeks = await saveImportedWeeks(adjusted);
+                const merged = [...midweekWeeks];
+                for (const w of savedWeeks) {
+                  const idx = merged.findIndex((e) => (
+                    e.id === w.id || (w.weekStart && e.weekStart === w.weekStart) || e.date === w.date
+                  ));
+                  if (idx >= 0) merged[idx] = w;
+                  else merged.push(w);
+                }
+                merged.sort((a, b) => {
+                  const parse = (d) => { const m = String(d ?? '').match(/(\d+)月\s*(\d+)日/); return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0; };
+                  return parse(a.date) - parse(b.date);
                 });
-                setWeek(0);
+                setMidweekWeeks(merged);
+                setWeek(findCurrentWeekIndex(merged));
                 setPage('meetings');
               }}
               onResetWeeks={() => {
                 setMidweekWeeks(seedWeeks);
                 setWeekendRows(seedWeekendData.map((r, i) => ({ ...r, _id: i })));
                 nextWeekendId.current = seedWeekendData.length;
-                setWeek(0);
+                setWeek(findCurrentWeekIndex(seedWeeks));
               }}
             />
           )}
@@ -326,6 +443,7 @@ export default function App() {
           getAssign={getAssign}
           onPick={onPick}
           onClose={() => setSheet(null)}
+          people={people}
         />
       )}
 

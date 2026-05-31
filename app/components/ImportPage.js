@@ -83,6 +83,7 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
   const [parsedWeeks, setParsedWeeks] = useState([]);
   const [error, setError] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
 
   const existingDates = new Set(existingWeeks.map((w) => w.date));
@@ -120,9 +121,17 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
     processFile(e.dataTransfer.files?.[0]);
   };
 
-  const handleConfirm = () => {
-    onImportWeeks?.(parsedWeeks);
-    setStage('done');
+  const handleConfirm = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onImportWeeks?.(parsedWeeks);
+      setStage('done');
+    } catch (err) {
+      setError(err.message ?? '匯入失敗');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleReset = () => {
@@ -289,11 +298,13 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
             </div>
             <div className="rev-stage__acts">
               <button className="btn" onClick={handleReset}>取消</button>
-              <button className="btn btn--primary" onClick={handleConfirm}>
-                匯入 {parsedWeeks.length} 週
+              <button className="btn btn--primary" onClick={handleConfirm} disabled={saving}>
+                {saving ? '儲存中…' : `匯入 ${parsedWeeks.length} 週`}
               </button>
             </div>
           </div>
+
+          {error && <div className="imp-error">{error}</div>}
 
           <div className="rvc-list">
             {parsedWeeks.map((week, i) => (

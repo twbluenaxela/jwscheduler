@@ -90,7 +90,9 @@ body { padding-bottom: 64px; }
   font-size: 12.5px; color: var(--ink-2); line-height: 1.45;
 }
 .sidenav__health b { color: var(--special); }
+.sidenav__health--ok b { color: #3a8c5c; }
 .health-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--special); margin-top: 4px; flex-shrink: 0; box-shadow: 0 0 0 3px rgba(194,49,35,.15); }
+.health-dot--ok { background: #3a8c5c; box-shadow: 0 0 0 3px rgba(58,140,92,.15); }
 
 .content { flex: 1; min-width: 0; padding: 26px 30px 40px; }
 .page-view { display: none; }
@@ -923,6 +925,8 @@ body.editing .week-edit__input { background: #fff; }
 .settings-invite { flex-direction: row !important; align-items: center; gap: 12px; }
 .settings-invite__url { flex: 1; font-size: 12px; font-family: var(--mono); color: var(--ink-2); word-break: break-all; }
 .settings-hint { font-size: 12px; color: var(--ink-3); font-weight: 600; margin: 6px 0 0; }
+.settings-save-ok { font-size: 13px; font-weight: 700; color: #3a8c5c; }
+.settings-save-err { font-size: 13px; font-weight: 700; color: var(--special); }
 .settings-members { display: flex; flex-direction: column; gap: 8px; max-width: 600px; }
 .settings-member { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
 .settings-member__avatar { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 16px; font-weight: 800; display: grid; place-items: center; flex-shrink: 0; }

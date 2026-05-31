@@ -120,7 +120,7 @@ These apply when Claude Code (this tool) works on this repo.
 
 ### State ownership
 
-All interactive state stays flat in `app/page.js`. Do not introduce React Context, Zustand, or any other state manager until Phase 2 backend is wired. Two local-state exceptions are fine:
+All interactive state stays flat in `app/page.js`. Do not introduce React Context, Zustand, or any other state manager. Two local-state exceptions are fine:
 - `ImportPage` owns `stage` / `parsedWeeks` / `error` — transient import state.
 - `WeekPicker` (inside `MeetingsPage.js`) owns its `open` boolean — ephemeral UI state.
 
@@ -152,17 +152,17 @@ Per `meeting-scheduler-plan.md §3`: never auto-commit any import. EPUB, PDF, im
 
 A real EPUB is at `sample/mwb_CH_202609.epub` (2026 Sept–Oct issue, Traditional Chinese). Use it to verify any parser changes before claiming they work. Run the dev server and test via the Import page UI — the parser runs in the browser so server-side scripts will not catch DOM-dependent bugs.
 
-### Phase 2 backend shape
+### Phase 2B backend shape (current)
 
-When the API is added, the import flow changes from:
+The import flow now saves to DB:
 ```
-parseEpub(file) → setMidweekWeeks(weeks)   [current: client state]
-```
-to:
-```
-POST /api/import/epub  multipart → server parses → saves ImportJob → returns jobId
-GET  /api/import/:jobId → returns parsed weeks for review UI
-POST /api/import/:jobId/confirm → writes WeeklyProgram rows to DB
+parseEpub(file) → review UI → onImportWeeks(weeks)
+  → POST /api/midweek-weeks/import  (saves MidweekWeek + Part rows)
+  → merged into midweekWeeks state
 ```
 
-The `ImportPage` component will call these endpoints instead of calling `parseEpub` directly. The `onImportWeeks` prop will be replaced by an API call. Keep this in mind when refactoring.
+`GET /api/congregations/data` is called on mount and returns `{ midweekWeeks, weekendRows, people, congregation }`. All three are set into React state; `week` index is auto-set to the current week via `findCurrentWeekIndex`.
+
+**Still using client state only (not yet persisted to DB):**
+- `assignments` — slot→name map; saving to DB is the next persistence milestone
+- Weekend row edits — inline edits are not yet written back to DB

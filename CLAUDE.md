@@ -6,13 +6,15 @@ Touch-friendly web app replacing the Excel scheduling workflow for 新屋 (Xinwu
 
 ## Stack
 
-- **Framework:** Next.js 15 (app router, `'use client'` root), React 19
-- **Language:** JavaScript (no TypeScript yet)
+- **Framework:** Next.js 16 (app router, `'use client'` root), React 19
+- **Language:** JavaScript (no TypeScript)
 - **Styling:** Single global CSS file (`app/globals.css`) — no CSS modules, no Tailwind
 - **Font:** Noto Sans TC via `next/font/google`
-- **Data:** Seed data only (`app/data/index.js`) — no backend yet; imported EPUB weeks live in React state
+- **Auth:** Firebase (email/password + Google OAuth) — client SDK + Admin SDK
+- **Database:** Neon Postgres via Prisma 6 (`prisma-client-js`)
 - **EPUB parsing:** `jszip` (client-side unzip) + browser `DOMParser` — no server needed
-- **Deploy target:** fly.io + Postgres (Phase 2+)
+- **Image export:** `html-to-image` (DOM screenshot → JPG/PNG)
+- **Deploy target:** fly.io (Phase 3+)
 
 ---
 
@@ -20,36 +22,87 @@ Touch-friendly web app replacing the Excel scheduling workflow for 新屋 (Xinwu
 
 ```
 app/
-  page.js              — root component; all shared state lives here
-  layout.js            — font loading, html/body wrapper
+  page.js              — root component; auth gating + all shared state
+  layout.js            — AuthProvider wrapper, font loading, html/body
   globals.css          — full design system (tokens, all component styles)
+  login/
+    page.js            — Firebase login UI (email/password + Google)
+  join/[token]/
+    page.js            — Invite link handler (joins congregation via token)
+  api/
+    auth/sync/         — POST: upsert Firebase user into Postgres
+    congregations/     — POST: create congregation (caller becomes ADMIN)
+    congregations/join/— POST: join via inviteToken
+    congregations/settings/ — GET/PATCH: congregation settings (admin only)
+    congregations/data/— GET: load all congregation data (weeks, people, weekend rows)
+    midweek-weeks/import/ — POST: save imported weeks + parts to DB
+    people/            — GET: list members, POST: create member
+    people/[id]/       — PATCH: update member
+    users/me/          — PATCH: update current user's displayName
   data/
-    index.js           — seed data: midweekWeeks, weekendData, peopleData,
-                         overviewData, POOL, CATS, candidates()
+    index.js           — seed/demo data: midweekWeeks, weekendData, peopleData,
+                         overviewData, POOL, CATS
+                         CATS is used by AssignSheet; POOL is seed-only demo data
   lib/
-    epubParser.js      — client-side EPUB parser (JSZip + DOMParser)
-                         exports parseEpub(file) → week[] matching midweekWeeks shape
+    db.js              — Prisma singleton (PrismaClient, reused across hot reloads)
+    firebase-client.js — Firebase client SDK (auth, googleProvider)
+    firebase-admin.js  — Firebase Admin SDK (lazy init, verifyIdToken helper)
+    auth-context.js    — AuthProvider + useAuth() hook + getToken() helper
+    epubParser.js      — client-side EPUB parser; exports parseEpub(file) → week[]
+    midweekExport.js   — JPG/Excel/print export functions
   components/
-    Sidebar.js         — desktop left nav
+    Sidebar.js         — desktop left nav (shows congregation name + scheduleStats vacancy card)
     TopBar.js          — mobile top bar
     TabBar.js          — mobile bottom tab bar
-    MeetingsPage.js    — midweek/weekend tab switcher; owns WeekPicker + ExportMenu;
-                         midweek view wraps everything in .mw-container (toolbar +
-                         .mw-navstrip + MidweekWeek) so all right edges align
-    MidweekWeek.js     — single midweek week card with WhoSlot / PairSlot;
-                         renders cbsRef (book+chapter) inline on the CBS row
+    MeetingsPage.js    — midweek/weekend tab switcher + export menu
+    MidweekWeek.js     — single midweek week card (WhoSlot / PairSlot)
     WeekendView.js     — weekend schedule table
     OverviewPage.js    — month overview list
-    PeoplePage.js      — congregation member list
-    ImportPage.js      — EPUB import UI: upload → parse → review → commit
-                         accepts onImportWeeks(weeks[]) callback
-    AssignSheet.js     — bottom-sheet candidate picker (modal)
+    PeoplePage.js      — congregation member list; name input uses local state + onBlur to avoid race conditions on every-keystroke API calls
+    ImportPage.js      — EPUB import + congregation schedule settings
+    SettingsPage.js    — ⚙ congregation info, invite link, members, schedule
+    AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed data)
     Toast.js           — undo toast notification
+prisma/
+  schema.prisma        — Prisma schema (Congregation, User, MidweekWeek, Part,
+                         Assignment, WeekendRow, Person)
 sample/
-  mwb_CH_202609.epub   — sample JW workbook EPUB for local dev/testing
-meeting-scheduler-plan.md  — full product spec and architecture decisions
-agents.md              — Claude API integration plans and AI workflow notes
+  mwb_CH_202609.epub   — sample EPUB for local dev/testing
 ```
+
+---
+
+## Auth & multi-tenancy
+
+Every user belongs to one `Congregation`. The flow:
+
+1. Not logged in → `/login` (Firebase email/password or Google)
+2. Logged in, no congregation → Onboarding screen (create or join)
+3. Logged in, has congregation → Main app
+
+**`AuthProvider`** (in `layout.js`) listens to `onAuthStateChanged`, calls `POST /api/auth/sync` on every login to upsert the User row in Postgres, and exposes `{ firebaseUser, dbUser, setDbUser }` via `useAuth()`.
+
+**`getToken()`** — async helper that returns the current Firebase ID token. Used in every API call: `headers: { Authorization: 'Bearer <token>' }`.
+
+**Roles:** `ADMIN` (full access + settings) or `MEMBER` (assign only). First user to create a congregation is ADMIN.
+
+**Invite link:** `{origin}/join/{inviteToken}` — clicking joins the congregation after login.
+
+---
+
+## Prisma schema (key models)
+
+| Model | Key fields |
+|---|---|
+| `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON) |
+| `User` | `firebaseUid`, `email`, `displayName`, `role` (ADMIN/MEMBER), `congregationId` |
+| `MidweekWeek` | `congregationId`, `date`, `dateLabel`, `weekStart` (original EPUB Monday date), `weekdayPill`, songs, times |
+| `Part` | `weekId`, `partKey`, `section`, `partNum`, `title`, `dur`, `cat`, `roleLabel`, `cbsRef` |
+| `Assignment` | `slotId` (unique string key), `weekId`, `name` |
+| `WeekendRow` | `congregationId`, `date`, `type`, `speaker`, `chair`, `wt`, `read`, etc. |
+| `Person` | `congregationId`, `name`, `gender`, `appointment`, `tags[]`, `status` |
+
+All API routes export `dynamic = 'force-dynamic'` to prevent Next.js build-time execution.
 
 ---
 
@@ -57,53 +110,72 @@ agents.md              — Claude API integration plans and AI workflow notes
 
 | State | Type | Purpose |
 |---|---|---|
-| `page` | string | active nav page (`meetings` / `overview` / `people` / `import`) |
+| `page` | string | active nav page (`meetings` / `overview` / `people` / `import` / `settings`) |
 | `view` | string | meetings sub-tab (`midweek` / `weekend`) |
-| `week` | number | index into `midweekWeeks` array |
-| `midweekWeeks` | array | week objects — initialized from seed data, replaced on EPUB import |
+| `week` | number | index into `midweekWeeks` — auto-set to current week on load/import |
+| `midweekWeeks` | array | week objects — loaded from DB on mount, updated on EPUB import |
+| `weekendRows` | array | weekend schedule rows — loaded from DB on mount |
+| `people` | array | congregation members — loaded from DB on mount; passed to AssignSheet |
+| `congSettings` | object | `{ dayOffset, time, exceptions[] }` — persisted to localStorage; loaded from DB on settings page |
 | `editMode` | boolean | toggles inline contentEditable on WhoSlots |
-| `assignments` | `{[slotId]: name}` | overrides for all slots; persists across sheet opens |
-| `sheet` | object\|null | open AssignSheet config: `{slotId, catKey, ctxLabel, defaultName}` |
-| `toast` | object\|null | undo toast: `{msg, undo}` |
+| `assignments` | `{[slotId]: name}` | overrides for all slots |
+| `sheet` | object\|null | open AssignSheet config |
+| `toast` | object\|null | undo toast |
+| `scheduleStats` | object\|null | derived (not state) — vacancy summary passed to Sidebar; `null` when no weeks loaded |
 
-**`getAssign(slotId, defaultName)`** — reads from `assignments`, falls back to seed data default.
+**`scheduleStats`** is computed inline (IIFE) from `midweekWeeks`, `week`, `assignments`, and `congSettings`. It slices `midweekWeeks` from the current week index to the end and counts empty primary-assignment slots: `chairman`, `openPrayer`, `closePrayer`, and each part's `_0` slot. Shape: `{ weekCount, nextDate, meetingTime, vacancies, upcomingWeeks }`.
 
-**`openSheet(slotId, catKey, ctxLabel, currentName)`** — opens the candidate picker sheet.
+**Congregation settings** live in two places: `localStorage` (fast, offline) and the `Congregation` DB row (authoritative). The ⚙ Settings page syncs them: loading reads from DB and updates local state; saving PATCHes the API.
 
-**`onPick(slotId, name, prevName)`** — commits an assignment, closes the sheet, shows undo toast.
+---
+
+## Congregation schedule settings
+
+`congSettings.dayOffset` — days after Monday (EPUB always gives Monday dates):
+- 0 = 星期一, 1 = 星期二, 2 = 星期三 (default), 3 = 星期四, etc.
+
+`congSettings.exceptions[]` — override for a date range:
+```js
+{ id, fromMonth, fromDay, toMonth, toDay, dayOffset, time }
+```
+
+`getEffectiveSchedule(weekStart, congSettings)` — checks exceptions first, falls back to default.
+
+`shiftDate(dateStr, offsetDays)` — adds N days to a Chinese date string using JS Date (handles month boundaries).
+
+`parseChineseDate(dateStr)` — parses a Chinese date string to a JS `Date`, adjusting year for Dec/Jan boundary.
+
+`findCurrentWeekIndex(weeks)` — returns the index of the week containing today (Mon–Sun). Falls back to the last week that started before today. Called on DB load, EPUB import, and seed reset so the picker always opens on the current week.
+
+On EPUB import, each week's `date` is computed as `shiftDate(w.date, schedule.dayOffset)` and `weekStart` stores the original Monday date. "重新套用至所有週次" recomputes all imported weeks' dates from `weekStart`.
 
 ---
 
 ## Slot ID convention
 
-Slot IDs encode week + section + part position:
-
 ```
-mw{weekId}_{section}          e.g. mw0_chairman, mw0_openPrayer, mw0_closePrayer
-mw{weekId}_{partId}_0         e.g. mw0_t0_0  (single-person part)
-mw{weekId}_{partId}_0         e.g. mw0_m0_0  (student of a pair)
-mw{weekId}_{partId}_1         e.g. mw0_m0_1  (helper of a pair)
+mw{weekId}_{section}      e.g. mw0_chairman, mw0_openPrayer
+mw{weekId}_{partId}_0     e.g. mw0_t0_0  (single-person or student)
+mw{weekId}_{partId}_1     e.g. mw0_m0_1  (helper of a pair)
 ```
 
-The **week prefix** is always `slotId.split('_')[0]` (e.g. `mw0`). This is used to detect same-week assignments.
+Week prefix = `slotId.split('_')[0]` — used to detect same-week assignments.
 
 ---
 
 ## Data layer (`app/data/index.js`)
 
-**`POOL`** — array of all congregation members eligible for assignments:
-```js
-{ n: "姓名", g: "M"|"F", a: "長老"|"助理僕人"|"傳道員"|"", t: ["tag1","tag2",...] }
-```
+Seed/demo data only — not shown to new congregations by default. Accessible via "重置為示範資料" on the import page.
 
-**`CATS`** — maps `catKey` → category config:
-```js
-{ tag: "主席", g: "M"|"any", name: "顯示名稱" }
-```
+**`POOL`** — hardcoded demo members (used only by seed data reset, not by AssignSheet).
 
-**`candidates(catKey, jitter, spread)`** — filters POOL by category, weights by days since last assignment (hashed), sorts descending. `spread` (1–3) controls fairness strength. Returns:
+**`CATS`** — `catKey` → `{ tag, g, name }` mapping. This **is** used in production by `AssignSheet.js` to know which `quals` tag and gender filter to apply for each slot type.
+
+`AssignSheet` builds candidates from the live `people` state (loaded from DB), not from `POOL`. The `buildCandidates(people, catKey, jitter, spread)` function inside `AssignSheet.js` filters by `status !== 'inactive'`, matches `people[].quals` against `CATS[catKey].tag`, and weights by a hash-derived fairness score (days since last / load count — placeholder until real assignment history is tracked).
+
+**`people` shape** (from `/api/congregations/data`):
 ```js
-{ ...person, d: daysSince, w: weight, recent: bool, load: quarterLoad }
+{ id, name, g: "M"|"F", appt: "長老"|"助理僕人"|"傳道員"|"", quals: ["tag1",...], status: "active"|"inactive" }
 ```
 
 ---
@@ -111,90 +183,41 @@ The **week prefix** is always `slotId.split('_')[0]` (e.g. `mw0`). This is used 
 ## Design system (CSS tokens)
 
 ```css
---bg:        #ecebe7   /* page background */
---surface-1: #f5f4f1   /* card background */
---surface-2: #ece9e2   /* subtle fills */
---line:      #d9d5cc   /* borders */
---ink-1:     #1a1a1a   /* primary text */
---ink-2:     #5a5751   /* secondary text */
---ink-3:     #9c9790   /* muted text */
---accent:    #2f6f8f   /* interactive / recommended */
---accent-soft: rgba(47,111,143,.1)
---special:   #c23123   /* warnings / errors (red) */
+--bg:          #ecebe7   /* page background */
+--surface:     #ffffff   /* card background */
+--surface-2:   #f7f6f3   /* subtle fills */
+--line:        #e3e1db   /* borders */
+--ink:         #211f1c   /* primary text */
+--ink-2:       #57534d   /* secondary text */
+--ink-3:       #8c877f   /* muted text */
+--accent:      #2f6f8f   /* interactive / recommended */
+--accent-soft: #e7f0f3
+--special:     #c23123   /* warnings / errors */
 
-/* Section band colours */
---treasures: #6f6f6f
---ministry:  #b58a08
---living:    #8c2b22
+--treasures: #6f6f6f  --ministry: #b58a08  --living: #8c2b22
 ```
 
 ---
 
-## AssignSheet — candidate picker
+## Export (JPG / PDF / Excel)
 
-**Props:** `sheet`, `assignments`, `getAssign`, `onPick`, `onClose`
+JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM element (`cardRef` passed into `MidweekWeek`). This guarantees the export matches exactly what's on screen.
 
-**Key behaviours:**
-- Filters POOL by `catKey` eligibility and ranks by weighted fairness score
-- Shows current assignee (`is-cur` class + "目前" badge)
-- Shows people already assigned elsewhere **in the same week** (`is-used` class + red "本週已排" badge) — dimmed to 55% opacity but still selectable
-- "重新推薦" reshuffle adds jitter to weights for variety
-- "公平強度" slider controls `spread` exponent (1 = gentler, 3 = strongly prioritises long-absent)
-- Manual name input + Enter/指派 button for external speakers or unlisted names
-- Esc key closes; backdrop click closes
-
-**Same-week detection logic:**
-```js
-const weekPrefix = sheet.slotId.split('_')[0];  // e.g. "mw0"
-const usedThisWeek = new Set(
-  Object.entries(assignments)
-    .filter(([k, v]) => k !== sheet.slotId && k.startsWith(weekPrefix + '_') && v)
-    .map(([, v]) => v)
-);
-```
-
----
-
-## Candidate card CSS classes
-
-| Class | Meaning |
-|---|---|
-| `.cand` | base candidate button |
-| `.is-rec` | top recommended (accent border + soft bg) |
-| `.is-cur` | currently assigned to this slot (inner shadow) |
-| `.is-used` | assigned to another slot this week (dimmed 55%) |
-| `.cur-tag` | grey "目前" chip in name row |
-| `.used-tag` | red "本週已排" chip in name row |
-
----
-
-## Eligibility rules (encoded in POOL tags + CATS)
-
-- `g: "M"` — brothers only
-- `g: "any"` — brothers and sisters (传道训练 `ministry` cat)
-- Sisters in POOL have only `t: ["用心"]` — they qualify for ministry demonstrations only
-- The `ministry` category (`tag: "用心"`) maps to both student and helper roles in 用心準備傳道工作
-
-Full eligibility matrix (per S-38) is in `meeting-scheduler-plan.md §11`.
-
----
-
-## Component patterns
-
-**WhoSlot** (in `MidweekWeek.js`) — renders a tappable name that opens `AssignSheet`. In `editMode` renders as `contentEditable` for direct text override.
-
-**PairSlot** (in `MidweekWeek.js`) — renders two `WhoSlot`s (`_0` student / `_1` helper) separated by `/`.
-
-**Toast** — auto-dismisses; exposes `undo` callback that reverts the `assignments` state entry.
+- **JPG** — `toJpeg(cardRef.current, { quality: 0.95, pixelRatio: 2 })` → download
+- **Copy** — `toPng` → `ClipboardItem`
+- **PDF** — `toPng` → embedded in a print window → browser "Save as PDF"
+- **Excel** — custom `buildXlsxBuffer()` in `midweekExport.js` (JSZip)
 
 ---
 
 ## What NOT to do
 
 - Do not scrape jw.org / wol.jw.org (robots-disallowed, ToS prohibits)
-- Do not auto-commit EPUB/image imports — always go through review screen first
-- Do not remove the `'use client'` directive from `page.js` — it owns all interactive state
-- Do not split state into multiple context providers yet — keep it flat in `page.js` until Phase 2 backend is wired
+- Do not auto-commit EPUB imports — always go through the review screen first
+- Do not remove `'use client'` from `page.js` — it owns all interactive state
+- Do not call `new PrismaClient()` without `datasourceUrl` or outside `db.js` — always import the singleton
+- Do not initialize Firebase Admin SDK at module load time — `firebase-admin.js` uses lazy init inside `verifyIdToken()` to avoid build-time crashes
+- Do not add `url = env(...)` to `prisma/schema.prisma` datasource — Prisma 6 reads from env automatically; Prisma 7 broke this and we downgraded
 
 ---
 
@@ -202,61 +225,7 @@ Full eligibility matrix (per S-38) is in `meeting-scheduler-plan.md §11`.
 
 | Phase | Status |
 |---|---|
-| **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet with weighted candidates, same-week conflict indicator, client-side EPUB import (parse → review → commit to state) |
-| **Phase 2 — Backend** | Not started — Node API (Fastify/Express) + Postgres (Neon or Fly Postgres) + Prisma/Drizzle, persist EPUB imports, image/PDF via Claude API vision |
-| **Phase 3 — Notifications** | Not started — LINE Messaging API push, .ics calendar feeds, Draft→Publish diff model |
-
----
-
-## Recent changes
-
-### EPUB import — client-side parsing (2026-05-31)
-Admin uploads the JW Life and Ministry Meeting Workbook EPUB → app parses it in the browser → review screen → commit replaces `midweekWeeks` state.
-
-**Files changed:**
-- `app/lib/epubParser.js` *(new)* — `parseEpub(file)` uses JSZip to unzip, reads `META-INF/container.xml` → OPF → spine, skips non-week pages (cover, toc, extracted-scripture files), parses each week XHTML with `DOMParser`. Extracts: date, reading, 3 songs, all parts with titles/durations/categories. Calculates meeting times from a 19:30 default start.
-- `app/components/ImportPage.js` — full rewrite; state machine `upload → parsing → review → done`; real file input + drag-and-drop; `WeekReviewCard` component (expandable per-week preview); wires `onImportWeeks` callback.
-- `app/page.js` — `midweekWeeks` lifted to state (was a static import); on import: replaces weeks, resets week index to 0, navigates to meetings page.
-- `app/components/MeetingsPage.js` — removed static `midweekWeeks` import; now accepts it as a prop.
-- `app/globals.css` — added: `.dropzone--active`, `.spin` animation, `.imp-error`, `.imp-hint`, `.rev-stage`, `.rvc*` (review card), `.imp-done`.
-
-**EPUB structure (mwb_CH_*.epub):** OEBPS/ contains one XHTML per week. Week pages have `<h3 class="dc-icon--music">` for songs, `<h2 class="du-color--teal-700">` for 上帝話語的寶藏, `<h2 class="du-color--gold-700">` for 用心準備傳道工作, `<h2 class="du-color--maroon-600">` for 基督徒的生活. Parts are `<h3>N．Title</h3>` followed by a `<p>（X分鐘）description</p>` in the next sibling div.
-
-**What EPUB import gives you (all `assign: []`):**
-- `date` ("9月 7日"), `dateLabel` ("9月7-13日" — full range for the week picker)
-- `reading`, `openSong` / `midSong` / `closeSong`
-- `treasures` (3 parts: 寶藏演講, 屬靈寶石, 經文朗讀)
-- `ministry` (2–4 parts, each paired student/helper; short titles like 初次交談 get description appended: "初次交談 — 向住戶作見證")
-- `living` (1–2 parts + 會眾研經班); CBS part carries `cbsRef` (e.g. `"《勇氣》第7章"`) extracted from the duration line
-- Calculated start times based on 19:30 default
-
-**What requires manual entry after import:** chairman, prayers, `weekdayPill` (defaults to 星期三 · 19:30).
-
----
-
-### Week picker, layout alignment, CBS book reference (2026-05-31)
-
-**Week picker:**
-- `MeetingsPage.js` — `WeekPicker` component (dropdown list of all weeks). Shows `dateLabel` from EPUB (e.g. "9月7-13日") or computes a range from `date` for seed weeks (start day + 6). Current week highlighted dark with "當週" badge; auto-scrolls into view on open. Positioned as a flex-fill button inside `.mw-navstrip`.
-- `epubParser.js` — added `dateLabel` field (raw H1 text from the week XHTML, e.g. "9月7-13日") stored on every parsed week.
-
-**Layout alignment — toolbar inline with card:**
-- `MeetingsPage.js` — midweek view now renders everything (toolbar + edit-banner + navstrip + card) inside `.mw-container`. This constrains the toolbar's right edge to the same `max-width: 880px` as the card, so 編輯 / 匯出 align flush with the card's right edge. Weekend view has a separate minimal toolbar (tabs only).
-- `.mw-navstrip` — nav strip (‹ picker ›) sits between toolbar and card, sharing the same border/background. Card top border and radius are removed where it meets the strip, creating a single unified unit.
-
-**CBS book reference:**
-- `epubParser.js` — for 會眾研經班 parts, text after the duration in the EPUB (e.g. `《勇氣》第7章`) is stored as `cbsRef` on the part object.
-- `MidweekWeek.js` — CBS row renders `cbsRef` inline after the duration, styled as `.cbs-ref` (smaller, `--ink-3` colour). No extra row height.
-- `globals.css` — added `.cbs-ref` rule.
-
----
-
-### Same-week assignment conflict indicator (2026-05-31)
-**Problem:** When opening the candidate picker for a second slot in the same week, there was no indication that a person was already assigned to another slot in that week.
-
-**Solution:**
-- `page.js`: passes `assignments` state down to `AssignSheet`
-- `AssignSheet.js`: computes `usedThisWeek` Set by scanning all `assignments` keys that share the same week prefix (`mw{id}_*`) excluding the current slot
-- Candidates in `usedThisWeek` get `is-used` CSS class (55% opacity) and a red "本週已排" badge
-- They remain selectable (for legitimate edge cases), but are visually de-prioritised
-- `globals.css`: added `.cand.is-used`, `.cand.is-used:hover`, `.used-tag` rules
+| **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet, EPUB import, week picker, export (JPG/PDF/Excel) |
+| **Phase 2 — Auth + Multi-tenancy** | Done — Firebase auth, congregation model, invite links, ⚙ settings page, Prisma 6 + Neon Postgres schema live |
+| **Phase 2B — Data persistence** | In progress — `GET /api/congregations/data` loads weeks/people/weekend on mount; `POST /api/midweek-weeks/import` persists EPUB import; people CRUD via `/api/people`; congregation schedule settings (dayOffset, time, exceptions) persist via `PATCH /api/congregations/settings`; user displayName editable via `PATCH /api/users/me`. Remaining: save/load assignments from DB (still React state only), save inline week/part edits to DB, delete week API |
+| **Phase 3 — Notifications** | Not started — LINE Messaging API push, .ics calendar feeds |

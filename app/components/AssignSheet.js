@@ -1,8 +1,32 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { POOL, CATS, candidates } from '../data/index';
+import { CATS } from '../data/index';
 
-export default function AssignSheet({ sheet, assignments, getAssign, onPick, onClose }) {
+function hash(s) {
+  let x = 2166136261;
+  for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); }
+  return x >>> 0;
+}
+function daysSince(name, tag) { return 5 + (hash(name + '·' + tag) % 68); }
+function loadTerm(name, tag)  { return 1 + (hash(tag + '#' + name) % 6); }
+
+function buildCandidates(people, catKey, jitter, spread) {
+  const c = CATS[catKey];
+  if (!c || !people?.length) return [];
+  return people
+    .filter(p => p.status !== 'inactive' && p.quals.includes(c.tag) && (c.g === 'any' || p.g === c.g))
+    .map(p => {
+      const d = daysSince(p.name, c.tag);
+      let w = Math.pow(d, spread);
+      const recent = d < 14;
+      if (recent) w *= 0.1;
+      if (jitter) w *= 0.55 + Math.random() * 0.9;
+      return { n: p.name, g: p.g, a: p.appt, d, w, recent, load: loadTerm(p.name, c.tag) };
+    })
+    .sort((a, b) => b.w - a.w);
+}
+
+export default function AssignSheet({ sheet, assignments, getAssign, onPick, onClose, people }) {
   const [query, setQuery] = useState('');
   const [jitter, setJitter] = useState(false);
   const [spread, setSpread] = useState(2);
@@ -21,17 +45,17 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
   );
 
   const rebuild = useCallback((j) => {
-    setList(candidates(sheet.catKey, j, spread));
-  }, [sheet.catKey, spread]);
+    setList(buildCandidates(people, sheet.catKey, j, spread));
+  }, [people, sheet.catKey, spread]);
 
   useEffect(() => {
     setQuery('');
     setManual('');
     setJitter(false);
     setSpread(2);
-    setList(candidates(sheet.catKey, false, 2));
+    setList(buildCandidates(people, sheet.catKey, false, 2));
     setTimeout(() => inputRef.current?.focus(), 120);
-  }, [sheet]);
+  }, [sheet, people]);
 
   useEffect(() => {
     if (!sheet) return;
@@ -51,9 +75,9 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
   const maxW = Math.max(...list.map((c) => c.w), 1);
 
   const total = list.length;
-  const excluded = POOL.filter((p) => {
-    return !(p.t.includes(cat.tag) && (cat.g === 'any' || p.g === cat.g));
-  }).length;
+  const excluded = (people ?? []).filter(p =>
+    p.status !== 'inactive' && !(p.quals.includes(cat.tag) && (cat.g === 'any' || p.g === cat.g))
+  ).length;
 
   function pick(name) {
     onPick(sheet.slotId, name, currentName);

@@ -1,7 +1,7 @@
 'use client';
 import Image from 'next/image';
 
-export default function Sidebar({ page, setPage, congName }) {
+export default function Sidebar({ page, setPage, congName, scheduleStats }) {
   const items = [
     {
       id: 'meetings',
@@ -83,12 +83,24 @@ export default function Sidebar({ page, setPage, congName }) {
         ))}
       </nav>
       <div className="sidenav__foot">
-        <div className="sidenav__health">
-          <span className="health-dot" />
-          <span>
-            未來 3 週<br />
-            <b>有 2 個空缺待補</b>
-          </span>
+        <div className={`sidenav__health${scheduleStats && scheduleStats.vacancies === 0 ? ' sidenav__health--ok' : ''}`}>
+          <span className={`health-dot${scheduleStats && scheduleStats.vacancies === 0 ? ' health-dot--ok' : ''}`} />
+          {!scheduleStats ? (
+            <span>
+              尚未匯入節目<br />
+              <b>前往匯入 / 匯出</b>
+            </span>
+          ) : scheduleStats.vacancies === 0 ? (
+            <span>
+              未來 {scheduleStats.upcomingWeeks} 週<br />
+              <b>所有空缺已補齊</b>
+            </span>
+          ) : (
+            <span>
+              未來 {scheduleStats.upcomingWeeks} 週<br />
+              <b>有 {scheduleStats.vacancies} 個空缺待補</b>
+            </span>
+          )}
         </div>
       </div>
     </aside>

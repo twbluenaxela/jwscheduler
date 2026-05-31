@@ -1,5 +1,4 @@
 'use client';
-import { weekendData } from '../data/index';
 
 function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet }) {
   const name = getAssign(slotId, defaultName);
@@ -15,7 +14,7 @@ function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet 
   );
 }
 
-export default function WeekendView({ filter, setFilter, getAssign, openSheet }) {
+export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet }) {
   const today = new Date();
   const thisYear = today.getFullYear();
 
@@ -25,14 +24,14 @@ export default function WeekendView({ filter, setFilter, getAssign, openSheet })
   }
 
   const rows = filter === 'upcoming'
-    ? weekendData.filter((r) => r.type === 'event' || parseDate(r.date) >= today)
-    : weekendData;
+    ? weekendRows.filter((r) => r.type === 'event' || parseDate(r.date) >= today)
+    : weekendRows;
 
   return (
     <div className="wk-wrap">
       <div className="wk-title">
-        <h2>新屋會眾 <span className="yr">{thisYear}</span> 公眾演講安排表</h2>
-        <span className="wk-title__meta">每週日 09:30 · 共 {weekendData.filter(r => !r.type || r.type === 'special').length} 場</span>
+        <h2><span className="yr">{thisYear}</span> 公眾演講安排表</h2>
+        <span className="wk-title__meta">共 {weekendRows.filter(r => !r.type || r.type === 'schedule' || r.type === 'special').length} 場</span>
         <div className="wk-title__spacer" />
         <div className="chips" role="group">
           <button
@@ -49,6 +48,9 @@ export default function WeekendView({ filter, setFilter, getAssign, openSheet })
       </div>
 
       {/* Desktop table */}
+      {rows.length === 0 ? (
+        <div className="people-empty">目前沒有週末安排資料。</div>
+      ) : (
       <div className="tablescroll">
         <table className="wk-table">
           <thead>
@@ -91,6 +93,7 @@ export default function WeekendView({ filter, setFilter, getAssign, openSheet })
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Mobile cards */}
       <div className="wk-cards">

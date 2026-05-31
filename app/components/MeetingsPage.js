@@ -167,7 +167,7 @@ export default function MeetingsPage({
   midweekWeeks,
   view, setView, week, setWeek,
   editMode, setEditMode, exportOpen, setExportOpen,
-  weekendFilter, setWeekendFilter,
+  weekendFilter, setWeekendFilter, weekendRows,
   getAssign, openSheet, updateMidweekWeek, setPage,
 }) {
   const menuRef = useRef(null);
@@ -264,6 +264,7 @@ export default function MeetingsPage({
           <WeekendView
             filter={weekendFilter}
             setFilter={setWeekendFilter}
+            weekendRows={weekendRows}
             getAssign={getAssign}
             openSheet={openSheet}
           />

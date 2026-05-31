@@ -16,8 +16,12 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
   const [cong, setCong] = useState(null);
   const [members, setMembers] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(''); // '' | 'ok' | 'err'
   const [copied, setCopied] = useState(false);
   const [nameEdit, setNameEdit] = useState('');
+  const [displayNameEdit, setDisplayNameEdit] = useState(dbUser?.displayName ?? '');
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameStatus, setNameStatus] = useState(''); // '' | 'ok' | 'err'
 
   const isAdmin = dbUser?.role === 'ADMIN';
 
@@ -36,6 +40,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
         setCong(congregation);
         setMembers(congregation.users ?? []);
         setNameEdit(congregation.name ?? '');
+        setDisplayNameEdit(dbUser?.displayName ?? '');
         // Sync congSettings from DB
         setCongSettings({
           dayOffset: congregation.meetingDayOffset ?? 2,
@@ -48,9 +53,10 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
 
   async function saveSchedule() {
     setSaving(true);
+    setSaveStatus('');
     try {
       const token = await getToken();
-      await fetch('/api/congregations/settings', {
+      const res = await fetch('/api/congregations/settings', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -60,8 +66,35 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
           exceptions: congSettings.exceptions ?? [],
         }),
       });
+      setSaveStatus(res.ok ? 'ok' : 'err');
+      if (res.ok) setTimeout(() => setSaveStatus(''), 3000);
+    } catch {
+      setSaveStatus('err');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveDisplayName() {
+    if (!displayNameEdit.trim()) return;
+    setNameSaving(true);
+    setNameStatus('');
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: displayNameEdit }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setDbUser((prev) => ({ ...prev, displayName: data.user.displayName }));
+      setNameStatus('ok');
+      setTimeout(() => setNameStatus(''), 3000);
+    } catch {
+      setNameStatus('err');
+    } finally {
+      setNameSaving(false);
     }
   }
 
@@ -79,6 +112,32 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
       <div className="toolbar">
         <span className="toolbar__title">設定</span>
         <button className="btn" onClick={() => signOut(auth)}>登出</button>
+      </div>
+
+      {/* ── My profile ── */}
+      <h3 className="settings-h" style={{ marginBottom: 10 }}>我的資訊</h3>
+      <div className="settings-card" style={{ marginBottom: 24, maxWidth: 480 }}>
+        <div className="settings-row">
+          <span className="settings-row__label">顯示名稱</span>
+          <input
+            className="settings-input"
+            value={displayNameEdit}
+            onChange={(e) => setDisplayNameEdit(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && saveDisplayName()}
+            placeholder="輸入你的姓名"
+          />
+        </div>
+        <div className="settings-row">
+          <span className="settings-row__label">電子郵件</span>
+          <span className="settings-row__val">{dbUser?.email}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+          <button className="btn btn--primary" onClick={saveDisplayName} disabled={nameSaving || !displayNameEdit.trim()}>
+            {nameSaving ? '儲存中…' : '儲存名稱'}
+          </button>
+          {nameStatus === 'ok' && <span className="settings-save-ok">✓ 已儲存</span>}
+          {nameStatus === 'err' && <span className="settings-save-err">儲存失敗，請重試</span>}
+        </div>
       </div>
 
       {/* ── Congregation info ── */}
@@ -183,10 +242,12 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
             <button className="btn btn--primary" onClick={saveSchedule} disabled={saving}>
               {saving ? '儲存中…' : '儲存設定'}
             </button>
+            {saveStatus === 'ok' && <span className="settings-save-ok">✓ 已儲存</span>}
+            {saveStatus === 'err' && <span className="settings-save-err">儲存失敗，請重試</span>}
           </div>
         </div>
       </div>
