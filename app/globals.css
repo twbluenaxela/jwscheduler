@@ -812,6 +812,28 @@ body.editing .week-edit__input { background: #fff; }
 .imp-error { background: #fce8e6; border: 1px solid #f5b8b2; border-radius: 10px; padding: 10px 14px; font-size: 13.5px; font-weight: 700; color: var(--special); margin-bottom: 12px; }
 
 .imp-hint { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+
+/* Congregation settings */
+.cong-settings { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.cong-settings__label { font-size: 12px; font-weight: 800; color: var(--ink-2); letter-spacing: .04em; white-space: nowrap; }
+.cong-settings__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cong-settings__days { display: flex; gap: 4px; }
+.cong-settings__days--sm { gap: 3px; }
+.cong-day-btn { appearance: none; border: 1.5px solid var(--line); background: var(--surface); border-radius: 7px; padding: 5px 9px; font-size: 13px; font-weight: 700; color: var(--ink-2); cursor: pointer; font-family: inherit; transition: all .12s; }
+.cong-day-btn--sm { padding: 3px 6px; font-size: 12px; }
+.cong-day-btn:hover { border-color: var(--accent); color: var(--accent); }
+.cong-day-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cong-settings__time { appearance: none; border: 1.5px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 8px; font-size: 13px; font-weight: 700; color: var(--ink); font-family: inherit; width: 108px; }
+.cong-settings__time:focus { outline: none; border-color: var(--accent); }
+.cong-settings__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+
+/* Exception periods */
+.cong-exc-list { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
+.cong-exc { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
+.cong-exc__num { appearance: none; border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 6px; padding: 3px 5px; font-size: 13px; font-weight: 700; color: var(--ink); font-family: inherit; width: 44px; text-align: center; }
+.cong-exc__num:focus { outline: none; border-color: var(--accent); }
+.cong-exc__del { appearance: none; border: 0; background: transparent; color: var(--ink-3); font-size: 14px; cursor: pointer; padding: 2px 4px; margin-left: auto; }
+.cong-exc__del:hover { color: var(--special); }
 .imp-hint__title { font-size: 13px; font-weight: 800; color: var(--ink-2); margin-bottom: 8px; }
 .imp-hint__steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
 .imp-hint__steps li { font-size: 13px; color: var(--ink-2); font-weight: 600; }
@@ -862,3 +884,58 @@ body.editing .week-edit__input { background: #fff; }
   .people-layout { grid-template-columns: 1fr; }
   .people-detail { position: static; }
 }
+
+/* ============================= Login / Auth ============================= */
+.login-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 24px; }
+.login-card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 32px 28px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 20px; }
+.login-brand { display: flex; align-items: center; gap: 14px; }
+.login-brand__icon { font-size: 36px; }
+.login-brand__title { font-size: 17px; font-weight: 800; color: var(--ink); }
+.login-brand__sub { font-size: 13px; color: var(--ink-3); font-weight: 600; margin-top: 2px; }
+.login-tabs { display: flex; gap: 0; border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; }
+.login-tab { flex: 1; appearance: none; border: 0; background: transparent; font-family: inherit; font-size: 14px; font-weight: 700; color: var(--ink-2); padding: 9px; cursor: pointer; transition: all .12s; }
+.login-tab.is-active { background: var(--accent); color: #fff; }
+.login-form { display: flex; flex-direction: column; gap: 14px; }
+.login-field { display: flex; flex-direction: column; gap: 5px; }
+.login-label { font-size: 12px; font-weight: 800; color: var(--ink-2); }
+.login-input { appearance: none; border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; color: var(--ink); transition: border-color .12s; }
+.login-input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.login-error { background: #fce8e6; border: 1px solid #f5b8b2; border-radius: 8px; padding: 9px 12px; font-size: 13px; font-weight: 700; color: var(--special); }
+.login-submit { padding: 11px; font-size: 15px; }
+.login-divider { display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 13px; font-weight: 600; }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.login-google { appearance: none; border: 1.5px solid var(--line); background: var(--surface); border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; font-family: inherit; color: var(--ink); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all .12s; }
+.login-google:hover { border-color: var(--accent); }
+
+/* ============================= Settings page ============================= */
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.settings-section { display: flex; flex-direction: column; gap: 0; }
+.settings-h { font-size: 13px; font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 8px; }
+.settings-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-row__label { font-size: 13.5px; font-weight: 700; color: var(--ink-2); }
+.settings-row__val { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.settings-row__val--mono { font-family: var(--mono); font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+.settings-input { appearance: none; border: 1.5px solid var(--line); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; font-size: 13.5px; font-weight: 700; font-family: inherit; color: var(--ink); flex: 1; }
+.settings-input:focus { outline: none; border-color: var(--accent); }
+.settings-badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+.settings-badge--admin { background: rgba(47,111,143,.12); color: var(--accent); border-color: var(--accent); }
+.settings-invite { flex-direction: row !important; align-items: center; gap: 12px; }
+.settings-invite__url { flex: 1; font-size: 12px; font-family: var(--mono); color: var(--ink-2); word-break: break-all; }
+.settings-hint { font-size: 12px; color: var(--ink-3); font-weight: 600; margin: 6px 0 0; }
+.settings-members { display: flex; flex-direction: column; gap: 8px; max-width: 600px; }
+.settings-member { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.settings-member__avatar { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 16px; font-weight: 800; display: grid; place-items: center; flex-shrink: 0; }
+.settings-member__info { flex: 1; min-width: 0; }
+.settings-member__name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.settings-member__email { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .settings-grid { grid-template-columns: 1fr; }
+}
+
+/* Empty state */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 80px 20px; text-align: center; }
+.empty-state__ic { font-size: 48px; }
+.empty-state__title { font-size: 18px; font-weight: 800; color: var(--ink); }
+.empty-state__sub { font-size: 14px; color: var(--ink-3); font-weight: 600; max-width: 320px; line-height: 1.5; }

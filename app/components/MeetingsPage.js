@@ -5,7 +5,6 @@ import WeekendView from './WeekendView';
 import {
   getMidweekExportFilename,
   downloadWeekXlsx,
-  openWeekPrintWindow,
 } from '../lib/midweekExport';
 
 const EXPORT_ITEMS = [
@@ -108,7 +107,24 @@ function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, me
       } else if (type === 'xlsx') {
         await downloadWeekXlsx(week, getAssign);
       } else if (type === 'pdf' || type === 'print') {
-        openWeekPrintWindow(week, getAssign);
+        const { toPng } = await import('html-to-image');
+        const dataUrl = await toPng(captureRef.current, { pixelRatio: 2, skipFonts: false });
+        const popup = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
+        if (!popup) throw new Error('瀏覽器阻擋了列印視窗。');
+        popup.document.write(`<!doctype html><html><head><meta charset="utf-8">
+          <title>${getMidweekExportFilename(week, 'pdf')}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { background: #ecebe7; display: flex; justify-content: center; padding: 24px; }
+            img { max-width: 100%; height: auto; border-radius: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+            @media print { body { background: #ecebe7; padding: 0; } img { border-radius: 0; box-shadow: none; max-width: 100%; } }
+          </style>
+        </head><body>
+          <img src="${dataUrl}" />
+          <script>window.addEventListener('load', () => setTimeout(() => window.print(), 200));<\/script>
+        </body></html>`);
+        popup.document.close();
+        popup.focus();
       }
     } catch (error) {
       window.alert(error?.message || '匯出失敗');
@@ -152,7 +168,7 @@ export default function MeetingsPage({
   view, setView, week, setWeek,
   editMode, setEditMode, exportOpen, setExportOpen,
   weekendFilter, setWeekendFilter,
-  getAssign, openSheet, updateMidweekWeek,
+  getAssign, openSheet, updateMidweekWeek, setPage,
 }) {
   const menuRef = useRef(null);
   const captureRef = useRef(null);
@@ -211,20 +227,32 @@ export default function MeetingsPage({
             </div>
           )}
 
-          <div className="mw-navstrip">
-            <button className="iconbtn" aria-label="上一週" onClick={prev}>‹</button>
-            <WeekPicker weeks={midweekWeeks} currentWeek={week} onSelect={setWeek} />
-            <button className="iconbtn" aria-label="下一週" onClick={next}>›</button>
-          </div>
-
-          <MidweekWeek
-            week={midweekWeeks[week]}
-            editMode={editMode}
-            getAssign={getAssign}
-            openSheet={openSheet}
-            updateMidweekWeek={updateMidweekWeek}
-            cardRef={captureRef}
-          />
+          {midweekWeeks.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state__ic">📂</div>
+              <div className="empty-state__title">尚未匯入任何週次</div>
+              <div className="empty-state__sub">前往「匯入 / 匯出」上傳聚會手冊 EPUB 即可開始編排</div>
+              <button className="btn btn--primary" onClick={() => setPage?.('import')}>
+                前往匯入
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="mw-navstrip">
+                <button className="iconbtn" aria-label="上一週" onClick={prev}>‹</button>
+                <WeekPicker weeks={midweekWeeks} currentWeek={week} onSelect={setWeek} />
+                <button className="iconbtn" aria-label="下一週" onClick={next}>›</button>
+              </div>
+              <MidweekWeek
+                week={midweekWeeks[week]}
+                editMode={editMode}
+                getAssign={getAssign}
+                openSheet={openSheet}
+                updateMidweekWeek={updateMidweekWeek}
+                cardRef={captureRef}
+              />
+            </>
+          )}
         </div>
       )}
 

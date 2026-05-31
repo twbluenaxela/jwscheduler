@@ -8,11 +8,20 @@
     "start": "next start"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "firebase": "^12.14.0",
+    "firebase-admin": "^13.10.0",
     "html-to-image": "^1.11.13",
     "jszip": "^3.10.1",
     "next": "16.2.6",
     "playwright": "^1.60.0",
+    "prisma": "^6.19.3",
     "react": "19.2.4",
     "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.15",
+    "typescript": "6.0.3"
   }
 }

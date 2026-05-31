@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth / multi-tenant ───────────────────────────────────────────────────────
+
+model Congregation {
+  id              Int          @id @default(autoincrement())
+  name            String
+  code            String       @unique  // short readable code e.g. "xinwu"
+  inviteToken     String       @unique  @default(uuid())
+  meetingDayOffset Int         @default(2)
+  meetingTime     String       @default("19:30")
+  exceptions      Json         @default("[]")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  users           User[]
+  weeks           MidweekWeek[]
+  weekendRows     WeekendRow[]
+  people          Person[]
+}
+
+model User {
+  id             Int           @id @default(autoincrement())
+  firebaseUid    String        @unique
+  email          String        @unique
+  displayName    String?
+  role           String        @default("MEMBER")  // "ADMIN" | "MEMBER"
+  congregationId Int?
+  congregation   Congregation? @relation(fields: [congregationId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+// ── Congregation members ──────────────────────────────────────────────────────
+
+model Person {
+  id             Int          @id @default(autoincrement())
+  congregationId Int
+  congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  name           String
+  gender         String       // "M" | "F"
+  appointment    String       @default("")
+  tags           String[]
+  status         String       @default("active")
+  awayNote       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([congregationId, name])
+}
+
+// ── Midweek meetings ──────────────────────────────────────────────────────────
+
+model MidweekWeek {
+  id             Int          @id @default(autoincrement())
+  congregationId Int
+  congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  date           String
+  dateLabel      String?
+  weekStart      String?      // original EPUB Monday date — used for schedule reapply
+  weekdayPill    String       @default("星期三 · 19:30")
+  reading        String       @default("")
+  openSong       String       @default("")
+  midSong        String       @default("")
+  closeSong      String       @default("")
+  openSongTime   String?
+  midSongTime    String?
+  closeSongTime  String?
+  openIntroTime  String?
+  closingTime    String?
+  closingDur     String?
+  parts          Part[]
+  assignments    Assignment[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([congregationId, date])
+}
+
+model Part {
+  id        Int         @id @default(autoincrement())
+  weekId    Int
+  week      MidweekWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  partKey   String
+  section   String
+  partNum   Int
+  title     String
+  dur       String
+  cat       String
+  roleLabel String?
+  time      String?
+  cbsRef    String?
+
+  @@unique([weekId, partKey])
+}
+
+model Assignment {
+  id        Int         @id @default(autoincrement())
+  slotId    String      @unique
+  weekId    Int
+  week      MidweekWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  name      String
+  updatedAt DateTime    @updatedAt
+}
+
+// ── Weekend meetings ──────────────────────────────────────────────────────────
+
+model WeekendRow {
+  id             Int          @id @default(autoincrement())
+  congregationId Int
+  congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  sortOrder      Int          @default(0)
+  date           String
+  type           String       @default("schedule")
+  no             String?
+  topic          String?
+  cong           String?
+  speaker        String?
+  chair          String?
+  wt             String?
+  read           String?
+  host           String?
+  away           String?
+  label          String?
+  note           String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}

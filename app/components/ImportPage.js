@@ -63,7 +63,22 @@ function WeekReviewCard({ week, idx }) {
   );
 }
 
-export default function ImportPage({ onImportWeeks, onResetWeeks, existingWeeks = [] }) {
+const DAY_NAMES = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
+
+const DAY_SHORT = ['一','二','三','四','五','六','日'];
+
+function addException(settings) {
+  const exc = { id: Date.now(), fromMonth: 1, fromDay: 1, toMonth: 12, toDay: 31, dayOffset: settings.dayOffset, time: settings.time };
+  return { ...settings, exceptions: [...(settings.exceptions ?? []), exc] };
+}
+function updateException(settings, id, patch) {
+  return { ...settings, exceptions: settings.exceptions.map(e => e.id === id ? { ...e, ...patch } : e) };
+}
+function removeException(settings, id) {
+  return { ...settings, exceptions: settings.exceptions.filter(e => e.id !== id) };
+}
+
+export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySchedule, existingWeeks = [], congSettings = { dayOffset: 2, time: '19:30', exceptions: [] }, setCongSettings }) {
   const [stage, setStage] = useState('upload'); // upload | parsing | review | done
   const [parsedWeeks, setParsedWeeks] = useState([]);
   const [error, setError] = useState(null);
@@ -178,7 +193,72 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, existingWeeks 
           </div>
 
           <div className="imp-col">
-            <h3 className="imp-h">匯出與分享</h3>
+            <h3 className="imp-h">會眾聚會設定</h3>
+            <div className="cong-settings">
+              <div className="cong-settings__label">預設平日聚會</div>
+              <div className="cong-settings__row">
+                <div className="cong-settings__days">
+                  {DAY_SHORT.map((name, i) => (
+                    <button key={i}
+                      className={`cong-day-btn${congSettings.dayOffset === i ? ' is-active' : ''}`}
+                      onClick={() => setCongSettings(s => ({ ...s, dayOffset: i }))}>
+                      {name}
+                    </button>
+                  ))}
+                </div>
+                <input className="cong-settings__time" type="time"
+                  value={congSettings.time}
+                  onChange={e => setCongSettings(s => ({ ...s, time: e.target.value }))} />
+              </div>
+
+              {/* Exception periods */}
+              {(congSettings.exceptions ?? []).length > 0 && (
+                <div className="cong-exc-list">
+                  {congSettings.exceptions.map(exc => (
+                    <div key={exc.id} className="cong-exc">
+                      <span className="cong-exc__label">從</span>
+                      <input className="cong-exc__num" type="number" min="1" max="12" value={exc.fromMonth}
+                        onChange={e => setCongSettings(s => updateException(s, exc.id, { fromMonth: +e.target.value }))} />
+                      <span className="cong-exc__label">月</span>
+                      <input className="cong-exc__num" type="number" min="1" max="31" value={exc.fromDay}
+                        onChange={e => setCongSettings(s => updateException(s, exc.id, { fromDay: +e.target.value }))} />
+                      <span className="cong-exc__label">日 至</span>
+                      <input className="cong-exc__num" type="number" min="1" max="12" value={exc.toMonth}
+                        onChange={e => setCongSettings(s => updateException(s, exc.id, { toMonth: +e.target.value }))} />
+                      <span className="cong-exc__label">月</span>
+                      <input className="cong-exc__num" type="number" min="1" max="31" value={exc.toDay}
+                        onChange={e => setCongSettings(s => updateException(s, exc.id, { toDay: +e.target.value }))} />
+                      <span className="cong-exc__label">日 改為</span>
+                      <div className="cong-settings__days cong-settings__days--sm">
+                        {DAY_SHORT.map((name, i) => (
+                          <button key={i}
+                            className={`cong-day-btn cong-day-btn--sm${exc.dayOffset === i ? ' is-active' : ''}`}
+                            onClick={() => setCongSettings(s => updateException(s, exc.id, { dayOffset: i }))}>
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                      <input className="cong-settings__time" type="time" value={exc.time}
+                        onChange={e => setCongSettings(s => updateException(s, exc.id, { time: e.target.value }))} />
+                      <button className="cong-exc__del" onClick={() => setCongSettings(s => removeException(s, exc.id))}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="cong-settings__actions">
+                <button className="btn btn--ghost" onClick={() => setCongSettings(s => addException(s))}>
+                  + 新增例外期間
+                </button>
+                {onReapplySchedule && existingWeeks.some(w => w.weekStart) && (
+                  <button className="btn btn--ghost" onClick={onReapplySchedule}>
+                    重新套用至所有週次
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <h3 className="imp-h" style={{ marginTop: 20 }}>匯出與分享</h3>
             <div className="exp-grid">
               {EXPORT_CARDS.map((c, i) => (
                 <button key={i} className="exp-card">
