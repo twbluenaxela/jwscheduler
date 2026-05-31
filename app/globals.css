@@ -137,7 +137,7 @@ body { padding-bottom: 64px; }
 .toolbar__spacer { flex: 1; }
 
 /* ── Midweek container: nav strip + card as one unit ── */
-.mw-container { max-width: 880px; width: 100%; }
+.mw-container { width: 100%; }
 .mw-navstrip {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border: 1px solid var(--line);
@@ -239,7 +239,7 @@ body { padding-bottom: 64px; }
 /* ============================= Midweek card ============================= */
 .card {
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; max-width: 880px;
+  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
 }
 .mw-head {
   display: flex; align-items: flex-start; gap: 20px;
