@@ -1,6 +1,6 @@
 # CLAUDE.md — 新屋會眾聚會編排 Scheduler
 
-Touch-friendly web app replacing the Excel scheduling workflow for 新屋 (Xinwu) congregation midweek and weekend meeting assignments. See `meeting-scheduler-plan.md` for full architecture decisions and phasing.
+Touch-friendly web app replacing the Excel scheduling workflow for 新屋 (Xinwu) congregation midweek and weekend meeting assignments. See `meeting-scheduler-plan.md` for full architecture decisions and phasing. See `agents.md` for planned Claude API integrations and AI-assisted workflows.
 
 ---
 
@@ -10,7 +10,8 @@ Touch-friendly web app replacing the Excel scheduling workflow for 新屋 (Xinwu
 - **Language:** JavaScript (no TypeScript yet)
 - **Styling:** Single global CSS file (`app/globals.css`) — no CSS modules, no Tailwind
 - **Font:** Noto Sans TC via `next/font/google`
-- **Data:** Seed data only (`app/data/index.js`) — no backend yet
+- **Data:** Seed data only (`app/data/index.js`) — no backend yet; imported EPUB weeks live in React state
+- **EPUB parsing:** `jszip` (client-side unzip) + browser `DOMParser` — no server needed
 - **Deploy target:** fly.io + Postgres (Phase 2+)
 
 ---
@@ -25,19 +26,26 @@ app/
   data/
     index.js           — seed data: midweekWeeks, weekendData, peopleData,
                          overviewData, POOL, CATS, candidates()
+  lib/
+    epubParser.js      — client-side EPUB parser (JSZip + DOMParser)
+                         exports parseEpub(file) → week[] matching midweekWeeks shape
   components/
     Sidebar.js         — desktop left nav
     TopBar.js          — mobile top bar
     TabBar.js          — mobile bottom tab bar
-    MeetingsPage.js    — tab switcher for midweek / weekend views
+    MeetingsPage.js    — tab switcher for midweek / weekend views; accepts midweekWeeks prop
     MidweekWeek.js     — single midweek week card with WhoSlot / PairSlot
     WeekendView.js     — weekend schedule table
     OverviewPage.js    — month overview list
     PeoplePage.js      — congregation member list
-    ImportPage.js      — EPUB / Excel / image / PDF import UI (stub)
+    ImportPage.js      — EPUB import UI: upload → parse → review → commit
+                         accepts onImportWeeks(weeks[]) callback
     AssignSheet.js     — bottom-sheet candidate picker (modal)
     Toast.js           — undo toast notification
+sample/
+  mwb_CH_202609.epub   — sample JW workbook EPUB for local dev/testing
 meeting-scheduler-plan.md  — full product spec and architecture decisions
+agents.md              — Claude API integration plans and AI workflow notes
 ```
 
 ---
@@ -49,6 +57,7 @@ meeting-scheduler-plan.md  — full product spec and architecture decisions
 | `page` | string | active nav page (`meetings` / `overview` / `people` / `import`) |
 | `view` | string | meetings sub-tab (`midweek` / `weekend`) |
 | `week` | number | index into `midweekWeeks` array |
+| `midweekWeeks` | array | week objects — initialized from seed data, replaced on EPUB import |
 | `editMode` | boolean | toggles inline contentEditable on WhoSlots |
 | `assignments` | `{[slotId]: name}` | overrides for all slots; persists across sheet opens |
 | `sheet` | object\|null | open AssignSheet config: `{slotId, catKey, ctxLabel, defaultName}` |
@@ -190,13 +199,36 @@ Full eligibility matrix (per S-38) is in `meeting-scheduler-plan.md §11`.
 
 | Phase | Status |
 |---|---|
-| **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet with weighted candidates, same-week conflict indicator |
-| **Phase 2 — Backend** | Not started — Node API (Fastify/Express) + Postgres (Neon or Fly Postgres) + Prisma/Drizzle, EPUB import, image/PDF via Claude API |
+| **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet with weighted candidates, same-week conflict indicator, client-side EPUB import (parse → review → commit to state) |
+| **Phase 2 — Backend** | Not started — Node API (Fastify/Express) + Postgres (Neon or Fly Postgres) + Prisma/Drizzle, persist EPUB imports, image/PDF via Claude API vision |
 | **Phase 3 — Notifications** | Not started — LINE Messaging API push, .ics calendar feeds, Draft→Publish diff model |
 
 ---
 
 ## Recent changes
+
+### EPUB import — client-side parsing (2026-05-31)
+Admin uploads the JW Life and Ministry Meeting Workbook EPUB → app parses it in the browser → review screen → commit replaces `midweekWeeks` state.
+
+**Files changed:**
+- `app/lib/epubParser.js` *(new)* — `parseEpub(file)` uses JSZip to unzip, reads `META-INF/container.xml` → OPF → spine, skips non-week pages (cover, toc, extracted-scripture files), parses each week XHTML with `DOMParser`. Extracts: date, reading, 3 songs, all parts with titles/durations/categories. Calculates meeting times from a 19:30 default start.
+- `app/components/ImportPage.js` — full rewrite; state machine `upload → parsing → review → done`; real file input + drag-and-drop; `WeekReviewCard` component (expandable per-week preview); wires `onImportWeeks` callback.
+- `app/page.js` — `midweekWeeks` lifted to state (was a static import); on import: replaces weeks, resets week index to 0, navigates to meetings page.
+- `app/components/MeetingsPage.js` — removed static `midweekWeeks` import; now accepts it as a prop.
+- `app/globals.css` — added: `.dropzone--active`, `.spin` animation, `.imp-error`, `.imp-hint`, `.rev-stage`, `.rvc*` (review card), `.imp-done`.
+
+**EPUB structure (mwb_CH_*.epub):** OEBPS/ contains one XHTML per week. Week pages have `<h3 class="dc-icon--music">` for songs, `<h2 class="du-color--teal-700">` for 上帝話語的寶藏, `<h2 class="du-color--gold-700">` for 用心準備傳道工作, `<h2 class="du-color--maroon-600">` for 基督徒的生活. Parts are `<h3>N．Title</h3>` followed by a `<p>（X分鐘）description</p>` in the next sibling div.
+
+**What EPUB import gives you (all `assign: []`):**
+- date, reading, openSong / midSong / closeSong
+- treasures (3 parts: 寶藏演講, 屬靈寶石, 經文朗讀)
+- ministry (2-4 parts, each paired student/helper)
+- living (1-2 parts + 會眾研經班)
+- Calculated start times based on 19:30 default
+
+**What requires manual entry after import:** chairman, prayers, `weekdayPill` (defaults to 星期三 · 19:30).
+
+---
 
 ### Same-week assignment conflict indicator (2026-05-31)
 **Problem:** When opening the candidate picker for a second slot in the same week, there was no indication that a person was already assigned to another slot in that week.

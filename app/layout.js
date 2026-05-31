@@ -3,6 +3,10 @@ import "./globals.css";
 export const metadata = {
   title: "聚會安排 · 新屋",
   description: "新屋會眾聚會編排系統",
+  icons: {
+    icon: "/jwschedulerlogo.png",
+    apple: "/jwschedulerlogo.png",
+  },
 };
 
 export default function RootLayout({ children }) {

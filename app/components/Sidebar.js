@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 
 export default function Sidebar({ page, setPage }) {
   const items = [
@@ -47,6 +48,14 @@ export default function Sidebar({ page, setPage }) {
   return (
     <aside className="sidenav">
       <div className="brand">
+        <Image
+          src="/jwschedulerlogo.png"
+          alt="聚會安排"
+          width={34}
+          height={34}
+          className="brand__logo"
+          priority
+        />
         <span className="brand__name">聚會安排</span>
         <span className="brand__cong">新屋會眾</span>
       </div>

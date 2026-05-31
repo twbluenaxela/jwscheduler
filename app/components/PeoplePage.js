@@ -2,12 +2,6 @@
 import { useMemo, useState } from 'react';
 import { midweekWeeks, peopleData, weekendData } from '../data/index';
 
-const STATUS_FILTERS = [
-  { id: 'all', label: '全部' },
-  { id: 'active', label: '可排定' },
-  { id: 'away', label: '外出' },
-];
-
 const QUAL_OPTIONS = [
   '主席',
   '禱告',
@@ -87,8 +81,6 @@ function createBlankPerson(nextId) {
     g: 'M',
     appt: DEFAULT_OFFICE,
     quals: [],
-    status: 'active',
-    awayNote: '',
     recent: [],
   };
 }
@@ -96,28 +88,14 @@ function createBlankPerson(nextId) {
 export default function PeoplePage() {
   const [people, setPeople] = useState(() => clonePeople());
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState('all');
   const [selectedId, setSelectedId] = useState(() => `person-1`);
   const [nextId, setNextId] = useState(peopleData.length + 1);
 
   const filteredPeople = useMemo(() => {
-    return people.filter((person) => {
-      if (filter !== 'all' && person.status !== filter) return false;
-      if (query && !person.name.includes(query)) return false;
-      return true;
-    });
-  }, [people, query, filter]);
+    return people.filter((person) => !query || person.name.includes(query));
+  }, [people, query]);
 
   const selectedPerson = people.find((person) => person.id === selectedId) ?? filteredPeople[0] ?? people[0];
-
-  const totals = useMemo(() => {
-    const activeCount = people.filter((person) => person.status !== 'away').length;
-    return {
-      total: people.length,
-      active: activeCount,
-      away: people.length - activeCount,
-    };
-  }, [people]);
 
   const upcoming = useMemo(() => {
     if (!selectedPerson?.name) return [];
@@ -151,7 +129,6 @@ export default function PeoplePage() {
     setPeople((prev) => [fresh, ...prev]);
     setSelectedId(fresh.id);
     setNextId((value) => value + 1);
-    setFilter('all');
     setQuery('');
   }
 
@@ -160,21 +137,7 @@ export default function PeoplePage() {
       <div className="people-header">
         <div>
           <div className="toolbar">
-            <span className="toolbar__title">人員 · 共 {totals.total} 位</span>
-          </div>
-          <div className="people-kpis" aria-label="人員統計">
-            <div className="people-kpi">
-              <span className="people-kpi__label">總人數</span>
-              <span className="people-kpi__value">{totals.total}</span>
-            </div>
-            <div className="people-kpi">
-              <span className="people-kpi__label">可排定</span>
-              <span className="people-kpi__value">{totals.active}</span>
-            </div>
-            <div className="people-kpi people-kpi--alert">
-              <span className="people-kpi__label">外出</span>
-              <span className="people-kpi__value">{totals.away}</span>
-            </div>
+            <span className="toolbar__title">人員 · 共 {people.length} 位</span>
           </div>
         </div>
 
@@ -191,24 +154,11 @@ export default function PeoplePage() {
         </div>
       </div>
 
-      <div className="chips people-filters" role="group" aria-label="人員篩選">
-        {STATUS_FILTERS.map((item) => (
-          <button
-            key={item.id}
-            className="chip"
-            aria-pressed={filter === item.id ? 'true' : 'false'}
-            onClick={() => setFilter(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
       <div className="people-subtitle">
         {query ? (
           <span>搜尋「{query}」· 找到 {filteredPeople.length} 位</span>
         ) : (
-          <span>以名單為核心的卡片檢視，適合快速查看資格、外出狀態與個人負載。</span>
+          <span>以名單為核心的卡片檢視，適合快速查看資格與個人安排。</span>
         )}
       </div>
 
@@ -217,7 +167,7 @@ export default function PeoplePage() {
           {filteredPeople.length > 0 ? filteredPeople.map((person) => (
             <button
               key={person.id}
-              className={`person${person.status === 'away' ? ' is-away' : ''}${selectedPerson?.id === person.id ? ' is-selected' : ''}`}
+              className={`person${selectedPerson?.id === person.id ? ' is-selected' : ''}`}
               onClick={() => setSelectedId(person.id)}
             >
               <span className={`avatar ${person.g === 'M' ? 'g-m' : 'g-f'}`}>
@@ -236,9 +186,6 @@ export default function PeoplePage() {
                     <span key={qual} className="qual">{qual}</span>
                   ))}
                 </div>
-                {person.status === 'away' && (
-                  <div className="away-flag">● {person.awayNote || '外出中'}</div>
-                )}
               </div>
               <span className="ov-caret">›</span>
             </button>
@@ -259,24 +206,6 @@ export default function PeoplePage() {
                   <div className="people-detail__meta">
                     {selectedPerson.g === 'M' ? '弟兄' : '姊妹'} · {selectedPerson.appt || '—'}
                   </div>
-                </div>
-                <div className={`people-detail__status people-detail__status--${selectedPerson.status}`}>
-                  {selectedPerson.status === 'away' ? '外出' : '可排定'}
-                </div>
-              </div>
-
-              <div className="people-detail__stats">
-                <div className="people-stat">
-                  <span className="people-stat__label">未來指派</span>
-                  <span className="people-stat__value">{upcoming.length}</span>
-                </div>
-                <div className="people-stat">
-                  <span className="people-stat__label">近期記錄</span>
-                  <span className="people-stat__value">{selectedPerson.recent?.length ?? 0}</span>
-                </div>
-                <div className="people-stat">
-                  <span className="people-stat__label">資格數</span>
-                  <span className="people-stat__value">{selectedPerson.quals.length}</span>
                 </div>
               </div>
 
@@ -322,36 +251,6 @@ export default function PeoplePage() {
                       <option key={office} value={office}>{office}</option>
                     ))}
                   </select>
-                </label>
-
-                <div className="field">
-                  <span className="field__label">狀態</span>
-                  <div className="chips">
-                    <button
-                      className="chip"
-                      aria-pressed={selectedPerson.status === 'active' ? 'true' : 'false'}
-                      onClick={() => updateSelected({ status: 'active' })}
-                    >
-                      可排定
-                    </button>
-                    <button
-                      className="chip chip--alert"
-                      aria-pressed={selectedPerson.status === 'away' ? 'true' : 'false'}
-                      onClick={() => updateSelected({ status: 'away' })}
-                    >
-                      外出
-                    </button>
-                  </div>
-                </div>
-
-                <label className="field">
-                  <span className="field__label">外出說明</span>
-                  <input
-                    className="field__input"
-                    value={selectedPerson.awayNote || ''}
-                    onChange={(e) => updateSelected({ awayNote: e.target.value })}
-                    placeholder="例如：6/14 - 6/28 外出"
-                  />
                 </label>
               </div>
 

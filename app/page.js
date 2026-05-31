@@ -9,9 +9,11 @@ import PeoplePage from './components/PeoplePage';
 import ImportPage from './components/ImportPage';
 import AssignSheet from './components/AssignSheet';
 import Toast from './components/Toast';
+import { midweekWeeks as seedWeeks } from './data/index';
 
 export default function App() {
   const [page, setPage] = useState('meetings');
+  const [midweekWeeks, setMidweekWeeks] = useState(seedWeeks);
   const [view, setView] = useState('midweek');
   const [week, setWeek] = useState(0);
   const [editMode, setEditMode] = useState(false);
@@ -29,6 +31,12 @@ export default function App() {
   const getAssign = useCallback((slotId, defaultName) => {
     return slotId in assignments ? assignments[slotId] : (defaultName ?? '');
   }, [assignments]);
+
+  const updateMidweekWeek = useCallback((weekId, updater) => {
+    setMidweekWeeks((prev) => prev.map((week) => (
+      week.id === weekId ? updater(week) : week
+    )));
+  }, []);
 
   const openSheet = useCallback((slotId, catKey, ctxLabel, currentName) => {
     setSheet({ slotId, catKey, ctxLabel, defaultName: currentName });
@@ -50,11 +58,7 @@ export default function App() {
     });
   }, []);
 
-  const onEdit = useCallback((slotId, value) => {
-    setAssignments((prev) => ({ ...prev, [slotId]: value }));
-  }, []);
-
-  const sharedProps = { getAssign, openSheet, onEdit };
+  const sharedProps = { getAssign, openSheet, updateMidweekWeek };
 
   return (
     <>
@@ -64,6 +68,7 @@ export default function App() {
         <div className="content">
           {page === 'meetings' && (
             <MeetingsPage
+              midweekWeeks={midweekWeeks}
               view={view} setView={setView}
               week={week} setWeek={setWeek}
               editMode={editMode} setEditMode={setEditMode}
@@ -74,7 +79,15 @@ export default function App() {
           )}
           {page === 'overview' && <OverviewPage />}
           {page === 'people' && <PeoplePage />}
-          {page === 'import' && <ImportPage />}
+          {page === 'import' && (
+            <ImportPage
+              onImportWeeks={(weeks) => {
+                setMidweekWeeks(weeks);
+                setWeek(0);
+                setPage('meetings');
+              }}
+            />
+          )}
         </div>
       </div>
       <TabBar page={page} setPage={setPage} />

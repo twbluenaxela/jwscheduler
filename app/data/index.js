@@ -10,13 +10,11 @@ export const midweekWeeks = [
     openPrayer: "林家明",
     openSong: "84",
     openIntroTime: "7:36",
-    treasuresGroup: "第一班",
     treasures: [
       { id: "t0", time: "7:36", partNum: 1, title: "「不要怕他們，因為我與你同在」", dur: "10 分鐘", cat: "treasures", assign: ["陳志強"] },
       { id: "t1", time: "7:46", partNum: 2, title: "屬靈寶石", dur: "10 分鐘", cat: "gems", assign: ["張宗翰"] },
       { id: "t2", time: "7:56", partNum: 3, title: "經文朗讀", dur: "4 分鐘", cat: "reading", roleLabel: "學生", assign: ["李建宏"] },
     ],
-    ministryGroup: "第一班",
     ministry: [
       { id: "m0", time: "8:00", partNum: 4, title: "初次交談 — 向住戶作見證", dur: "3 分鐘", cat: "ministry", roleLabel: "學生/助手", assign: ["黃美玲", "周佩珊"] },
       { id: "m1", time: "8:04", partNum: 5, title: "再次交談 — 向住戶作見證", dur: "4 分鐘", cat: "ministry", roleLabel: "學生/助手", assign: ["林淑芬", "陳怡君"] },
@@ -44,13 +42,11 @@ export const midweekWeeks = [
     openPrayer: "黃俊賢",
     openSong: "56",
     openIntroTime: "7:36",
-    treasuresGroup: "第一班",
     treasures: [
       { id: "t0", time: "7:36", partNum: 1, title: "猶大國民是前車之鑑", dur: "10 分鐘", cat: "treasures", assign: ["潘冠廷"] },
       { id: "t1", time: "7:46", partNum: 2, title: "屬靈寶石", dur: "10 分鐘", cat: "gems", assign: ["卓銘軒"] },
       { id: "t2", time: "7:56", partNum: 3, title: "經文朗讀", dur: "4 分鐘", cat: "reading", roleLabel: "學生", assign: [] },
     ],
-    ministryGroup: "第一班",
     ministry: [
       { id: "m0", time: "8:00", partNum: 4, title: "初次交談 — 在公共場所傳道", dur: "2 分鐘", cat: "ministry", roleLabel: "學生/助手", assign: ["蔡麗華", "黃美玲"] },
       { id: "m1", time: "8:03", partNum: 5, title: "初次交談 — 向住戶作見證", dur: "2 分鐘", cat: "ministry", roleLabel: "學生/助手", assign: ["周佩珊", "林淑芬"] },

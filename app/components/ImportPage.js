@@ -1,108 +1,230 @@
 'use client';
 
-const sources = [
-  { ic: '▤', name: 'Excel (.xlsx)', desc: '沿用現有表格 · 種子人員與歷史指派', rel: 'high' },
-  { ic: '▦', name: '圖片 (JPG / PNG)', desc: '拍下的表格 · 以視覺辨識解析', rel: 'med' },
-  { ic: '▥', name: 'PDF', desc: '文字層解析，必要時以視覺辨識', rel: 'med' },
-  { ic: '❖', name: '聚會手冊 EPUB', desc: '每週節目 · 標題／時長／詩歌', rel: 'high' },
-];
+import { useState, useRef, useCallback } from 'react';
+import { parseEpub } from '../lib/epubParser';
 
-const reviewItems = [
-  { ok: true,  part: '經文朗讀',         who: '李建宏',         note: '' },
-  { ok: true,  part: '初次交談 / 助手',  who: '黃美玲 / 周佩珊', note: '' },
-  { ok: false, part: '屬靈寶石',         who: '張宗翰？',        note: '辨識度低，請確認' },
-  { ok: true,  part: '會眾研經班',       who: '劉政德 / 蔡明杰', note: '' },
-];
+const SECTION_LABELS = {
+  treasures: { label: '上帝話語的寶藏', color: 'treasures' },
+  ministry:  { label: '用心準備傳道工作', color: 'ministry' },
+  living:    { label: '基督徒的生活', color: 'living' },
+};
 
-const exportCards = [
+const CAT_LABELS = {
+  treasures: '寶藏演講', gems: '屬靈寶石', reading: '經文朗讀',
+  ministry: '傳道示範', living: '生活演講', cbs: '研經班',
+};
+
+const EXPORT_CARDS = [
   { ic: '▦', label: '分享圖片', sub: 'JPG · 貼到 LINE 群組' },
   { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式' },
   { ic: '▥', label: '匯出 PDF', sub: '列印用排版' },
   { ic: '⎙', label: '列印', sub: '直接送印表機' },
 ];
 
-export default function ImportPage() {
+function WeekReviewCard({ week, idx }) {
+  const [open, setOpen] = useState(idx === 0);
+  const total = week.treasures.length + week.ministry.length + week.living.length;
+
+  return (
+    <div className="rvc">
+      <button className="rvc__head" onClick={() => setOpen(o => !o)}>
+        <span className="rvc__arrow">{open ? '▾' : '▸'}</span>
+        <span className="rvc__date">{week.date}</span>
+        <span className="rvc__reading">{week.reading}</span>
+        <span className="rvc__meta">
+          {total} 項 · 詩歌 {week.openSong}/{week.midSong}/{week.closeSong}
+        </span>
+      </button>
+
+      {open && (
+        <div className="rvc__body">
+          {(['treasures', 'ministry', 'living']).map(sec => {
+            const parts = week[sec];
+            if (!parts.length) return null;
+            const { label, color } = SECTION_LABELS[sec];
+            return (
+              <div key={sec} className="rvc__section">
+                <div className={`rvc__sec-head rvc__sec-head--${color}`}>{label}</div>
+                {parts.map((p, i) => (
+                  <div key={i} className="rvc__part">
+                    <span className="rvc__part-num">{p.partNum}.</span>
+                    <span className="rvc__part-title">{p.title}</span>
+                    <span className="rvc__part-meta">
+                      {CAT_LABELS[p.cat] ?? p.cat} · {p.dur}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ImportPage({ onImportWeeks }) {
+  const [stage, setStage] = useState('upload'); // upload | parsing | review | done
+  const [parsedWeeks, setParsedWeeks] = useState([]);
+  const [error, setError] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const processFile = useCallback(async (file) => {
+    if (!file) return;
+    if (!file.name.endsWith('.epub')) {
+      setError('請選擇 .epub 格式的聚會手冊檔案');
+      return;
+    }
+    setError(null);
+    setStage('parsing');
+    try {
+      const weeks = await parseEpub(file);
+      setParsedWeeks(weeks);
+      setStage('review');
+    } catch (e) {
+      setError(e.message ?? '解析失敗，請確認檔案格式正確');
+      setStage('upload');
+    }
+  }, []);
+
+  const onFileChange = (e) => {
+    processFile(e.target.files?.[0]);
+    e.target.value = '';
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    processFile(e.dataTransfer.files?.[0]);
+  };
+
+  const handleConfirm = () => {
+    onImportWeeks?.(parsedWeeks);
+    setStage('done');
+  };
+
+  const handleReset = () => {
+    setStage('upload');
+    setParsedWeeks([]);
+    setError(null);
+  };
+
   return (
     <section>
       <div className="toolbar">
         <span className="toolbar__title">匯入 / 匯出</span>
+        {stage === 'review' && (
+          <button className="btn" onClick={handleReset}>重新上傳</button>
+        )}
       </div>
 
-      <div className="imp-grid">
-        {/* Import column */}
-        <div className="imp-col">
-          <h3 className="imp-h">匯入資料</h3>
-          <div className="dropzone">
-            <div className="dropzone__ic">⬆</div>
-            <div className="dropzone__t">拖曳檔案到這裡，或<u>點擊選擇</u></div>
-            <div className="dropzone__sub">支援 Excel · 圖片 · PDF · 聚會手冊 EPUB</div>
-          </div>
-          <div className="srcs">
-            {sources.map((s, i) => (
-              <div key={i} className="src">
-                <span className="src__ic">{s.ic}</span>
-                <div className="src__t">
-                  <span className="src__name">{s.name}</span>
-                  <span className="src__desc">{s.desc}</span>
-                </div>
-                <span className={`rel rel--${s.rel}`}>
-                  {s.rel === 'high' ? '高準確度' : '需審核'}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="pipeline">
-            <span className="pl-step is-done">上傳</span>
-            <span className="pl-arr">→</span>
-            <span className="pl-step is-now">解析</span>
-            <span className="pl-arr">→</span>
-            <span className="pl-step">審核</span>
-            <span className="pl-arr">→</span>
-            <span className="pl-step">發布</span>
-          </div>
-        </div>
-
-        {/* Review column */}
-        <div className="imp-col">
-          <h3 className="imp-h">
-            審核 — 確認後才寫入
-            <span className="imp-h__src">圖片解析 · 6/3 聚會</span>
-          </h3>
-          <div className="rev">
-            <div className="rev-head">
-              <span />
-              <span>項目</span>
-              <span>指派</span>
-              <span>備註</span>
+      {/* ── UPLOAD / PARSING ── */}
+      {(stage === 'upload' || stage === 'parsing') && (
+        <div className="imp-grid">
+          <div className="imp-col">
+            <h3 className="imp-h">匯入聚會手冊 EPUB</h3>
+            <div
+              className={`dropzone${dragging ? ' dropzone--active' : ''}`}
+              onClick={() => stage === 'upload' && fileInputRef.current?.click()}
+              onDrop={onDrop}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".epub"
+                style={{ display: 'none' }}
+                onChange={onFileChange}
+              />
+              {stage === 'parsing' ? (
+                <>
+                  <div className="dropzone__ic spin">⟳</div>
+                  <div className="dropzone__t">解析中，請稍候…</div>
+                  <div className="dropzone__sub">正在讀取聚會手冊節目</div>
+                </>
+              ) : (
+                <>
+                  <div className="dropzone__ic">⬆</div>
+                  <div className="dropzone__t">拖曳 EPUB 到這裡，或<u>點擊選擇</u></div>
+                  <div className="dropzone__sub">
+                    支援 JW.org 聚會手冊 EPUB（mwb_CH_*.epub）
+                  </div>
+                </>
+              )}
             </div>
-            {reviewItems.map((r, i) => (
-              <div key={i} className={`rev-row${!r.ok ? ' rev-row--warn' : ''}`}>
-                <span className="rev-ic">{r.ok ? '✓' : '！'}</span>
-                <span className="rev-part">{r.part}</span>
-                <span className="rev-who">{r.who}</span>
-                <span className="rev-note">{r.note}</span>
+
+            {error && <div className="imp-error">{error}</div>}
+
+            <div className="imp-hint">
+              <div className="imp-hint__title">如何取得 EPUB？</div>
+              <ol className="imp-hint__steps">
+                <li>前往 JW.org → 出版物 → 傳道與生活聚會手冊</li>
+                <li>選擇中文（繁體）語言</li>
+                <li>下載 EPUB 格式（每兩個月一期）</li>
+                <li>將下載的 .epub 檔案上傳到這裡</li>
+              </ol>
+            </div>
+          </div>
+
+          <div className="imp-col">
+            <h3 className="imp-h">匯出與分享</h3>
+            <div className="exp-grid">
+              {EXPORT_CARDS.map((c, i) => (
+                <button key={i} className="exp-card">
+                  <span className="exp-ic">{c.ic}</span>
+                  <b>{c.label}</b>
+                  <small>{c.sub}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── REVIEW ── */}
+      {stage === 'review' && (
+        <div className="rev-stage">
+          <div className="rev-stage__bar">
+            <div>
+              <div className="rev-stage__title">
+                解析完成 — 找到 {parsedWeeks.length} 週節目
               </div>
+              <div className="rev-stage__sub">
+                請確認節目內容正確，然後點選「匯入」套用至編排系統
+              </div>
+            </div>
+            <div className="rev-stage__acts">
+              <button className="btn" onClick={handleReset}>取消</button>
+              <button className="btn btn--primary" onClick={handleConfirm}>
+                匯入 {parsedWeeks.length} 週
+              </button>
+            </div>
+          </div>
+
+          <div className="rvc-list">
+            {parsedWeeks.map((week, i) => (
+              <WeekReviewCard key={i} week={week} idx={i} />
             ))}
           </div>
-          <div className="rev-actions">
-            <button className="btn">捨棄</button>
-            <button className="btn btn--primary">確認並發布</button>
-          </div>
         </div>
-      </div>
+      )}
 
-      <section className="exp-block">
-        <h3 className="imp-h">匯出與分享</h3>
-        <div className="exp-grid">
-          {exportCards.map((c, i) => (
-            <button key={i} className="exp-card">
-              <span className="exp-ic">{c.ic}</span>
-              <b>{c.label}</b>
-              <small>{c.sub}</small>
-            </button>
-          ))}
+      {/* ── DONE ── */}
+      {stage === 'done' && (
+        <div className="imp-done">
+          <div className="imp-done__ic">✓</div>
+          <div className="imp-done__title">匯入成功！</div>
+          <div className="imp-done__sub">
+            已載入 {parsedWeeks.length} 週節目。前往「聚會」頁面開始指派人員。
+          </div>
+          <button className="btn" onClick={handleReset}>再次匯入</button>
         </div>
-      </section>
+      )}
     </section>
   );
 }
