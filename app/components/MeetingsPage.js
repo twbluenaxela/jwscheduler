@@ -2,14 +2,20 @@
 import { useEffect, useRef, useState } from 'react';
 import MidweekWeek from './MidweekWeek';
 import WeekendView from './WeekendView';
+import {
+  copyWeekImageToClipboard,
+  downloadWeekJpeg,
+  downloadWeekXlsx,
+  openWeekPrintWindow,
+} from '../lib/midweekExport';
 
 const EXPORT_ITEMS = [
-  { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組' },
-  { ic: '▭', label: '複製到剪貼簿' },
+  { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組', action: 'jpg' },
+  { ic: '▭', label: '複製到剪貼簿', action: 'copy' },
   null,
-  { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式' },
-  { ic: '▥', label: '匯出 PDF' },
-  { ic: '⎙', label: '列印' },
+  { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
+  { ic: '▥', label: '匯出 PDF', action: 'pdf' },
+  { ic: '⎙', label: '列印', action: 'print' },
 ];
 
 function getDateLabel(week) {
@@ -78,7 +84,25 @@ function WeekPicker({ weeks, currentWeek, onSelect }) {
   );
 }
 
-function ExportMenu({ exportOpen, setExportOpen, menuRef }) {
+function ExportMenu({ week, getAssign, exportOpen, setExportOpen, menuRef }) {
+  const handleExport = async (type) => {
+    if (!week) return;
+    setExportOpen(false);
+    try {
+      if (type === 'jpg') {
+        await downloadWeekJpeg(week, getAssign);
+      } else if (type === 'copy') {
+        await copyWeekImageToClipboard(week, getAssign);
+      } else if (type === 'xlsx') {
+        await downloadWeekXlsx(week, getAssign);
+      } else if (type === 'pdf' || type === 'print') {
+        openWeekPrintWindow(week, getAssign);
+      }
+    } catch (error) {
+      window.alert(error?.message || '匯出失敗');
+    }
+  };
+
   return (
     <div className="menuwrap" ref={menuRef}>
       <button
@@ -93,7 +117,12 @@ function ExportMenu({ exportOpen, setExportOpen, menuRef }) {
             item === null ? (
               <div key={i} className="menu__div" />
             ) : (
-              <button key={i} className="menu__item">
+              <button
+                key={i}
+                type="button"
+                className="menu__item"
+                onClick={() => handleExport(item.action)}
+              >
                 <span className="menu__ic">{item.ic}</span>
                 {item.label}
                 {item.sub && <small>{item.sub}</small>}
@@ -152,7 +181,13 @@ export default function MeetingsPage({
               <span className="pen">{editMode ? '✓' : '✎'}</span>
               <span>{editMode ? '完成' : '編輯'}</span>
             </button>
-            <ExportMenu exportOpen={exportOpen} setExportOpen={setExportOpen} menuRef={menuRef} />
+            <ExportMenu
+              week={midweekWeeks[week]}
+              getAssign={getAssign}
+              exportOpen={exportOpen}
+              setExportOpen={setExportOpen}
+              menuRef={menuRef}
+            />
           </div>
 
           {editMode && (

@@ -120,11 +120,17 @@ These apply when Claude Code (this tool) works on this repo.
 
 ### State ownership
 
-All interactive state stays flat in `app/page.js`. Do not introduce React Context, Zustand, or any other state manager until Phase 2 backend is wired. The one exception: `ImportPage` manages its own `stage` / `parsedWeeks` / `error` locally — that's fine because it's transient import state, not app state.
+All interactive state stays flat in `app/page.js`. Do not introduce React Context, Zustand, or any other state manager until Phase 2 backend is wired. Two local-state exceptions are fine:
+- `ImportPage` owns `stage` / `parsedWeeks` / `error` — transient import state.
+- `WeekPicker` (inside `MeetingsPage.js`) owns its `open` boolean — ephemeral UI state.
 
 ### CSS convention
 
-All styles go in `app/globals.css`. No CSS Modules, no Tailwind, no `style={}` props. Token names are in `globals.css :root`. When adding new component styles, append them to the file above the final `@media (max-width: 860px)` block.
+All styles go in `app/globals.css`. No CSS Modules, no Tailwind, no `style={}` props. Token names are in `globals.css :root`. When adding new component styles, append them above the final `@media (max-width: 860px)` block.
+
+### Layout: midweek card alignment
+
+The midweek view wraps the toolbar, nav strip, and card in a single `.mw-container` (max-width 880px). This ensures the toolbar's 編輯/匯出 buttons always align with the card's right edge. If you add new toolbar controls for the midweek view, place them **inside** the `.mw-container` block in `MeetingsPage.js`, not outside it. The weekend view has a separate minimal toolbar.
 
 ### EPUB parser is client-only
 
@@ -132,7 +138,11 @@ All styles go in `app/globals.css`. No CSS Modules, no Tailwind, no `style={}` p
 
 ### Adding new week fields
 
-The `midweekWeeks` array shape is defined by the seed data in `app/data/index.js` and produced by `epubParser.js`. If you add a field, update both. The shape is also consumed by `MidweekWeek.js` — check that component before adding or removing fields.
+The `midweekWeeks` array shape is defined by the seed data in `app/data/index.js` and produced by `epubParser.js`. If you add a field, update both. The shape is consumed by `MidweekWeek.js` (renders the card) and `MeetingsPage.js` (WeekPicker reads `dateLabel`). Check those before adding or removing fields.
+
+**Current optional fields** (absent on seed data, present on EPUB-parsed weeks):
+- `dateLabel` — full week range string from the EPUB `<h1>`, e.g. `"9月7-13日"`. Used by `WeekPicker` to show the range. Falls back to computing `"X月Y-Z日"` from `date` if absent.
+- `cbsRef` — book+chapter string from the CBS DUR line, e.g. `"《勇氣》第7章"`. Rendered inline on the CBS row in `MidweekWeek.js`. Absent on non-CBS parts and seed data.
 
 ### The review screen is non-negotiable
 

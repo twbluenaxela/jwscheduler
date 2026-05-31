@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import TabBar from './components/TabBar';
@@ -9,7 +9,7 @@ import PeoplePage from './components/PeoplePage';
 import ImportPage from './components/ImportPage';
 import AssignSheet from './components/AssignSheet';
 import Toast from './components/Toast';
-import { midweekWeeks as seedWeeks } from './data/index';
+import { midweekWeeks as seedWeeks, weekendData as seedWeekendData } from './data/index';
 
 export default function App() {
   const [page, setPage] = useState('meetings');
@@ -19,6 +19,10 @@ export default function App() {
   const [editMode, setEditMode] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [weekendFilter, setWeekendFilter] = useState('upcoming');
+  const [weekendRows, setWeekendRows] = useState(() => seedWeekendData.map((r, i) => ({ ...r, _id: i })));
+  const [weekendEditMode, setWeekendEditMode] = useState(false);
+  const [weekendExportOpen, setWeekendExportOpen] = useState(false);
+  const nextWeekendId = useRef(seedWeekendData.length);
   const [assignments, setAssignments] = useState({});
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
@@ -36,6 +40,22 @@ export default function App() {
     setMidweekWeeks((prev) => prev.map((week) => (
       week.id === weekId ? updater(week) : week
     )));
+  }, []);
+
+  const addWeekendRow = useCallback((type = 'schedule') => {
+    const id = nextWeekendId.current++;
+    const row = type === 'event'
+      ? { _id: id, date: '', type: 'event', label: '', note: '' }
+      : { _id: id, date: '', no: '', topic: '', cong: '', speaker: '', chair: '', wt: '', read: '', host: '', away: '' };
+    setWeekendRows(prev => [...prev, row]);
+  }, []);
+
+  const deleteWeekendRow = useCallback((rowId) => {
+    setWeekendRows(prev => prev.filter(r => r._id !== rowId));
+  }, []);
+
+  const updateWeekendRow = useCallback((rowId, field, value) => {
+    setWeekendRows(prev => prev.map(r => r._id === rowId ? { ...r, [field]: value } : r));
   }, []);
 
   const openSheet = useCallback((slotId, catKey, ctxLabel, currentName) => {
@@ -59,6 +79,7 @@ export default function App() {
   }, []);
 
   const sharedProps = { getAssign, openSheet, updateMidweekWeek };
+  const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow };
 
   return (
     <>

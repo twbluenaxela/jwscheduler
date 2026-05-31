@@ -33,8 +33,11 @@ app/
     Sidebar.js         — desktop left nav
     TopBar.js          — mobile top bar
     TabBar.js          — mobile bottom tab bar
-    MeetingsPage.js    — tab switcher for midweek / weekend views; accepts midweekWeeks prop
-    MidweekWeek.js     — single midweek week card with WhoSlot / PairSlot
+    MeetingsPage.js    — midweek/weekend tab switcher; owns WeekPicker + ExportMenu;
+                         midweek view wraps everything in .mw-container (toolbar +
+                         .mw-navstrip + MidweekWeek) so all right edges align
+    MidweekWeek.js     — single midweek week card with WhoSlot / PairSlot;
+                         renders cbsRef (book+chapter) inline on the CBS row
     WeekendView.js     — weekend schedule table
     OverviewPage.js    — month overview list
     PeoplePage.js      — congregation member list
@@ -220,13 +223,31 @@ Admin uploads the JW Life and Ministry Meeting Workbook EPUB → app parses it i
 **EPUB structure (mwb_CH_*.epub):** OEBPS/ contains one XHTML per week. Week pages have `<h3 class="dc-icon--music">` for songs, `<h2 class="du-color--teal-700">` for 上帝話語的寶藏, `<h2 class="du-color--gold-700">` for 用心準備傳道工作, `<h2 class="du-color--maroon-600">` for 基督徒的生活. Parts are `<h3>N．Title</h3>` followed by a `<p>（X分鐘）description</p>` in the next sibling div.
 
 **What EPUB import gives you (all `assign: []`):**
-- date, reading, openSong / midSong / closeSong
-- treasures (3 parts: 寶藏演講, 屬靈寶石, 經文朗讀)
-- ministry (2-4 parts, each paired student/helper)
-- living (1-2 parts + 會眾研經班)
+- `date` ("9月 7日"), `dateLabel` ("9月7-13日" — full range for the week picker)
+- `reading`, `openSong` / `midSong` / `closeSong`
+- `treasures` (3 parts: 寶藏演講, 屬靈寶石, 經文朗讀)
+- `ministry` (2–4 parts, each paired student/helper; short titles like 初次交談 get description appended: "初次交談 — 向住戶作見證")
+- `living` (1–2 parts + 會眾研經班); CBS part carries `cbsRef` (e.g. `"《勇氣》第7章"`) extracted from the duration line
 - Calculated start times based on 19:30 default
 
 **What requires manual entry after import:** chairman, prayers, `weekdayPill` (defaults to 星期三 · 19:30).
+
+---
+
+### Week picker, layout alignment, CBS book reference (2026-05-31)
+
+**Week picker:**
+- `MeetingsPage.js` — `WeekPicker` component (dropdown list of all weeks). Shows `dateLabel` from EPUB (e.g. "9月7-13日") or computes a range from `date` for seed weeks (start day + 6). Current week highlighted dark with "當週" badge; auto-scrolls into view on open. Positioned as a flex-fill button inside `.mw-navstrip`.
+- `epubParser.js` — added `dateLabel` field (raw H1 text from the week XHTML, e.g. "9月7-13日") stored on every parsed week.
+
+**Layout alignment — toolbar inline with card:**
+- `MeetingsPage.js` — midweek view now renders everything (toolbar + edit-banner + navstrip + card) inside `.mw-container`. This constrains the toolbar's right edge to the same `max-width: 880px` as the card, so 編輯 / 匯出 align flush with the card's right edge. Weekend view has a separate minimal toolbar (tabs only).
+- `.mw-navstrip` — nav strip (‹ picker ›) sits between toolbar and card, sharing the same border/background. Card top border and radius are removed where it meets the strip, creating a single unified unit.
+
+**CBS book reference:**
+- `epubParser.js` — for 會眾研經班 parts, text after the duration in the EPUB (e.g. `《勇氣》第7章`) is stored as `cbsRef` on the part object.
+- `MidweekWeek.js` — CBS row renders `cbsRef` inline after the duration, styled as `.cbs-ref` (smaller, `--ink-3` colour). No extra row height.
+- `globals.css` — added `.cbs-ref` rule.
 
 ---
 
