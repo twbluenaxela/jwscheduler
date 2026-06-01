@@ -8,11 +8,11 @@ This file documents where and how AI agents (Claude API) are used or planned in 
 
 ### None in production yet
 
-Phase 1 is fully client-side with no Claude API calls. The EPUB parser (`app/lib/epubParser.js`) is deterministic — JSZip + DOMParser, no LLM.
+The app is live at https://jwscheduler.fly.dev/ but has no Claude API calls yet. The EPUB parser (`app/lib/epubParser.js`) is deterministic — JSZip + DOMParser, no LLM. Phase 3 route stubs (`/api/meetings/publish`, `/api/line/webhook`) exist but are not yet wired to any AI logic.
 
 ---
 
-## Planned: Phase 2 — Vision import (image / PDF)
+## Planned: Vision import (image / PDF)
 
 When an admin uploads a **JPG/PNG photo of the schedule** or a **PDF scan**, the structured content cannot be parsed deterministically. This is where the Claude API comes in.
 
@@ -106,7 +106,7 @@ messages: [
 
 ---
 
-## Planned: Phase 3 — Assignment suggestions via Claude
+## Planned: Assignment suggestions via Claude
 
 Once historical assignments are stored in Postgres, an optional "ask Claude" button could explain *why* a candidate is recommended ("陳志強 已 43 天未擔任寶藏演講，且本週未有其他安排") or flag edge cases the algorithm misses (e.g. a brother is scheduled for the same role two weekends in a row due to a manual override).
 

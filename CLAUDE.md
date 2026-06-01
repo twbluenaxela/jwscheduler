@@ -14,7 +14,7 @@ Touch-friendly web app replacing the Excel scheduling workflow for 新屋 (Xinwu
 - **Database:** Neon Postgres via Prisma 6 (`prisma-client-js`)
 - **EPUB parsing:** `jszip` (client-side unzip) + browser `DOMParser` — no server needed
 - **Image export:** `html-to-image` (DOM screenshot → JPG/PNG)
-- **Deploy target:** fly.io (Phase 3+)
+- **Deploy:** fly.io — live at https://jwscheduler.fly.dev/
 
 ---
 
@@ -39,6 +39,8 @@ app/
     people/            — GET: list members, POST: create member
     people/[id]/       — PATCH: update member
     users/me/          — PATCH: update current user's displayName
+    meetings/publish/  — POST: publish finalized schedule (Phase 3)
+    line/webhook/      — POST: LINE Messaging API webhook (Phase 3)
   data/
     index.js           — seed/demo data: midweekWeeks, weekendData, peopleData,
                          overviewData, POOL, CATS
@@ -66,6 +68,11 @@ app/
 prisma/
   schema.prisma        — Prisma schema (Congregation, User, MidweekWeek, Part,
                          Assignment, WeekendRow, Person)
+                         binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+                         required for Alpine-based Docker image on fly.io
+Dockerfile             — multi-stage build: deps → builder (prisma generate + next build) → runner
+fly.toml               — fly.io config: primary_region=ams, internal_port=3000,
+                         release_command="npx prisma db push", NEXT_PUBLIC_* build args
 sample/
   mwb_CH_202609.epub   — sample EPUB for local dev/testing
 ```
@@ -218,6 +225,9 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 - Do not call `new PrismaClient()` without `datasourceUrl` or outside `db.js` — always import the singleton
 - Do not initialize Firebase Admin SDK at module load time — `firebase-admin.js` uses lazy init inside `verifyIdToken()` to avoid build-time crashes
 - Do not add `url = env(...)` to `prisma/schema.prisma` datasource — Prisma 6 reads from env automatically; Prisma 7 broke this and we downgraded
+- Do not remove `binaryTargets` from the Prisma generator — the fly.io runner uses Alpine (musl libc); without `linux-musl-openssl-3.0.x` all API routes crash at runtime
+- Do not run `prisma migrate deploy` as the release command — no migration files exist; use `prisma db push` instead
+- `NEXT_PUBLIC_*` Firebase vars must be in `fly.toml [build.args]` — they are baked in at build time and are not available from fly.io secrets at runtime
 
 ---
 
@@ -228,4 +238,5 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 | **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet, EPUB import, week picker, export (JPG/PDF/Excel) |
 | **Phase 2 — Auth + Multi-tenancy** | Done — Firebase auth, congregation model, invite links, ⚙ settings page, Prisma 6 + Neon Postgres schema live |
 | **Phase 2B — Data persistence** | In progress — `GET /api/congregations/data` loads weeks/people/weekend on mount; `POST /api/midweek-weeks/import` persists EPUB import; people CRUD via `/api/people`; congregation schedule settings (dayOffset, time, exceptions) persist via `PATCH /api/congregations/settings`; user displayName editable via `PATCH /api/users/me`. Remaining: save/load assignments from DB (still React state only), save inline week/part edits to DB, delete week API |
-| **Phase 3 — Notifications** | Not started — LINE Messaging API push, .ics calendar feeds |
+| **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. Release command: `prisma db push`. |
+| **Phase 3 — Notifications** | In progress — `/api/line/webhook` and `/api/meetings/publish` routes exist. LINE Messaging API push and .ics calendar feeds planned. |

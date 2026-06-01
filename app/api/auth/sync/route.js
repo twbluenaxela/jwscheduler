@@ -24,6 +24,7 @@ export async function POST(request) {
 
     return NextResponse.json({ user });
   } catch (err) {
+    console.error('[auth/sync] error:', err.message);
     return NextResponse.json({ error: err.message }, { status: 401 });
   }
 }
