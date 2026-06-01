@@ -26,7 +26,8 @@ app/
   layout.js            — AuthProvider wrapper, font loading, html/body
   globals.css          — full design system (tokens, all component styles)
   login/
-    page.js            — Firebase login UI (email/password + Google)
+    page.js            — Firebase login UI (email/password + Google popup);
+                         redirects to / once useAuth().firebaseUser is set
   join/[token]/
     page.js            — Invite link handler (joins congregation via token)
   api/
@@ -48,7 +49,8 @@ app/
   lib/
     db.js              — Prisma singleton (PrismaClient, reused across hot reloads)
     firebase-client.js — Firebase client SDK (auth, googleProvider)
-    firebase-admin.js  — Firebase Admin SDK (lazy init, verifyIdToken helper)
+    firebase-admin.js  — Firebase Admin SDK (lazy init, verifyIdToken helper);
+                         credentials from FIREBASE_SERVICE_ACCOUNT JSON blob
     auth-context.js    — AuthProvider + useAuth() hook + getToken() helper
     epubParser.js      — client-side EPUB parser; exports parseEpub(file) → week[]
     midweekExport.js   — JPG/Excel/print export functions
@@ -72,7 +74,8 @@ prisma/
                          required for Alpine-based Docker image on fly.io
 Dockerfile             — multi-stage build: deps → builder (prisma generate + next build) → runner
 fly.toml               — fly.io config: primary_region=ams, internal_port=3000,
-                         release_command="npx prisma db push", NEXT_PUBLIC_* build args
+                         NEXT_PUBLIC_* build args. NO release_command — `prisma
+                         db push` timed out on Neon cold-start; run it manually
 sample/
   mwb_CH_202609.epub   — sample EPUB for local dev/testing
 ```
@@ -83,11 +86,15 @@ sample/
 
 Every user belongs to one `Congregation`. The flow:
 
-1. Not logged in → `/login` (Firebase email/password or Google)
+1. Not logged in → `/login` (Firebase email/password or Google popup)
 2. Logged in, no congregation → Onboarding screen (create or join)
 3. Logged in, has congregation → Main app
 
-**`AuthProvider`** (in `layout.js`) listens to `onAuthStateChanged`, calls `POST /api/auth/sync` on every login to upsert the User row in Postgres, and exposes `{ firebaseUser, dbUser, setDbUser }` via `useAuth()`.
+**`AuthProvider`** (in `layout.js`) listens to `onAuthStateChanged`, calls `POST /api/auth/sync` on every login to upsert the User row in Postgres, and exposes `{ firebaseUser, dbUser, setDbUser, dbSyncing, syncError }` via `useAuth()`. `dbSyncing` is true while the sync request is in flight; `syncError` holds the message if it fails. `page.js` gates on these: spinner while `dbSyncing`, error screen on `syncError` — so a backend failure never renders an empty shell.
+
+**Login → app navigation:** the login page (`/login`) does not navigate on its own success callback. It watches `useAuth().firebaseUser` in an effect and `router.replace('/')` once set. Without this, a successful login leaves the user stuck on `/login` ("bounced back to login").
+
+**Google sign-in uses `signInWithPopup`, not `signInWithRedirect`.** Because `authDomain` (`*.firebaseapp.com`) differs from the app origin (`*.fly.dev`), redirect relies on third-party cookies that browsers block, so it silently fails. Popup logs benign `Cross-Origin-Opener-Policy ... window.closed` warnings (Google's pages set strict COOP) but completes via a postMessage fallback — those warnings are noise, not the failure.
 
 **`getToken()`** — async helper that returns the current Firebase ID token. Used in every API call: `headers: { Authorization: 'Bearer <token>' }`.
 
@@ -224,9 +231,13 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 - Do not remove `'use client'` from `page.js` — it owns all interactive state
 - Do not call `new PrismaClient()` without `datasourceUrl` or outside `db.js` — always import the singleton
 - Do not initialize Firebase Admin SDK at module load time — `firebase-admin.js` uses lazy init inside `verifyIdToken()` to avoid build-time crashes
+- Do not feed the Admin SDK a private key from a standalone `FIREBASE_PRIVATE_KEY` env var — shells/secret stores mangle its `\n` newlines and `cert()` throws `error:1E08010C:DECODER routines::unsupported`. Use the full `FIREBASE_SERVICE_ACCOUNT` JSON blob (its `\n` are decoded correctly by `JSON.parse`). `loadServiceAccount()` still normalizes `\n` defensively
+- Do not switch Google sign-in to `signInWithRedirect` — it needs third-party cookies that fail cross-domain (fly.dev app + firebaseapp.com authDomain). Keep `signInWithPopup`; the COOP `window.closed` console warnings it emits are benign
+- Do not remove the `firebaseUser` → `router.replace('/')` effect from `login/page.js` — without it a successful login never leaves `/login`
 - Do not add `url = env(...)` to `prisma/schema.prisma` datasource — Prisma 6 reads from env automatically; Prisma 7 broke this and we downgraded
 - Do not remove `binaryTargets` from the Prisma generator — the fly.io runner uses Alpine (musl libc); without `linux-musl-openssl-3.0.x` all API routes crash at runtime
 - Do not run `prisma migrate deploy` as the release command — no migration files exist; use `prisma db push` instead
+- Do not rely on `prisma db push` as a fly.io `release_command` — Neon free-tier auto-suspend makes the release machine time out connecting, which aborts the whole deploy. The release command was removed; run `fly ssh console -C "npx prisma db push"` manually after a schema change
 - `NEXT_PUBLIC_*` Firebase vars must be in `fly.toml [build.args]` — they are baked in at build time and are not available from fly.io secrets at runtime
 
 ---
@@ -238,5 +249,5 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 | **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet, EPUB import, week picker, export (JPG/PDF/Excel) |
 | **Phase 2 — Auth + Multi-tenancy** | Done — Firebase auth, congregation model, invite links, ⚙ settings page, Prisma 6 + Neon Postgres schema live |
 | **Phase 2B — Data persistence** | In progress — `GET /api/congregations/data` loads weeks/people/weekend on mount; `POST /api/midweek-weeks/import` persists EPUB import; people CRUD via `/api/people`; congregation schedule settings (dayOffset, time, exceptions) persist via `PATCH /api/congregations/settings`; user displayName editable via `PATCH /api/users/me`. Remaining: save/load assignments from DB (still React state only), save inline week/part edits to DB, delete week API |
-| **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. Release command: `prisma db push`. |
+| **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. No release command (Neon cold-start timed it out); `prisma db push` run manually. Admin SDK creds via `FIREBASE_SERVICE_ACCOUNT` secret. |
 | **Phase 3 — Notifications** | In progress — `/api/line/webhook` and `/api/meetings/publish` routes exist. LINE Messaging API push and .ics calendar feeds planned. |

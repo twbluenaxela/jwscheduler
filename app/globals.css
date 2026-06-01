@@ -748,7 +748,7 @@ body.editing .week-edit__input { background: #fff; }
   .topbar .brand__name { font-size: 18px; }
   .content { padding: 18px 14px 84px; }
   .tabbar {
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(5, 1fr);
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
     background: rgba(255,255,255,.94);
     backdrop-filter: saturate(180%) blur(14px);

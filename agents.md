@@ -144,6 +144,17 @@ The `midweekWeeks` array shape is defined by the seed data in `app/data/index.js
 - `dateLabel` — full week range string from the EPUB `<h1>`, e.g. `"9月7-13日"`. Used by `WeekPicker` to show the range. Falls back to computing `"X月Y-Z日"` from `date` if absent.
 - `cbsRef` — book+chapter string from the CBS DUR line, e.g. `"《勇氣》第7章"`. Rendered inline on the CBS row in `MidweekWeek.js`. Absent on non-CBS parts and seed data.
 
+### Auth & deployment gotchas (learned the hard way)
+
+Full detail is in `CLAUDE.md`; the short version for anyone touching auth or deploy:
+
+- **Admin SDK credentials** come from the `FIREBASE_SERVICE_ACCOUNT` JSON blob, never a bare `FIREBASE_PRIVATE_KEY` — the standalone key's `\n` newlines get mangled in shells/secret stores and `cert()` throws `DECODER routines::unsupported`.
+- **Google sign-in must stay `signInWithPopup`.** Redirect breaks cross-domain (fly.dev app vs firebaseapp.com authDomain) because it needs third-party cookies. The `Cross-Origin-Opener-Policy ... window.closed` console warnings from popup are benign — login still completes.
+- **`login/page.js` must redirect after auth** via an effect on `useAuth().firebaseUser` → `router.replace('/')`. The sign-in calls themselves don't navigate; without the effect a successful login stays stuck on `/login`.
+- **`page.js` gates on `dbSyncing` / `syncError`** from `useAuth()`. If a login succeeds but `/api/auth/sync` fails, show the error screen — never the empty app shell.
+- **No fly.io `release_command`.** `prisma db push` times out on Neon's cold start and aborts the deploy. Run schema pushes manually: `fly ssh console -C "npx prisma db push"`.
+- **fly CLI from WSL may fail with IPv6 `network is unreachable`.** Deploy from Windows PowerShell, or hit the fly GraphQL / Machines API directly over IPv4.
+
 ### The review screen is non-negotiable
 
 Per `meeting-scheduler-plan.md §3`: never auto-commit any import. EPUB, PDF, image — all go through the review UI before touching app state or (in Phase 2) the database. Do not add a "skip review" shortcut.

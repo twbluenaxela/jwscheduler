@@ -214,6 +214,21 @@ export default function App() {
         setMidweekWeeks(loadedWeeks);
         setWeek(findCurrentWeekIndex(loadedWeeks));
         setWeekendRows(data.weekendRows ?? []);
+
+        // Populate assignments map from DB data
+        const initialAssignments = {};
+        for (const w of loadedWeeks) {
+          if (w.chairman) initialAssignments[`mw${w.id}_chairman`] = w.chairman;
+          if (w.openPrayer) initialAssignments[`mw${w.id}_openPrayer`] = w.openPrayer;
+          if (w.closePrayer) initialAssignments[`mw${w.id}_closePrayer`] = w.closePrayer;
+          for (const section of ['treasures', 'ministry', 'living']) {
+            for (const part of w[section] ?? []) {
+              if (part.assign?.[0]) initialAssignments[`mw${w.id}_${part.id}_0`] = part.assign[0];
+              if (part.assign?.[1]) initialAssignments[`mw${w.id}_${part.id}_1`] = part.assign[1];
+            }
+          }
+        }
+        setAssignments(initialAssignments);
         nextWeekendId.current = (data.weekendRows ?? []).reduce((max, row) => Math.max(max, Number(row._id) || 0), 0) + 1;
         if (data.congregation) {
           setCongSettings({

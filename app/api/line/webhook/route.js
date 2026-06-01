@@ -24,7 +24,7 @@ async function replyMessage(replyToken, text) {
 async function handleFollow(event) {
   await replyMessage(
     event.replyToken,
-    '你好！請傳送你在排班表上的姓名，即可連結並接收聚會通知。'
+    '你好！這是新屋會眾的聚會排班通知帳號。\n\n請直接回覆你在排班表上的姓名，即可完成連結並接收通知。'
   );
 }
 
