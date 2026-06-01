@@ -96,6 +96,14 @@ Once historical assignments are stored in Postgres (they are, as of Phase 2B), a
 
 This is a UX enhancement, not a core feature — the weighted hash algorithm already does the heavy lifting.
 
+**Qualification model an agent must respect:** candidate eligibility comes from
+`CATS[catKey].tag` matching a `Person.tags` entry (see CLAUDE.md). The chairman
+role is **not** one qualification — it is split into three independent ones that
+do not imply each other: `傳道與生活主席` (midweek), `週末聚會主席` (weekend
+chair), and `守望台主持人` (Watchtower conductor). Do not assume a brother
+qualified for one is qualified for the others. 職務 (appt) for brothers may also
+be `分區監督` (circuit overseer) in addition to the standard appointments.
+
 ---
 
 ## Claude Code development guidelines

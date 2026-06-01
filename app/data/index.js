@@ -98,9 +98,9 @@ export const overviewData = [
 ];
 
 export const peopleData = [
-  { name: "王文哲", g: "M", appt: "長老",    quals: ["主席", "寶藏演講", "公眾演講", "守望台主持"], status: "active", recent: [{ date: "5/27", role: "主席", note: "週三聚會" }, { date: "5/18", role: "公眾演講", note: "週末聚會" }] },
-  { name: "林家明", g: "M", appt: "長老",    quals: ["主席", "經文寶石", "生活演講", "研經班主持"], status: "active", recent: [{ date: "5/27", role: "開始禱告", note: "週三聚會" }, { date: "5/11", role: "研經班主持", note: "週末聚會" }] },
-  { name: "鄭裕昇", g: "M", appt: "助理僕人", quals: ["主席", "寶藏演講", "公眾演講"], status: "active", recent: [{ date: "5/20", role: "主席", note: "週三聚會" }, { date: "5/4", role: "守望台主持", note: "週末聚會" }] },
+  { name: "王文哲", g: "M", appt: "長老",    quals: ["傳道與生活主席", "週末聚會主席", "守望台主持人", "寶藏演講", "公眾演講"], status: "active", recent: [{ date: "5/27", role: "主席", note: "週三聚會" }, { date: "5/18", role: "公眾演講", note: "週末聚會" }] },
+  { name: "林家明", g: "M", appt: "長老",    quals: ["傳道與生活主席", "週末聚會主席", "守望台主持人", "經文寶石", "生活演講", "研經班主持"], status: "active", recent: [{ date: "5/27", role: "開始禱告", note: "週三聚會" }, { date: "5/11", role: "研經班主持", note: "週末聚會" }] },
+  { name: "鄭裕昇", g: "M", appt: "助理僕人", quals: ["傳道與生活主席", "週末聚會主席", "守望台主持人", "寶藏演講", "公眾演講"], status: "active", recent: [{ date: "5/20", role: "主席", note: "週三聚會" }, { date: "5/4", role: "守望台主持", note: "週末聚會" }] },
   { name: "陳志強", g: "M", appt: "助理僕人", quals: ["寶藏演講", "生活演講", "朗讀"], status: "active", recent: [{ date: "5/27", role: "寶藏演講", note: "週三聚會" }, { date: "5/6", role: "生活演講", note: "週三聚會" }] },
   { name: "周家興", g: "M", appt: "傳道員",   quals: ["經文朗讀", "禱告", "朗讀"], status: "active", recent: [{ date: "5/27", role: "經文朗讀", note: "週三聚會" }, { date: "5/11", role: "朗讀", note: "週末聚會" }] },
   { name: "劉政德", g: "M", appt: "長老",    quals: ["研經班主持", "公眾演講", "生活演講"], status: "away", awayNote: "6/14 – 6/28 外出", recent: [{ date: "5/20", role: "研經班主持", note: "週末聚會" }, { date: "5/13", role: "生活演講", note: "週三聚會" }] },
@@ -138,18 +138,19 @@ export const POOL = [
 ];
 
 export const CATS = {
-  chairman:   { tag: "主席",       g: "M",   name: "主席" },
-  prayer:     { tag: "禱告",       g: "M",   name: "禱告" },
-  treasures:  { tag: "寶藏演講",   g: "M",   name: "寶藏演講" },
-  gems:       { tag: "經文寶石",   g: "M",   name: "經文寶石" },
-  reading:    { tag: "經文朗讀",   g: "M",   name: "經文朗讀（學生）" },
-  ministry:   { tag: "傳道示範",   g: "any", name: "傳道訓練" },
-  living:     { tag: "生活演講",   g: "M",   name: "生活演講" },
-  cbs:        { tag: "研經班主持", g: "M",   name: "會眾研經班主持" },
-  cbsread:    { tag: "研經班朗讀", g: "M",   name: "研經班朗讀" },
-  publictalk: { tag: "公眾演講",   g: "M",   name: "公眾演講 講者" },
-  wt:         { tag: "主席",       g: "M",   name: "守望台主持" },
-  wtread:     { tag: "守望台朗讀", g: "M",   name: "守望台朗讀" },
+  chairman:    { tag: "傳道與生活主席", g: "M",   name: "傳道與生活主席" },
+  prayer:      { tag: "禱告",          g: "M",   name: "禱告" },
+  treasures:   { tag: "寶藏演講",      g: "M",   name: "寶藏演講" },
+  gems:        { tag: "經文寶石",      g: "M",   name: "經文寶石" },
+  reading:     { tag: "經文朗讀",      g: "M",   name: "經文朗讀（學生）" },
+  ministry:    { tag: "傳道示範",      g: "any", name: "傳道訓練" },
+  living:      { tag: "生活演講",      g: "M",   name: "生活演講" },
+  cbs:         { tag: "研經班主持",    g: "M",   name: "會眾研經班主持" },
+  cbsread:     { tag: "研經班朗讀",    g: "M",   name: "研經班朗讀" },
+  publictalk:  { tag: "公眾演講",      g: "M",   name: "公眾演講 講者" },
+  weekendchair:{ tag: "週末聚會主席",  g: "M",   name: "週末聚會主席" },
+  wt:          { tag: "守望台主持人",  g: "M",   name: "守望台主持" },
+  wtread:      { tag: "守望台朗讀",    g: "M",   name: "守望台朗讀" },
 };
 
 const SPREAD = 2;

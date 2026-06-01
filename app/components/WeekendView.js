@@ -216,7 +216,7 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
                     {editMode ? <EditCell value={r.cong} onCommit={v => updateRow(r._id, 'cong', v)} placeholder="會眾" /> : r.cong}
                   </td>
                   <td><NamePill slotId={`${key}_speaker`} defaultName={r.speaker} catKey="publictalk" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
-                  <td><NamePill slotId={`${key}_chair`}   defaultName={r.chair}   catKey="wt"         ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
+                  <td><NamePill slotId={`${key}_chair`}   defaultName={r.chair}   catKey="weekendchair" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
                   <td><NamePill slotId={`${key}_wt`}      defaultName={r.wt}      catKey="wt"         ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
                   <td><NamePill slotId={`${key}_read`}    defaultName={r.read}    catKey="wtread"     ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
                   <td>

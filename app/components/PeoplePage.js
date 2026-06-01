@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getToken } from '../lib/auth-context';
 
 const QUAL_OPTIONS = [
-  '主席',
+  '傳道與生活主席',
+  '週末聚會主席',
+  '守望台主持人',
   '禱告',
   '寶藏演講',
   '經文寶石',
@@ -18,7 +20,7 @@ const QUAL_OPTIONS = [
 ];
 
 const OFFICE_OPTIONS = {
-  M: ['長老', '助理僕人', '傳道員', '未受浸傳道員'],
+  M: ['分區監督', '長老', '助理僕人', '傳道員', '未受浸傳道員'],
   F: ['傳道員', '未受浸傳道員'],
 };
 

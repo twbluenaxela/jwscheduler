@@ -100,6 +100,9 @@ scripts/
                          (node --env-file=.env scripts/import-weekend.mjs)
   merge-person.mjs     — one-time: rename/merge a person record + update all assignments
                          (node --env-file=.env scripts/merge-person.mjs)
+  split-chairman-qual.mjs — one-time (idempotent): migrate legacy 主席 tag to the
+                         three split quals (傳道與生活主席 / 週末聚會主席 / 守望台主持人)
+                         (node --env-file=.env scripts/split-chairman-qual.mjs)
 Dockerfile             — multi-stage build: deps → builder (prisma generate + next build) → runner
 fly.toml               — fly.io config: primary_region=ams, internal_port=3000,
                          NEXT_PUBLIC_* build args. NO release_command — `prisma
@@ -222,22 +225,33 @@ Seed/demo data only — not shown to new congregations by default. Accessible vi
 
 ```js
 export const CATS = {
-  chairman:   { tag: "主席",       g: "M",   name: "主席" },
-  prayer:     { tag: "禱告",       g: "M",   name: "禱告" },
-  treasures:  { tag: "寶藏演講",   g: "M",   name: "寶藏演講" },
-  gems:       { tag: "經文寶石",   g: "M",   name: "經文寶石" },
-  reading:    { tag: "經文朗讀",   g: "M",   name: "經文朗讀（學生）" },
-  ministry:   { tag: "傳道示範",   g: "any", name: "傳道訓練" },
-  living:     { tag: "生活演講",   g: "M",   name: "生活演講" },
-  cbs:        { tag: "研經班主持", g: "M",   name: "會眾研經班主持" },
-  cbsread:    { tag: "研經班朗讀", g: "M",   name: "研經班朗讀" },
-  publictalk: { tag: "公眾演講",   g: "M",   name: "公眾演講 講者" },
-  wt:         { tag: "主席",       g: "M",   name: "守望台主持" },
-  wtread:     { tag: "守望台朗讀", g: "M",   name: "守望台朗讀" },
+  chairman:    { tag: "傳道與生活主席", g: "M",   name: "傳道與生活主席" },
+  prayer:      { tag: "禱告",          g: "M",   name: "禱告" },
+  treasures:   { tag: "寶藏演講",      g: "M",   name: "寶藏演講" },
+  gems:        { tag: "經文寶石",      g: "M",   name: "經文寶石" },
+  reading:     { tag: "經文朗讀",      g: "M",   name: "經文朗讀（學生）" },
+  ministry:    { tag: "傳道示範",      g: "any", name: "傳道訓練" },
+  living:      { tag: "生活演講",      g: "M",   name: "生活演講" },
+  cbs:         { tag: "研經班主持",    g: "M",   name: "會眾研經班主持" },
+  cbsread:     { tag: "研經班朗讀",    g: "M",   name: "研經班朗讀" },
+  publictalk:  { tag: "公眾演講",      g: "M",   name: "公眾演講 講者" },
+  weekendchair:{ tag: "週末聚會主席",  g: "M",   name: "週末聚會主席" },
+  wt:          { tag: "守望台主持人",  g: "M",   name: "守望台主持" },
+  wtread:      { tag: "守望台朗讀",    g: "M",   name: "守望台朗讀" },
 };
 ```
 
-QUAL_OPTIONS in PeoplePage.js: `主席`, `禱告`, `寶藏演講`, `經文寶石`, `經文朗讀`, `傳道示範`, `助手`, `生活演講`, `研經班主持`, `研經班朗讀`, `守望台朗讀`, `公眾演講`.
+The old single `主席` qualification was split into three distinct quals/cats:
+`傳道與生活主席` (`chairman` cat — midweek chairman), `週末聚會主席`
+(`weekendchair` cat — weekend `chair` field), and `守望台主持人` (`wt` cat —
+weekend `wt` field). Previously weekend chair and WT conductor both used the
+`wt` cat with tag `主席` and shared one candidate pool. Migration:
+`scripts/split-chairman-qual.mjs` (one-time, idempotent) — gave every member
+tagged `主席` all three new tags and removed the legacy tag.
+
+QUAL_OPTIONS in PeoplePage.js: `傳道與生活主席`, `週末聚會主席`, `守望台主持人`, `禱告`, `寶藏演講`, `經文寶石`, `經文朗讀`, `傳道示範`, `助手`, `生活演講`, `研經班主持`, `研經班朗讀`, `守望台朗讀`, `公眾演講`.
+
+職務 (appt) options for brothers (M): `分區監督`, `長老`, `助理僕人`, `傳道員`, `未受浸傳道員`. For sisters (F): `傳道員`, `未受浸傳道員`.
 
 `AssignSheet` builds candidates from the live `people` state (loaded from DB), not from `POOL`.
 
