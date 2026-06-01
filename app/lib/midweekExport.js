@@ -744,13 +744,13 @@ export async function jpegDataUrlToImage(dataUrl) {
   return { bytes, width: dims.width, height: dims.height };
 }
 
-// Builds a multi-page PDF (one baseline-JPEG image per A4 page) entirely in the
-// browser — no print dialog, no external library. Each image is embedded with
-// the DCTDecode filter and scaled to fit the page within margins.
+// Builds a multi-page PDF (one baseline-JPEG image per page) entirely in the
+// browser — no print dialog, no external library. Each page is sized to match
+// its image's aspect ratio (A4 width, height scaled to fit) so the card fills
+// the whole page edge-to-edge with no white margins — the PDF looks exactly
+// like the exported card image.
 export function jpegImagesToPdfBlob(images) {
-  const PAGE_W = 595.28;
-  const PAGE_H = 841.89;
-  const MARGIN = 24;
+  const PAGE_W = 595.28; // A4 width in points; page height follows each image
   const enc = new TextEncoder();
   const chunks = [];
   let offset = 0;
@@ -896,6 +896,72 @@ export async function exportWeeksXlsx(weeks, getAssign) {
   });
   const blob = await buildXlsxBuffer(rows);
   triggerDownload(blob, weeks.length === 1 ? getMidweekExportFilename(weeks[0], 'xlsx') : `本週聚會_${weeks.length}週.xlsx`);
+}
+
+/* ===== DOM-node exporters (screenshot the real card so the output matches it exactly) =====
+   Unlike the renderWeekToCanvas exporters above (which hand-redraw the week and have
+   drifted from the live card), these capture an actual rendered MidweekWeek card via
+   html-to-image — identical to the meetings-page export. The caller passes the rendered
+   card DOM nodes (one per week, in the same order as `weeks`). */
+
+async function nodeToJpegDataUrl(node) {
+  const { toJpeg } = await import('html-to-image');
+  return toJpeg(node, { pixelRatio: 2, quality: 0.95, backgroundColor: '#ecebe7', skipFonts: false });
+}
+
+export async function exportNodesJpeg(nodes, weeks) {
+  if (!nodes.length) return;
+  if (nodes.length === 1) {
+    const dataUrl = await nodeToJpegDataUrl(nodes[0]);
+    const blob = await (await fetch(dataUrl)).blob();
+    triggerDownload(blob, getMidweekExportFilename(weeks[0], 'jpg'));
+    return;
+  }
+  const zip = new JSZip();
+  for (let i = 0; i < nodes.length; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    const dataUrl = await nodeToJpegDataUrl(nodes[i]);
+    // eslint-disable-next-line no-await-in-loop
+    const blob = await (await fetch(dataUrl)).blob();
+    zip.file(`${sanitizeFilename(getWeekLabel(weeks[i]))}.jpg`, blob);
+  }
+  const out = await zip.generateAsync({ type: 'blob' });
+  triggerDownload(out, `本週聚會_${nodes.length}週.zip`);
+}
+
+export async function exportNodesPdf(nodes, weeks) {
+  if (!nodes.length) return;
+  const images = [];
+  for (const node of nodes) {
+    // eslint-disable-next-line no-await-in-loop
+    images.push(await jpegDataUrlToImage(await nodeToJpegDataUrl(node)));
+  }
+  const blob = jpegImagesToPdfBlob(images);
+  triggerDownload(blob, nodes.length === 1 ? getMidweekExportFilename(weeks[0], 'pdf') : `本週聚會_${nodes.length}週.pdf`);
+}
+
+export async function openNodesPrintWindow(nodes) {
+  if (!nodes.length) throw new Error('沒有可列印的週次。');
+  const urls = [];
+  for (const node of nodes) {
+    // eslint-disable-next-line no-await-in-loop
+    urls.push(await nodeToJpegDataUrl(node));
+  }
+  const imgs = urls.map((u) => `<img src="${u}" />`).join('');
+  const popup = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
+  if (!popup) throw new Error('瀏覽器阻擋了列印視窗。');
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>本週聚會</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #ecebe7; }
+      img { display: block; width: 100%; height: auto; page-break-after: always; }
+      @media print { body { background: #fff; } }
+    </style></head><body>${imgs}
+    <script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));<\/script>
+    </body></html>`);
+  popup.document.close();
+  popup.focus();
+  return popup;
 }
 
 export function openWeeksPrintWindow(weeks, getAssign) {

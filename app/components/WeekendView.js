@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
   const name = getAssign(slotId, defaultName);
@@ -59,7 +59,7 @@ function EditCell({ value, onCommit, placeholder = '—', mono = false }) {
   );
 }
 
-export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow, getSuggestion, onAccept, onClear, fetchWeekendSuggestions }) {
+export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow, addRow, getSuggestion, onAccept, onClear, fetchWeekendSuggestions }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const thisYear = today.getFullYear();
@@ -89,6 +89,15 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
   const [selectedYear, setSelectedYear] = useState(() => thisYear);
   const [loadingRow, setLoadingRow] = useState(null);
   const ghostProps = { getSuggestion, onAccept, onClear };
+  const bottomRef = useRef(null);
+  const prevLen = useRef(weekendRows.length);
+
+  useEffect(() => {
+    if (weekendRows.length > prevLen.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    prevLen.current = weekendRows.length;
+  }, [weekendRows.length]);
 
   const isEventLike = (r) => r.type === 'event' || r.type === 'suspended';
 
@@ -159,7 +168,7 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
       </div>
 
       {/* Desktop table */}
-      {rows.length === 0 ? (
+      {rows.length === 0 && !editMode ? (
         <div className="people-empty">目前沒有週末安排資料。</div>
       ) : (
       <div className="tablescroll">
@@ -273,6 +282,16 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
               );
             })}
           </tbody>
+          {editMode && addRow && (
+            <tfoot ref={bottomRef}>
+              <tr className="we-add-tr">
+                <td colSpan={20}>
+                  <button className="we-add-btn" onClick={() => addRow('schedule')}>＋ 新增安排</button>
+                  <button className="we-add-btn" onClick={() => addRow('event')}>＋ 新增事項</button>
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       )}
@@ -363,6 +382,12 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
             </div>
           );
         })}
+        {editMode && addRow && (
+          <div className="wk-card wk-card--add" ref={bottomRef}>
+            <button className="we-add-btn" onClick={() => addRow('schedule')}>＋ 新增安排</button>
+            <button className="we-add-btn" onClick={() => addRow('event')}>＋ 新增事項</button>
+          </div>
+        )}
       </div>
 
       <div className="legend">

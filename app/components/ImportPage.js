@@ -2,11 +2,12 @@
 
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { parseEpub } from '../lib/epubParser';
+import MidweekWeek from './MidweekWeek';
 import {
-  exportWeeksJpeg,
-  exportWeeksPdf,
+  exportNodesJpeg,
+  exportNodesPdf,
   exportWeeksXlsx,
-  openWeeksPrintWindow,
+  openNodesPrintWindow,
 } from '../lib/midweekExport';
 
 const SECTION_LABELS = {
@@ -107,6 +108,7 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
   const [customTo, setCustomTo] = useState({ m: 12, d: 31 });
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
+  const cardRefs = useRef([]); // rendered (off-screen) MidweekWeek cards, one per selected week
 
   const selectedWeeks = useMemo(() => {
     if (range === 'month') {
@@ -129,10 +131,11 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
     setExportError(null);
     setExporting(true);
     try {
-      if (action === 'jpg') await exportWeeksJpeg(selectedWeeks, getAssign);
+      const nodes = cardRefs.current.slice(0, selectedWeeks.length).filter(Boolean);
+      if (action === 'jpg') await exportNodesJpeg(nodes, selectedWeeks);
       else if (action === 'xlsx') await exportWeeksXlsx(selectedWeeks, getAssign);
-      else if (action === 'pdf') exportWeeksPdf(selectedWeeks, getAssign);
-      else if (action === 'print') openWeeksPrintWindow(selectedWeeks, getAssign);
+      else if (action === 'pdf') await exportNodesPdf(nodes, selectedWeeks);
+      else if (action === 'print') await openNodesPrintWindow(nodes);
     } catch (err) {
       setExportError(err?.message || '匯出失敗');
     } finally {
@@ -436,6 +439,22 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
           <span className="imp-reset-label">目前已載入 {existingWeeks.length} 週</span>
         </div>
       )}
+
+      {/* Off-screen real cards used as the source for JPG/PDF/列印 exports, so the
+          output matches the live card exactly (no hand-redrawn canvas drift). */}
+      <div aria-hidden="true" style={{ position: 'fixed', left: '-99999px', top: 0, width: 960, pointerEvents: 'none' }}>
+        {selectedWeeks.map((w, i) => (
+          <MidweekWeek
+            key={w.id ?? i}
+            week={w}
+            editMode={false}
+            getAssign={getAssign}
+            openSheet={() => {}}
+            updateMidweekWeek={() => {}}
+            cardRef={(el) => { cardRefs.current[i] = el; }}
+          />
+        ))}
+      </div>
     </section>
   );
 }

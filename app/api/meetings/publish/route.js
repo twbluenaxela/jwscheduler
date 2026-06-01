@@ -60,6 +60,22 @@ function collectAssignments(name, weeks, weekendRows) {
 
 function itemKey(item) { return `${item.date}|${item.role}`; }
 
+// Every name holding a future assignment — used so the saved snapshot covers
+// everyone (not just LINE-linked people), keeping the changes-diff accurate.
+function collectAssignedNames(weeks, weekendRows) {
+  const names = new Set();
+  for (const week of weeks) {
+    for (const a of week.assignments) if (a.name) names.add(a.name);
+  }
+  for (const row of weekendRows) {
+    if (row.type === 'event') continue;
+    for (const f of ['speaker', 'chair', 'wt', 'read', 'host']) {
+      if (row[f]) names.add(row[f]);
+    }
+  }
+  return names;
+}
+
 function buildMessage(name, current, previous) {
   const header = `【新屋會眾 · 聚會節目通知】\n${name}，你好！`;
 
@@ -154,6 +170,14 @@ export async function POST(request) {
       } catch (err) {
         failed++;
         errors.push(`${person.name}: ${err.message}`);
+      }
+    }
+
+    // Fill the snapshot for everyone else who holds an assignment (no LINE link),
+    // so the group-wide changes diff (meetings/changes) has a complete baseline.
+    for (const name of collectAssignedNames(weeks, weekendRows)) {
+      if (newSnapshot[name] === undefined) {
+        newSnapshot[name] = collectAssignments(name, weeks, weekendRows);
       }
     }
 
