@@ -50,6 +50,7 @@ model Person {
   tags           String[]
   status         String       @default("active")
   awayNote       String?
+  lineUserId     String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 

@@ -1,0 +1,32 @@
+# fly.toml app configuration file generated for jwscheduler on 2026-06-01T09:26:53+08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'jwscheduler'
+primary_region = 'ams'
+
+[build.args]
+  NEXT_PUBLIC_FIREBASE_API_KEY = "AIzaSyBsIcvaW8K_iP8wxENPaTWoMgEDI5DQ_3Q"
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = "jwschedulertw.firebaseapp.com"
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID = "jwschedulertw"
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET = "jwschedulertw.firebasestorage.app"
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID = "304748231430"
+  NEXT_PUBLIC_FIREBASE_APP_ID = "1:304748231430:web:69e26186c14ce2f19ebc87"
+
+[deploy]
+  release_command = 'npx prisma db push'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256

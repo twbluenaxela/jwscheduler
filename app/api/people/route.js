@@ -23,6 +23,7 @@ function mapPerson(person) {
     quals: person.tags ?? [],
     status: person.status,
     awayNote: person.awayNote ?? '',
+    lineUserId: person.lineUserId ?? '',
     recent: [],
   };
 }

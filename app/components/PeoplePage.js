@@ -266,6 +266,20 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
                   />
                 </label>
 
+                <label className="field">
+                  <span className="field__label">LINE ID</span>
+                  <input
+                    className="field__input field__input--mono"
+                    defaultValue={selectedPerson.lineUserId ?? ''}
+                    key={selectedPerson.id}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val !== (selectedPerson.lineUserId ?? '')) updateSelected({ lineUserId: val });
+                    }}
+                    placeholder="U…（選填，用於推播通知）"
+                  />
+                </label>
+
                 <div className="field">
                   <span className="field__label">性別</span>
                   <div className="chips">

@@ -938,6 +938,15 @@ body.editing .week-edit__input { background: #fff; }
   .settings-grid { grid-template-columns: 1fr; }
 }
 
+/* Publish notification */
+.btn--notify { background: #2a6e4a; color: #fff; font-weight: 700; border: none; border-radius: 10px; padding: 7px 14px; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.btn--notify:hover:not(:disabled) { background: #235e3e; }
+.btn--notify:disabled { opacity: .5; cursor: default; }
+.publish-banner { font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 10px; margin-top: 8px; }
+.publish-banner--ok { background: rgba(42,110,74,.1); color: #2a6e4a; }
+.publish-banner--err { background: rgba(194,49,35,.1); color: var(--special); }
+.field__input--mono { font-family: var(--mono); font-size: 12.5px; }
+
 /* Empty state */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 80px 20px; text-align: center; }
 .empty-state__ic { font-size: 48px; }

@@ -6,6 +6,7 @@ import {
   getMidweekExportFilename,
   downloadWeekXlsx,
 } from '../lib/midweekExport';
+import { getToken } from '../lib/auth-context';
 
 const EXPORT_ITEMS = [
   { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組', action: 'jpg' },
@@ -172,6 +173,29 @@ export default function MeetingsPage({
 }) {
   const menuRef = useRef(null);
   const captureRef = useRef(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState(null); // { sent, failed, total } | { error }
+
+  async function handlePublish() {
+    if (!window.confirm('確定要發送 LINE 通知給所有已設定 LINE ID 的成員嗎？')) return;
+    setPublishing(true);
+    setPublishResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/meetings/publish', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setPublishResult(data);
+    } catch (err) {
+      setPublishResult({ error: err.message });
+    } finally {
+      setPublishing(false);
+      setTimeout(() => setPublishResult(null), 6000);
+    }
+  }
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -218,7 +242,19 @@ export default function MeetingsPage({
               setExportOpen={setExportOpen}
               menuRef={menuRef}
             />
+            {midweekWeeks.length > 0 && (
+              <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
+                {publishing ? '發送中…' : '發布通知'}
+              </button>
+            )}
           </div>
+          {publishResult && (
+            <div className={`publish-banner${publishResult.error || publishResult.failed > 0 ? ' publish-banner--err' : ' publish-banner--ok'}`}>
+              {publishResult.error
+                ? `發送失敗：${publishResult.error}`
+                : `已發送 ${publishResult.sent} / ${publishResult.total} 人${publishResult.failed > 0 ? `，${publishResult.failed} 人失敗` : ''}`}
+            </div>
+          )}
 
           {editMode && (
             <div className="edit-banner">

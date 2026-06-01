@@ -11,6 +11,7 @@ function personPayload(body) {
   if ('quals' in body || 'tags' in body) data.tags = Array.isArray(body.quals) ? body.quals : (Array.isArray(body.tags) ? body.tags : []);
   if ('status' in body) data.status = body.status ?? 'active';
   if ('awayNote' in body) data.awayNote = body.awayNote || null;
+  if ('lineUserId' in body) data.lineUserId = body.lineUserId?.trim() || null;
   return data;
 }
 
@@ -23,6 +24,7 @@ function mapPerson(person) {
     quals: person.tags ?? [],
     status: person.status,
     awayNote: person.awayNote ?? '',
+    lineUserId: person.lineUserId ?? '',
     recent: [],
   };
 }
