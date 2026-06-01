@@ -113,6 +113,16 @@ model Assignment {
   updatedAt DateTime    @updatedAt
 }
 
+// ── LINE registration state ──────────────────────────────────────────────────
+// Tracks users mid-way through the two-step LINE linking flow
+// (congregation chosen, waiting for name). Cleaned up once linking completes.
+
+model LinePendingLink {
+  lineUserId     String   @id
+  congregationId Int
+  createdAt      DateTime @default(now())
+}
+
 // ── Weekend meetings ──────────────────────────────────────────────────────────
 
 model WeekendRow {

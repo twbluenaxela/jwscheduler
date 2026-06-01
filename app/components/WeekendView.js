@@ -1,4 +1,5 @@
 'use client';
+import { useMemo, useState } from 'react';
 
 function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet }) {
   const name = getAssign(slotId, defaultName);
@@ -14,36 +15,90 @@ function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet 
   );
 }
 
+const FILTER_OPTIONS = [
+  { key: 'upcoming', label: '未來' },
+  { key: 'month',    label: '本月' },
+  { key: 'half',     label: '半年' },
+  { key: 'all',      label: '全部' },
+];
+
 export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet }) {
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const thisYear = today.getFullYear();
 
-  function parseDate(dateStr) {
-    const [m, d] = dateStr.replace('日', '').split('/').map(Number);
-    return new Date(thisYear, m - 1, d);
+  // Parse "M/D" date strings, assigning the year that places the date
+  // closest to today (preferring the nearest future date).
+  function parseDate(dateStr, hintYear) {
+    const parts = String(dateStr ?? '').replace('日', '').split('/').map(Number);
+    if (parts.length < 2) return null;
+    const [m, d] = parts;
+    const baseYear = hintYear ?? thisYear;
+    const candidates = [baseYear - 1, baseYear, baseYear + 1].map(y => new Date(y, m - 1, d));
+    const future = candidates.filter(c => c >= today);
+    return future.length ? future[0] : candidates[candidates.length - 1];
   }
 
-  const rows = filter === 'upcoming'
-    ? weekendRows.filter((r) => r.type === 'event' || parseDate(r.date) >= today)
-    : weekendRows;
+  // Derive all years present in the data
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    weekendRows.forEach(r => {
+      const d = parseDate(r.date);
+      if (d) years.add(d.getFullYear());
+    });
+    return [...years].sort();
+  }, [weekendRows]);
+
+  const [selectedYear, setSelectedYear] = useState(() => thisYear);
+
+  function inRange(r) {
+    const d = parseDate(r.date, selectedYear);
+    // Year gate
+    if (d && d.getFullYear() !== selectedYear) return false;
+    if (r.type === 'event') return true;
+    if (!d) return true;
+    if (filter === 'upcoming') return d >= today;
+    if (filter === 'month') {
+      return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+    }
+    if (filter === 'half') {
+      const cutoff = new Date(today);
+      cutoff.setMonth(cutoff.getMonth() + 6);
+      return d >= today && d <= cutoff;
+    }
+    return true; // 'all'
+  }
+
+  const rows = weekendRows.filter(inRange);
+  const scheduleCount = rows.filter(r => !r.type || r.type === 'schedule' || r.type === 'special').length;
 
   return (
     <div className="wk-wrap">
       <div className="wk-title">
-        <h2><span className="yr">{thisYear}</span> 公眾演講安排表</h2>
-        <span className="wk-title__meta">共 {weekendRows.filter(r => !r.type || r.type === 'schedule' || r.type === 'special').length} 場</span>
+        <h2>公眾演講安排表</h2>
+        <span className="wk-title__meta">共 {scheduleCount} 場</span>
         <div className="wk-title__spacer" />
+        {availableYears.length > 1 && (
+          <div className="chips" role="group" style={{ marginRight: 6 }}>
+            {availableYears.map(y => (
+              <button
+                key={y}
+                className="chip"
+                aria-pressed={selectedYear === y ? 'true' : 'false'}
+                onClick={() => setSelectedYear(y)}
+              >{y}</button>
+            ))}
+          </div>
+        )}
         <div className="chips" role="group">
-          <button
-            className="chip"
-            aria-pressed={filter === 'all' ? 'true' : 'false'}
-            onClick={() => setFilter('all')}
-          >全部</button>
-          <button
-            className="chip"
-            aria-pressed={filter === 'upcoming' ? 'true' : 'false'}
-            onClick={() => setFilter('upcoming')}
-          >未來</button>
+          {FILTER_OPTIONS.map(({ key, label }) => (
+            <button
+              key={key}
+              className="chip"
+              aria-pressed={filter === key ? 'true' : 'false'}
+              onClick={() => setFilter(key)}
+            >{label}</button>
+          ))}
         </div>
       </div>
 
@@ -61,10 +116,10 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => {
+            {rows.map((r) => {
               if (r.type === 'event') {
                 return (
-                  <tr key={i} className="is-event">
+                  <tr key={r._id} className="is-event">
                     <td className="td-date">{r.date}</td>
                     <td colSpan={9}>
                       <span className="event-tag">◆ {r.label}</span>
@@ -74,9 +129,9 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
                 );
               }
               const cls = r.type === 'special' ? 'is-special' : '';
-              const key = `we${i}`;
+              const key = `we${r._id}`;
               return (
-                <tr key={i} className={cls}>
+                <tr key={r._id} className={cls}>
                   <td className="td-date">{r.date}</td>
                   <td className="td-no">{r.no ?? ''}</td>
                   <td className="td-topic">{r.topic}</td>
@@ -97,10 +152,10 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
 
       {/* Mobile cards */}
       <div className="wk-cards">
-        {rows.map((r, i) => {
+        {rows.map((r) => {
           if (r.type === 'event') {
             return (
-              <div key={i} className="wk-card is-event">
+              <div key={r._id} className="wk-card is-event">
                 <div className="wk-card__top"><span className="wk-card__date">{r.date}</span></div>
                 <div className="wk-card__topic">◆ {r.label}</div>
                 <div style={{ color: 'var(--ink-3)', fontWeight: 600, fontSize: '13.5px' }}>{r.note}</div>
@@ -108,9 +163,9 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
             );
           }
           const cls = r.type === 'special' ? 'is-special' : '';
-          const key = `we${i}`;
+          const key = `we${r._id}`;
           return (
-            <div key={i} className={`wk-card ${cls}`}>
+            <div key={r._id} className={`wk-card ${cls}`}>
               <div className="wk-card__top">
                 <span className="wk-card__date">{r.date}</span>
                 {r.no && <span className="wk-card__no">編號 {r.no}</span>}

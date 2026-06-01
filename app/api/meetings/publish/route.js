@@ -3,9 +3,23 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 
+function parseCnDate(dateStr) {
+  const m = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
+  if (!m) return null;
+  const now = new Date();
+  let year = now.getFullYear();
+  const mo = parseInt(m[1]);
+  if (mo < now.getMonth() + 1 - 6) year++;
+  else if (mo > now.getMonth() + 1 + 6) year--;
+  return new Date(year, mo - 1, parseInt(m[2]));
+}
+
 function collectAssignments(name, weeks) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const items = [];
   for (const week of weeks) {
+    const d = parseCnDate(week.date);
+    if (!d || d < today) continue;
     const aMap = new Map(week.assignments.map((a) => [a.slotId, a.name]));
     if (aMap.get(`mw${week.id}_chairman`) === name) items.push({ date: week.date, role: '主席' });
     if (aMap.get(`mw${week.id}_openPrayer`) === name) items.push({ date: week.date, role: '開始禱告' });
@@ -30,10 +44,13 @@ function buildMessage(name, current, previous) {
     return `${header}\n\n以下是你目前的安排（共 ${current.length} 項）：\n\n${list}\n\n如有疑問請聯絡編排負責人。`;
   }
 
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const prevFuture = previous.filter((i) => { const d = parseCnDate(i.date); return d && d >= today; });
+
   const curSet = new Set(current.map(itemKey));
-  const prevSet = new Set(previous.map(itemKey));
+  const prevSet = new Set(prevFuture.map(itemKey));
   const added = current.filter((i) => !prevSet.has(itemKey(i)));
-  const removed = previous.filter((i) => !curSet.has(itemKey(i)));
+  const removed = prevFuture.filter((i) => !curSet.has(itemKey(i)));
 
   if (!added.length && !removed.length) return null; // no changes, skip
 

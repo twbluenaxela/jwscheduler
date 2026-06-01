@@ -24,38 +24,94 @@ const OFFICE_OPTIONS = {
 
 const DEFAULT_OFFICE = '傳道員';
 
-function collectUpcomingAssignments(name, midweekWeeks, weekendRows) {
+function parseDateForCompare(dateStr) {
+  // Handles "5月 20日" and "7/5" formats
+  const cn = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
+  if (cn) {
+    const now = new Date();
+    let year = now.getFullYear();
+    const mo = parseInt(cn[1]);
+    if (mo < now.getMonth() + 1 - 6) year++;
+    else if (mo > now.getMonth() + 1 + 6) year--;
+    return new Date(year, mo - 1, parseInt(cn[2]));
+  }
+  const slash = String(dateStr ?? '').match(/(\d+)\/(\d+)/);
+  if (slash) {
+    const now = new Date();
+    let year = now.getFullYear();
+    const mo = parseInt(slash[1]);
+    if (mo < now.getMonth() + 1 - 6) year++;
+    else if (mo > now.getMonth() + 1 + 6) year--;
+    return new Date(year, mo - 1, parseInt(slash[2]));
+  }
+  return null;
+}
+
+function collectRecentAssignments(name, midweekWeeks, weekendRows) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const items = [];
 
   midweekWeeks.forEach((week) => {
-    if (week.chairman === name) {
-      items.push({ date: week.date, label: '主席', context: week.weekdayPill });
-    }
-    if (week.openPrayer === name) {
-      items.push({ date: week.date, label: '開始禱告', context: week.weekdayPill });
-    }
-    if (week.closePrayer === name) {
-      items.push({ date: week.date, label: '結束禱告', context: week.weekdayPill });
-    }
+    const d = parseDateForCompare(week.date);
+    if (!d || d >= today) return;
+    if (week.chairman === name) items.push({ date: week.date, label: '主席', context: week.weekdayPill, _d: d });
+    if (week.openPrayer === name) items.push({ date: week.date, label: '開始禱告', context: week.weekdayPill, _d: d });
+    if (week.closePrayer === name) items.push({ date: week.date, label: '結束禱告', context: week.weekdayPill, _d: d });
     week.treasures.forEach((part) => {
-      if (part.assign.includes(name)) {
-        items.push({ date: week.date, label: part.title, context: week.weekdayPill });
-      }
+      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill, _d: d });
     });
     week.ministry.forEach((part) => {
-      if (part.assign.includes(name)) {
-        items.push({ date: week.date, label: part.title, context: week.weekdayPill });
-      }
+      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill, _d: d });
     });
     week.living.forEach((part) => {
-      if (part.assign.includes(name)) {
-        items.push({ date: week.date, label: part.title, context: week.weekdayPill });
-      }
+      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill, _d: d });
     });
   });
 
   weekendRows.forEach((row) => {
     if (row.type === 'event') return;
+    const d = parseDateForCompare(row.date);
+    if (!d || d >= today) return;
+    if (row.speaker === name) items.push({ date: row.date, label: '公眾演講', context: row.topic, _d: d });
+    if (row.chair === name) items.push({ date: row.date, label: '主席', context: row.topic, _d: d });
+    if (row.wt === name) items.push({ date: row.date, label: '守望台主持', context: row.topic, _d: d });
+    if (row.read === name) items.push({ date: row.date, label: '朗讀', context: row.topic, _d: d });
+    if (row.host === name) items.push({ date: row.date, label: '招待', context: row.topic, _d: d });
+  });
+
+  return items
+    .sort((a, b) => b._d - a._d)
+    .slice(0, 8)
+    .map(({ _d, ...rest }) => rest);
+}
+
+function collectUpcomingAssignments(name, midweekWeeks, weekendRows) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const items = [];
+
+  midweekWeeks.forEach((week) => {
+    const d = parseDateForCompare(week.date);
+    if (!d || d < today) return;
+    if (week.chairman === name) items.push({ date: week.date, label: '主席', context: week.weekdayPill });
+    if (week.openPrayer === name) items.push({ date: week.date, label: '開始禱告', context: week.weekdayPill });
+    if (week.closePrayer === name) items.push({ date: week.date, label: '結束禱告', context: week.weekdayPill });
+    week.treasures.forEach((part) => {
+      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill });
+    });
+    week.ministry.forEach((part) => {
+      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill });
+    });
+    week.living.forEach((part) => {
+      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill });
+    });
+  });
+
+  weekendRows.forEach((row) => {
+    if (row.type === 'event') return;
+    const d = parseDateForCompare(row.date);
+    if (!d || d < today) return;
     if (row.speaker === name) items.push({ date: row.date, label: '公眾演講', context: row.topic });
     if (row.chair === name) items.push({ date: row.date, label: '主席', context: row.topic });
     if (row.wt === name) items.push({ date: row.date, label: '守望台主持', context: row.topic });
@@ -103,6 +159,11 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
   const upcoming = useMemo(() => {
     if (!selectedPerson?.name) return [];
     return collectUpcomingAssignments(selectedPerson.name, midweekWeeks, weekendRows);
+  }, [selectedPerson, midweekWeeks, weekendRows]);
+
+  const recent = useMemo(() => {
+    if (!selectedPerson?.name) return [];
+    return collectRecentAssignments(selectedPerson.name, midweekWeeks, weekendRows);
   }, [selectedPerson, midweekWeeks, weekendRows]);
 
   async function persistPerson(person, changes) {
@@ -364,18 +425,20 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
               <div className="people-detail__section">
                 <div className="people-detail__section-head">
                   <span>近期指派</span>
-                  <small>手動維護的最近服務紀錄</small>
+                  <small>從本地節目資料自動整理</small>
                 </div>
                 <div className="timeline">
-                  {(selectedPerson.recent?.length ? selectedPerson.recent : [{ date: '—', role: '尚未補上', note: '可先編輯人員資料補齊。' }]).map((item, index) => (
-                    <div key={`${item.date}-${index}`} className="timeline__row">
+                  {recent.length ? recent.map((item, index) => (
+                    <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
                       <span className="timeline__date">{item.date}</span>
                       <span className="timeline__main">
-                        <b>{item.role}</b>
-                        <small>{item.note}</small>
+                        <b>{item.label}</b>
+                        <small>{item.context}</small>
                       </span>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="people-empty people-empty--compact">目前沒有過去的指派記錄。</div>
+                  )}
                 </div>
               </div>
 

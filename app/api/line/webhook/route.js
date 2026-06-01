@@ -21,9 +21,23 @@ async function replyMessage(replyToken, text) {
   });
 }
 
+function parseCnDate(dateStr) {
+  const m = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
+  if (!m) return null;
+  const now = new Date();
+  let year = now.getFullYear();
+  const mo = parseInt(m[1]);
+  if (mo < now.getMonth() + 1 - 6) year++;
+  else if (mo > now.getMonth() + 1 + 6) year--;
+  return new Date(year, mo - 1, parseInt(m[2]));
+}
+
 function collectAssignments(name, weeks) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const items = [];
   for (const week of weeks) {
+    const d = parseCnDate(week.date);
+    if (!d || d < today) continue;
     const aMap = new Map(week.assignments.map((a) => [a.slotId, a.name]));
     if (aMap.get(`mw${week.id}_chairman`) === name) items.push({ date: week.date, role: '主席' });
     if (aMap.get(`mw${week.id}_openPrayer`) === name) items.push({ date: week.date, role: '開始禱告' });
@@ -38,59 +52,114 @@ function collectAssignments(name, weeks) {
 
 const QUERY_KEYWORDS = ['我的安排', '查詢', '安排', '節目', 'schedule', 'assignment'];
 
+// ── Step 1: Follow event ──────────────────────────────────────────────────────
 async function handleFollow(event) {
   await replyMessage(
     event.replyToken,
-    '你好！這是新屋會眾的聚會排班通知帳號。\n\n請直接回覆你在排班表上的姓名，即可完成連結並接收通知。\n\n連結後，傳送「我的安排」可查詢你目前的排班。'
+    '你好！歡迎加入聚會排班通知服務。\n\n請先回覆你所屬的會眾名稱，例如：新屋'
   );
 }
 
+// ── Step 2 / Query: Handle text messages ──────────────────────────────────────
 async function handleMessage(event) {
   const userId = event.source?.userId;
   const text = event.message?.text?.trim();
   if (!userId || !text) return;
 
-  // Check if querying assignments
-  const isQuery = QUERY_KEYWORDS.some((kw) => text.includes(kw));
-  if (isQuery) {
-    const person = await db.person.findFirst({ where: { lineUserId: userId } });
+  // ── Already linked ──────────────────────────────────────────────────────────
+  const linked = await db.person.findFirst({
+    where: { lineUserId: userId },
+    include: { congregation: { select: { name: true } } },
+  });
+
+  if (linked) {
+    const isQuery = QUERY_KEYWORDS.some((kw) => text.includes(kw));
+    if (isQuery) {
+      const weeks = await db.midweekWeek.findMany({
+        where: { congregationId: linked.congregationId },
+        orderBy: { id: 'asc' },
+        include: { parts: true, assignments: true },
+      });
+      const items = collectAssignments(linked.name, weeks);
+      if (!items.length) {
+        await replyMessage(event.replyToken, `${linked.name}，目前你沒有排定的安排。`);
+      } else {
+        const list = items.map((i) => `▸ ${i.date}  ${i.role}`).join('\n');
+        await replyMessage(event.replyToken, `${linked.name}，你目前的安排（共 ${items.length} 項）：\n\n${list}`);
+      }
+    } else {
+      await replyMessage(event.replyToken, `✓ 你已連結為「${linked.name}」（${linked.congregation.name}）。\n\n傳送「我的安排」可查詢你目前的排班。`);
+    }
+    return;
+  }
+
+  // ── Pending: waiting for name ───────────────────────────────────────────────
+  const pending = await db.linePendingLink.findUnique({ where: { lineUserId: userId } });
+
+  if (pending) {
+    const person = await db.person.findFirst({
+      where: { name: text, congregationId: pending.congregationId, status: 'active' },
+      include: { congregation: { select: { name: true } } },
+    });
     if (!person) {
-      await replyMessage(event.replyToken, '你尚未連結帳號。請傳送你在排班表上的姓名以完成連結。');
+      await replyMessage(event.replyToken, `在該會眾中找不到「${text}」。請確認姓名是否與排班表完全一致，或傳送會眾代碼重新選擇。`);
       return;
     }
-    const weeks = await db.midweekWeek.findMany({
-      where: { congregationId: person.congregationId },
-      orderBy: { id: 'asc' },
-      include: { parts: true, assignments: true },
+    // Link and clean up pending state
+    await Promise.all([
+      db.person.update({ where: { id: person.id }, data: { lineUserId: userId } }),
+      db.linePendingLink.delete({ where: { lineUserId: userId } }),
+    ]);
+    await replyMessage(event.replyToken, `✓ 連結成功！${person.name}（${person.congregation.name}），你將收到後續的排班通知。\n\n傳送「我的安排」可隨時查詢你的排班。`);
+    return;
+  }
+
+  // ── No state: match congregation by code (exact) or name ──────────────────
+  // Try code first (exact, case-insensitive), then name with priority:
+  // exact → starts-with → contains.
+  // Code lookup lets users resolve ambiguous name matches cleanly.
+  let cong = await db.congregation.findFirst({
+    where: { code: { equals: text, mode: 'insensitive' } },
+  });
+
+  if (!cong) {
+    let matches = await db.congregation.findMany({
+      where: { name: { equals: text, mode: 'insensitive' } },
     });
-    const items = collectAssignments(person.name, weeks);
-    if (!items.length) {
-      await replyMessage(event.replyToken, `${person.name}，目前你沒有排定的安排。`);
-    } else {
-      const list = items.map((i) => `▸ ${i.date}  ${i.role}`).join('\n');
-      await replyMessage(event.replyToken, `${person.name}，你目前的安排（共 ${items.length} 項）：\n\n${list}`);
+    if (!matches.length) {
+      matches = await db.congregation.findMany({
+        where: { name: { startsWith: text, mode: 'insensitive' } },
+      });
     }
-    return;
-  }
+    if (!matches.length) {
+      matches = await db.congregation.findMany({
+        where: { name: { contains: text, mode: 'insensitive' } },
+      });
+    }
 
-  // Already linked?
-  const existing = await db.person.findFirst({ where: { lineUserId: userId } });
-  if (existing) {
-    await replyMessage(event.replyToken, `✓ 你已連結為「${existing.name}」。\n\n傳送「我的安排」可查詢你目前的排班。`);
-    return;
-  }
+    if (matches.length === 0) {
+      await replyMessage(event.replyToken, `找不到「${text}」相關的會眾。\n\n請再試一次，或聯絡管理員確認會眾名稱。`);
+      return;
+    }
 
-  // Try name-based linking
-  const person = await db.person.findFirst({ where: { name: text, status: 'active' } });
-  if (!person) {
-    await replyMessage(event.replyToken, `找不到「${text}」。請確認姓名是否與排班表上完全一致，或聯絡管理員。`);
-    return;
-  }
+    if (matches.length > 1) {
+      const list = matches.map(c => `・${c.name}\n  代碼：${c.code}`).join('\n');
+      await replyMessage(event.replyToken, `找到多個符合的會眾：\n\n${list}\n\n請直接回覆會眾代碼以確認選擇。`);
+      return;
+    }
 
-  await db.person.update({ where: { id: person.id }, data: { lineUserId: userId } });
-  await replyMessage(event.replyToken, `✓ 已連結！${person.name}，你將收到後續的排班通知。\n\n傳送「我的安排」可隨時查詢你的排班。`);
+    cong = matches[0];
+  }
+  // Store pending congregation, ask for name
+  await db.linePendingLink.upsert({
+    where: { lineUserId: userId },
+    update: { congregationId: cong.id },
+    create: { lineUserId: userId, congregationId: cong.id },
+  });
+  await replyMessage(event.replyToken, `已選擇「${cong.name}」（代碼：${cong.code}）。\n\n請回覆你在排班表上的姓名：`);
 }
 
+// ── Router ────────────────────────────────────────────────────────────────────
 export async function POST(request) {
   const rawBody = await request.text();
   const signature = request.headers.get('x-line-signature') ?? '';

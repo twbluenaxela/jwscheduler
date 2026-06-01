@@ -763,7 +763,9 @@ body.editing .week-edit__input { background: #fff; }
   .tabbar__item .navicon { width: 22px; height: 22px; }
   .tabbar__item[aria-current="true"] { color: var(--accent); }
   .tab { padding: 8px 18px; font-size: 14px; }
-  .toolbar { gap: 9px; }
+  .toolbar { gap: 7px; flex-wrap: nowrap; }
+  .toolbar .btn { font-size: 12px; padding: 7px 10px; }
+  .toolbar .btn--notify { font-size: 12px; padding: 7px 10px; }
   .people-header { grid-template-columns: 1fr; align-items: stretch; }
   .people-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: none; }
   .people-tools { justify-content: stretch; }

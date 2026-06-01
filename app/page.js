@@ -298,6 +298,18 @@ export default function App() {
   async function persistAssignment(slotId, name) {
     try {
       const token = await getToken();
+      const weMatch = slotId.match(/^we(\d+)_(.+)$/);
+      if (weMatch) {
+        const [, rowId, field] = weMatch;
+        const res = await fetch(`/api/weekend-rows/${rowId}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [field]: name }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        updateWeekendRow(Number(rowId), field, name);
+        return;
+      }
       const res = await fetch('/api/assignments', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
