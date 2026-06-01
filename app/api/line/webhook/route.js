@@ -1,12 +1,60 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
+import db from '../../../lib/db';
 
 function verifySignature(rawBody, signature) {
   const secret = process.env.LINE_CHANNEL_SECRET;
   if (!secret) return false;
   const hash = crypto.createHmac('sha256', secret).update(rawBody).digest('base64');
   return hash === signature;
+}
+
+async function replyMessage(replyToken, text) {
+  await fetch('https://api.line.me/v2/bot/message/reply', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ replyToken, messages: [{ type: 'text', text }] }),
+  });
+}
+
+async function handleFollow(event) {
+  await replyMessage(
+    event.replyToken,
+    '你好！請傳送你在排班表上的姓名，即可連結並接收聚會通知。'
+  );
+}
+
+async function handleMessage(event) {
+  const userId = event.source?.userId;
+  const text = event.message?.text?.trim();
+  if (!userId || !text) return;
+
+  // Check if already linked
+  const existing = await db.person.findFirst({ where: { lineUserId: userId } });
+  if (existing) {
+    await replyMessage(event.replyToken, `✓ 你已連結為「${existing.name}」，將會收到排班通知。`);
+    return;
+  }
+
+  // Try to match by name across all congregations
+  const person = await db.person.findFirst({
+    where: { name: text, status: 'active' },
+  });
+
+  if (!person) {
+    await replyMessage(
+      event.replyToken,
+      `找不到「${text}」。請確認姓名是否與排班表上完全一致，或聯絡管理員。`
+    );
+    return;
+  }
+
+  await db.person.update({ where: { id: person.id }, data: { lineUserId: userId } });
+  await replyMessage(event.replyToken, `✓ 已連結！${person.name}，你將收到後續的排班通知。`);
 }
 
 export async function POST(request) {
@@ -25,11 +73,8 @@ export async function POST(request) {
   }
 
   for (const event of payload.events ?? []) {
-    const userId = event.source?.userId;
-    if (!userId) continue;
-    if (event.type === 'follow' || event.type === 'message') {
-      console.log(`[LINE webhook] userId=${userId} type=${event.type}`);
-    }
+    if (event.type === 'follow') await handleFollow(event);
+    else if (event.type === 'message' && event.message?.type === 'text') await handleMessage(event);
   }
 
   return NextResponse.json({ ok: true });
