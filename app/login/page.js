@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -7,14 +8,22 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase-client';
+import { useAuth } from '../lib/auth-context';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { firebaseUser } = useAuth();
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Once Firebase reports a signed-in user, leave the login page for the app.
+  useEffect(() => {
+    if (firebaseUser) router.replace('/');
+  }, [firebaseUser, router]);
 
   const handle = async (e) => {
     e.preventDefault();
@@ -41,7 +50,7 @@ export default function LoginPage() {
       // Popup is more reliable than redirect when authDomain (firebaseapp.com)
       // differs from the app's origin (fly.dev) — redirect needs 3rd-party cookies.
       await signInWithPopup(auth, googleProvider);
-      // success — onAuthStateChanged fires and the app redirects
+      // success — the firebaseUser effect above redirects to the app
     } catch (err) {
       // user closing the popup is not a real error worth showing
       if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
