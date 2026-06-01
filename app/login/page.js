@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithRedirect,
+  getRedirectResult,
   updateProfile,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase-client';
@@ -15,6 +16,18 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Complete any in-progress Google redirect sign-in and surface errors
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) setLoading(false); // success — onAuthStateChanged will redirect
+      })
+      .catch((err) => {
+        setError(friendlyError(err.code, err.message));
+        setLoading(false);
+      });
+  }, []);
 
   const handle = async (e) => {
     e.preventDefault();
@@ -93,14 +106,17 @@ export default function LoginPage() {
   );
 }
 
-function friendlyError(code) {
+function friendlyError(code, message) {
   const map = {
-    'auth/user-not-found':      '找不到此帳號',
-    'auth/wrong-password':      '密碼錯誤',
-    'auth/invalid-credential':  '帳號或密碼錯誤',
-    'auth/email-already-in-use':'此信箱已被使用',
-    'auth/weak-password':       '密碼至少需要 6 個字元',
-    'auth/popup-closed-by-user':'視窗已關閉，請重試',
+    'auth/user-not-found':        '找不到此帳號',
+    'auth/wrong-password':        '密碼錯誤',
+    'auth/invalid-credential':    '帳號或密碼錯誤',
+    'auth/email-already-in-use':  '此信箱已被使用',
+    'auth/weak-password':         '密碼至少需要 6 個字元',
+    'auth/popup-closed-by-user':  '視窗已關閉，請重試',
+    'auth/unauthorized-domain':   '此網域未授權使用 Google 登入，請在 Firebase Console → Authentication → Authorized domains 加入此網域',
+    'auth/operation-not-allowed': 'Google 登入尚未啟用，請在 Firebase Console 開啟',
+    'auth/cancelled-popup-request': '登入已取消，請重試',
   };
-  return map[code] ?? '登入失敗，請再試一次';
+  return map[code] ?? `登入失敗 (${code ?? message ?? '未知錯誤'})`;
 }

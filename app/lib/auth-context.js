@@ -11,9 +11,10 @@ export function AuthProvider({ children }) {
   const [dbUser, setDbUser] = useState(null);
 
   useEffect(() => {
-    // Consume any pending redirect result (Google sign-in); errors are surfaced
-    // via onAuthStateChanged not firing — nothing to do here on success.
-    getRedirectResult(auth).catch(() => {});
+    // Consume any pending redirect result; the login page handles errors.
+    getRedirectResult(auth).catch((err) => {
+      console.error('[auth] getRedirectResult error:', err.code, err.message);
+    });
 
     return onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
