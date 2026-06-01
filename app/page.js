@@ -295,18 +295,35 @@ export default function App() {
     setSheet({ slotId, catKey, ctxLabel, defaultName: currentName });
   }, []);
 
+  async function persistAssignment(slotId, name) {
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/assignments', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotId, name }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+    } catch (err) {
+      setToast({ msg: `儲存失敗：${err.message}` });
+    }
+  }
+
   const onPick = useCallback((slotId, name, prevName) => {
     setAssignments((prev) => ({ ...prev, [slotId]: name }));
     setSheet(null);
+    persistAssignment(slotId, name);
     setToast({
       msg: `已指派 ${name}`,
       undo: () => {
+        const restoreName = prevName ?? '';
         setAssignments((prev) => {
           const next = { ...prev };
           if (prevName) next[slotId] = prevName;
           else delete next[slotId];
           return next;
         });
+        persistAssignment(slotId, restoreName);
       },
     });
   }, []);

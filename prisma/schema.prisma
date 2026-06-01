@@ -17,7 +17,8 @@ model Congregation {
   inviteToken     String       @unique  @default(uuid())
   meetingDayOffset Int         @default(2)
   meetingTime     String       @default("19:30")
-  exceptions      Json         @default("[]")
+  exceptions          Json         @default("[]")
+  publishedSnapshot   Json?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 

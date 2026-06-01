@@ -7,31 +7,47 @@ function collectAssignments(name, weeks) {
   const items = [];
   for (const week of weeks) {
     const aMap = new Map(week.assignments.map((a) => [a.slotId, a.name]));
-    const chairman = aMap.get(`mw${week.id}_chairman`) ?? '';
-    const openPrayer = aMap.get(`mw${week.id}_openPrayer`) ?? '';
-    const closePrayer = aMap.get(`mw${week.id}_closePrayer`) ?? '';
-
-    if (chairman === name) items.push({ date: week.date, role: '主席' });
-    if (openPrayer === name) items.push({ date: week.date, role: '開始禱告' });
-    if (closePrayer === name) items.push({ date: week.date, role: '結束禱告' });
-
+    if (aMap.get(`mw${week.id}_chairman`) === name) items.push({ date: week.date, role: '主席' });
+    if (aMap.get(`mw${week.id}_openPrayer`) === name) items.push({ date: week.date, role: '開始禱告' });
+    if (aMap.get(`mw${week.id}_closePrayer`) === name) items.push({ date: week.date, role: '結束禱告' });
     for (const part of week.parts) {
-      const p0 = aMap.get(`mw${week.id}_${part.partKey}_0`) ?? '';
-      const p1 = aMap.get(`mw${week.id}_${part.partKey}_1`) ?? '';
-      if (p0 === name) items.push({ date: week.date, role: part.title });
-      if (p1 === name) items.push({ date: week.date, role: `${part.title}（助手）` });
+      if (aMap.get(`mw${week.id}_${part.partKey}_0`) === name) items.push({ date: week.date, role: part.title });
+      if (aMap.get(`mw${week.id}_${part.partKey}_1`) === name) items.push({ date: week.date, role: `${part.title}（助手）` });
     }
   }
   return items;
 }
 
-function buildMessage(name, items) {
+function itemKey(item) { return `${item.date}|${item.role}`; }
+
+function buildMessage(name, current, previous) {
   const header = `【新屋會眾 · 聚會節目通知】\n${name}，你好！`;
-  if (items.length === 0) {
-    return `${header}\n\n目前你沒有排定的安排。\n如有疑問請聯絡編排負責人。`;
+
+  // First time — send full list
+  if (previous === null) {
+    if (!current.length) return null; // no assignments, skip
+    const list = current.map((i) => `▸ ${i.date}  ${i.role}`).join('\n');
+    return `${header}\n\n以下是你目前的安排（共 ${current.length} 項）：\n\n${list}\n\n如有疑問請聯絡編排負責人。`;
   }
-  const list = items.map((item) => `▸ ${item.date}  ${item.role}`).join('\n');
-  return `${header}\n\n以下是你的安排（共 ${items.length} 項）：\n\n${list}\n\n如有疑問請聯絡編排負責人。`;
+
+  const curSet = new Set(current.map(itemKey));
+  const prevSet = new Set(previous.map(itemKey));
+  const added = current.filter((i) => !prevSet.has(itemKey(i)));
+  const removed = previous.filter((i) => !curSet.has(itemKey(i)));
+
+  if (!added.length && !removed.length) return null; // no changes, skip
+
+  const lines = [`${header}\n\n你的安排有更新：`];
+  if (added.length) {
+    lines.push('\n新增：');
+    added.forEach((i) => lines.push(`  ✚ ${i.date}  ${i.role}`));
+  }
+  if (removed.length) {
+    lines.push('\n取消：');
+    removed.forEach((i) => lines.push(`  ✖ ${i.date}  ${i.role}`));
+  }
+  lines.push('\n如有疑問請聯絡編排負責人。');
+  return lines.join('\n');
 }
 
 async function pushLineMessage(lineUserId, text) {
@@ -62,7 +78,8 @@ export async function POST(request) {
 
     const congId = user.congregationId;
 
-    const [weeks, people] = await Promise.all([
+    const [congregation, weeks, people] = await Promise.all([
+      db.congregation.findUnique({ where: { id: congId }, select: { publishedSnapshot: true } }),
       db.midweekWeek.findMany({
         where: { congregationId: congId },
         orderBy: { id: 'asc' },
@@ -73,14 +90,18 @@ export async function POST(request) {
       }),
     ]);
 
-    let sent = 0;
-    let failed = 0;
+    const prevSnapshot = (congregation.publishedSnapshot ?? null);
+    const newSnapshot = {};
+    let sent = 0, failed = 0, skipped = 0;
     const errors = [];
 
     for (const person of people) {
+      const current = collectAssignments(person.name, weeks);
+      newSnapshot[person.name] = current;
+      const previous = prevSnapshot ? (prevSnapshot[person.name] ?? []) : null;
+      const text = buildMessage(person.name, current, previous);
+      if (!text) { skipped++; continue; }
       try {
-        const items = collectAssignments(person.name, weeks);
-        const text = buildMessage(person.name, items);
         await pushLineMessage(person.lineUserId, text);
         sent++;
       } catch (err) {
@@ -89,7 +110,13 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ sent, failed, total: people.length, errors });
+    // Save new snapshot
+    await db.congregation.update({
+      where: { id: congId },
+      data: { publishedSnapshot: newSnapshot },
+    });
+
+    return NextResponse.json({ sent, failed, skipped, total: people.length, errors });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -40,8 +40,9 @@ app/
     people/            — GET: list members, POST: create member
     people/[id]/       — PATCH: update member
     users/me/          — PATCH: update current user's displayName
-    meetings/publish/  — POST: publish finalized schedule (Phase 3)
-    line/webhook/      — POST: LINE Messaging API webhook (Phase 3)
+    assignments/       — POST: upsert/delete a single assignment by slotId
+    meetings/publish/  — POST: diff vs publishedSnapshot, push LINE messages to opted-in people, save new snapshot
+    line/webhook/      — POST: LINE Messaging API webhook; handles follow (prompt for name) + text (name-link or "查詢安排")
   data/
     index.js           — seed/demo data: midweekWeeks, weekendData, peopleData,
                          overviewData, POOL, CATS
@@ -108,13 +109,13 @@ Every user belongs to one `Congregation`. The flow:
 
 | Model | Key fields |
 |---|---|
-| `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON) |
+| `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON), `publishedSnapshot` (JSON — last published assignments per person, for diff) |
 | `User` | `firebaseUid`, `email`, `displayName`, `role` (ADMIN/MEMBER), `congregationId` |
 | `MidweekWeek` | `congregationId`, `date`, `dateLabel`, `weekStart` (original EPUB Monday date), `weekdayPill`, songs, times |
 | `Part` | `weekId`, `partKey`, `section`, `partNum`, `title`, `dur`, `cat`, `roleLabel`, `cbsRef` |
 | `Assignment` | `slotId` (unique string key), `weekId`, `name` |
 | `WeekendRow` | `congregationId`, `date`, `type`, `speaker`, `chair`, `wt`, `read`, etc. |
-| `Person` | `congregationId`, `name`, `gender`, `appointment`, `tags[]`, `status` |
+| `Person` | `congregationId`, `name`, `gender`, `appointment`, `tags[]`, `status`, `lineUserId` (nullable — opt-in LINE notifications) |
 
 All API routes export `dynamic = 'force-dynamic'` to prevent Next.js build-time execution.
 
@@ -183,7 +184,7 @@ Seed/demo data only — not shown to new congregations by default. Accessible vi
 
 **`POOL`** — hardcoded demo members (used only by seed data reset, not by AssignSheet).
 
-**`CATS`** — `catKey` → `{ tag, g, name }` mapping. This **is** used in production by `AssignSheet.js` to know which `quals` tag and gender filter to apply for each slot type.
+**`CATS`** — `catKey` → `{ tag, g, name }` mapping. This **is** used in production by `AssignSheet.js` to know which `quals` tag and gender filter to apply for each slot type. Tags must match `QUAL_OPTIONS` in `PeoplePage.js` exactly — the current aligned set is: `主席`, `禱告`, `寶藏演講`, `朗讀`, `傳道示範`, `生活演講`, `研經班主持`, `公眾演講`.
 
 `AssignSheet` builds candidates from the live `people` state (loaded from DB), not from `POOL`. The `buildCandidates(people, catKey, jitter, spread)` function inside `AssignSheet.js` filters by `status !== 'inactive'`, matches `people[].quals` against `CATS[catKey].tag`, and weights by a hash-derived fairness score (days since last / load count — placeholder until real assignment history is tracked).
 
@@ -248,6 +249,6 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 |---|---|
 | **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet, EPUB import, week picker, export (JPG/PDF/Excel) |
 | **Phase 2 — Auth + Multi-tenancy** | Done — Firebase auth, congregation model, invite links, ⚙ settings page, Prisma 6 + Neon Postgres schema live |
-| **Phase 2B — Data persistence** | In progress — `GET /api/congregations/data` loads weeks/people/weekend on mount; `POST /api/midweek-weeks/import` persists EPUB import; people CRUD via `/api/people`; congregation schedule settings (dayOffset, time, exceptions) persist via `PATCH /api/congregations/settings`; user displayName editable via `PATCH /api/users/me`. Remaining: save/load assignments from DB (still React state only), save inline week/part edits to DB, delete week API |
+| **Phase 2B — Data persistence** | Mostly done — `POST /api/assignments` persists picks to DB; assignments loaded into state on mount; `GET /api/congregations/data` loads all data. Remaining: save inline week/part edits to DB (titles, songs, times), delete week API |
 | **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. No release command (Neon cold-start timed it out); `prisma db push` run manually. Admin SDK creds via `FIREBASE_SERVICE_ACCOUNT` secret. |
-| **Phase 3 — Notifications** | In progress — `/api/line/webhook` and `/api/meetings/publish` routes exist. LINE Messaging API push and .ics calendar feeds planned. |
+| **Phase 3 — Notifications** | In progress — LINE Messaging API integrated. Webhook at `/api/line/webhook`: follow event prompts name entry; text message links by name or queries assignments ("查詢安排"). Publish at `/api/meetings/publish`: diffs current vs `publishedSnapshot`, sends only changed assignments (first-time users get full list), saves new snapshot. Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. LINE auto-reply must be disabled in LINE Official Account Manager. |
