@@ -82,7 +82,6 @@ function collectRecentAssignments(name, midweekWeeks, weekendRows) {
 
   return items
     .sort((a, b) => b._d - a._d)
-    .slice(0, 8)
     .map(({ _d, ...rest }) => rest);
 }
 
@@ -134,11 +133,14 @@ function createBlankPerson(nextId) {
 }
 
 export default function PeoplePage({ people, setPeople, midweekWeeks = [], weekendRows = [], loading = false }) {
+  const RECENT_DEFAULT = 3;
+
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState('');
   const [nextId, setNextId] = useState(1);
   const [error, setError] = useState('');
   const [localName, setLocalName] = useState('');
+  const [showAllRecent, setShowAllRecent] = useState(false);
   const prevSelectedIdRef = useRef('');
 
   const filteredPeople = useMemo(() => {
@@ -147,12 +149,13 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
 
   const selectedPerson = people.find((person) => person.id === selectedId) ?? filteredPeople[0] ?? people[0];
 
-  // Sync localName only when the selected person changes, not on every API response
+  // Sync localName and reset history expansion when the selected person changes
   useEffect(() => {
     const currentId = selectedPerson?.id ?? '';
     if (prevSelectedIdRef.current !== currentId) {
       prevSelectedIdRef.current = currentId;
       setLocalName(selectedPerson?.name ?? '');
+      setShowAllRecent(false);
     }
   });
 
@@ -428,15 +431,29 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
                   <small>從本地節目資料自動整理</small>
                 </div>
                 <div className="timeline">
-                  {recent.length ? recent.map((item, index) => (
-                    <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
-                      <span className="timeline__date">{item.date}</span>
-                      <span className="timeline__main">
-                        <b>{item.label}</b>
-                        <small>{item.context}</small>
-                      </span>
-                    </div>
-                  )) : (
+                  {recent.length ? (
+                    <>
+                      {(showAllRecent ? recent : recent.slice(0, RECENT_DEFAULT)).map((item, index) => (
+                        <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
+                          <span className="timeline__date">{item.date}</span>
+                          <span className="timeline__main">
+                            <b>{item.label}</b>
+                            <small>{item.context}</small>
+                          </span>
+                        </div>
+                      ))}
+                      {recent.length > RECENT_DEFAULT && (
+                        <button
+                          className="timeline__expand"
+                          onClick={() => setShowAllRecent((v) => !v)}
+                        >
+                          {showAllRecent
+                            ? '▲ 收起'
+                            : `＋ ${recent.length - RECENT_DEFAULT} 筆更多記錄`}
+                        </button>
+                      )}
+                    </>
+                  ) : (
                     <div className="people-empty people-empty--compact">目前沒有過去的指派記錄。</div>
                   )}
                 </div>

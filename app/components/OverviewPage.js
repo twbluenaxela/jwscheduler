@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 const TYPE_BADGE = {
   mw: <span className="ov-type ov-type--mw">聚會</span>,
@@ -16,8 +16,22 @@ const STAT_BADGE = {
 
 const FILTERS = ['all', 'mw', 'we', 'gap'];
 const FILTER_LABELS = { all: '全部', mw: '聚會', we: '週末', gap: '有空缺' };
-
+const SORTS = ['upcoming', 'urgent', 'oldest'];
+const SORT_LABELS = { upcoming: '最近優先', urgent: '最緊迫', oldest: '最早優先' };
 const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
+
+function parseRowDate(dateStr) {
+  const text = String(dateStr ?? '');
+  const m = text.match(/(\d+)月\s*(\d+)日/);
+  if (!m) return null;
+  const month = Number(m[1]);
+  const day = Number(m[2]);
+  const now = new Date();
+  let year = now.getFullYear();
+  if (month === 12 && now.getMonth() <= 1) year--;
+  if (month <= 2 && now.getMonth() >= 10) year++;
+  return new Date(year, month - 1, day);
+}
 
 function compactDate(date) {
   const text = String(date ?? '');
@@ -49,11 +63,7 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
     const cbs = week.living?.find((part) => part.cat === 'cbs');
     const reading = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])]
       .find((part) => part.cat === 'reading');
-    const roleGaps = missingCount([
-      week.chairman,
-      week.openPrayer,
-      week.closePrayer,
-    ]);
+    const roleGaps = missingCount([week.chairman, week.openPrayer, week.closePrayer]);
     const partGaps = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])]
       .reduce((sum, part) => sum + partGapCount(part), 0);
     const gaps = roleGaps + partGaps;
@@ -65,6 +75,8 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
     ].filter(Boolean);
 
     return {
+      id: `mw_${week.id ?? week.date}`,
+      rawDate: parseRowDate(week.date),
       date: compactDate(week.date),
       wd: weekdayFor(week.date),
       type: 'mw',
@@ -78,17 +90,22 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
   const weekendOverviewRows = weekendRows.map((row) => {
     if (row.type === 'event') {
       return {
+        id: `we_${row._id ?? row.id}`,
+        rawDate: parseRowDate(row.date),
         date: row.date,
         wd: '',
         type: 'event',
         title: [row.label, row.note].filter(Boolean).join(' — ') || '特別事項',
         keys: [],
         status: 'suspended',
+        gaps: 0,
       };
     }
 
     const gaps = missingCount([row.speaker, row.chair, row.wt, row.read]);
     return {
+      id: `we_${row._id ?? row.id}`,
+      rawDate: parseRowDate(row.date),
       date: row.date,
       wd: '',
       type: 'we',
@@ -106,18 +123,146 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
   return [...midweekRows, ...weekendOverviewRows];
 }
 
-export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false }) {
-  const [filter, setFilter] = useState('all');
-  const overviewData = buildOverviewRows(midweekWeeks, weekendRows);
-
-  const rows = overviewData.filter((r) => {
-    if (filter === 'all') return true;
-    if (filter === 'gap') return r.status === 'gap' || r.status === 'empty';
-    return r.type === filter;
+function sortRows(rows, sort) {
+  return [...rows].sort((a, b) => {
+    if (sort === 'urgent') {
+      const gapDiff = (b.gaps || 0) - (a.gaps || 0);
+      if (gapDiff !== 0) return gapDiff;
+    }
+    const da = a.rawDate?.getTime() ?? 0;
+    const db = b.rawDate?.getTime() ?? 0;
+    return sort === 'oldest' ? db - da : da - db;
   });
+}
+
+function SwipeRow({ onDismiss, children }) {
+  const startX = useRef(null);
+  const [offset, setOffset] = useState(0);
+  const isSwiping = useRef(false);
+
+  function onTouchStart(e) {
+    startX.current = e.touches[0].clientX;
+    isSwiping.current = false;
+  }
+
+  function onTouchMove(e) {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    if (dx < -8) {
+      isSwiping.current = true;
+      setOffset(Math.min(0, dx));
+    }
+  }
+
+  function onTouchEnd() {
+    if (offset < -80) {
+      onDismiss();
+    } else {
+      setOffset(0);
+    }
+    startX.current = null;
+    isSwiping.current = false;
+  }
+
+  const opacity = offset < -40 ? Math.max(0.2, 1 - (-offset - 40) / 100) : 1;
 
   return (
-    <section>
+    <div
+      className="ov-swipe-wrap"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      style={{
+        transform: `translateX(${offset}px)`,
+        transition: offset === 0 ? 'transform 0.22s ease' : 'none',
+        opacity,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function OvToast({ toast, onHide }) {
+  const timer = useRef(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(onHide, 4000);
+    return () => clearTimeout(timer.current);
+  }, [toast, onHide]);
+
+  if (!toast) return null;
+  return (
+    <div className="ov-toast show">
+      <span>{toast.msg}</span>
+      {toast.undo && (
+        <button className="toast__undo" onClick={() => { toast.undo(); onHide(); }}>
+          復原
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false }) {
+  const [filter, setFilter] = useState('all');
+  const [sort, setSort] = useState('upcoming');
+  const [showPast, setShowPast] = useState(false);
+  const [dismissed, setDismissed] = useState([]);
+  const [toast, setToast] = useState(null);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const allRows = buildOverviewRows(midweekWeeks, weekendRows);
+
+  function dismiss(id) {
+    setDismissed((prev) => [...prev, id]);
+    setToast({
+      msg: '已隱藏項目',
+      undo: () => setDismissed((prev) => prev.filter((x) => x !== id)),
+    });
+  }
+
+  function resetDismissed() {
+    const count = dismissed.length;
+    const snapshot = [...dismissed];
+    setDismissed([]);
+    setToast({
+      msg: `已還原 ${count} 個隱藏項目`,
+      undo: () => setDismissed(snapshot),
+    });
+  }
+
+  const visibleRows = allRows.filter((r) => {
+    if (dismissed.includes(r.id)) return false;
+    if (filter === 'gap') return r.status === 'gap' || r.status === 'empty';
+    if (filter !== 'all') return r.type === filter;
+    return true;
+  });
+
+  const futureRows = sortRows(
+    visibleRows.filter((r) => !r.rawDate || r.rawDate >= today),
+    sort,
+  );
+  const pastRows = sortRows(
+    visibleRows.filter((r) => r.rawDate && r.rawDate < today),
+    'oldest',
+  );
+
+  const hiddenPastCount = allRows.filter(
+    (r) => r.rawDate && r.rawDate < today && !dismissed.includes(r.id) &&
+      (() => {
+        if (filter === 'gap') return r.status === 'gap' || r.status === 'empty';
+        if (filter !== 'all') return r.type === filter;
+        return true;
+      })(),
+  ).length;
+
+  return (
+    <section className="ov-section">
       <div className="toolbar">
         <span className="toolbar__title">總覽 · 會眾資料</span>
         <div className="toolbar__spacer" />
@@ -135,33 +280,107 @@ export default function OverviewPage({ midweekWeeks = [], weekendRows = [], load
         </div>
       </div>
 
+      <div className="ov-controls">
+        <div className="ov-sort-group">
+          {SORTS.map((s) => (
+            <button
+              key={s}
+              className={`ov-sort-btn${sort === s ? ' ov-sort-btn--active' : ''}`}
+              onClick={() => setSort(s)}
+            >
+              {SORT_LABELS[s]}
+            </button>
+          ))}
+        </div>
+        {dismissed.length > 0 && (
+          <button className="ov-reset-btn" onClick={resetDismissed}>
+            還原隱藏 ({dismissed.length})
+          </button>
+        )}
+      </div>
+
       <div className="ov-list">
         {loading && <div className="people-empty">正在載入會眾資料…</div>}
-        {!loading && rows.length === 0 && (
+
+        {!loading && futureRows.length === 0 && pastRows.length === 0 && (
           <div className="people-empty">目前沒有可顯示的聚會或週末安排。</div>
         )}
-        {!loading && rows.map((r, i) => (
-          <button key={i} className={`ov-row ov-row--${r.status}`}>
-            <span className="ov-date">
-              <b>{r.date}</b>
-              <small>週{r.wd}</small>
-            </span>
-            {TYPE_BADGE[r.type]}
-            <span className="ov-main">
-              <span className="ov-title">{r.title}</span>
-              <span className="ov-keys">
-                {r.keys.map((k, j) => (
-                  <span key={j} className={`ov-key${/未指派|未排定|尚未/.test(k) ? ' ov-key--miss' : ''}`}>
-                    {k}
+
+        {!loading && futureRows.map((r) => (
+          <SwipeRow key={r.id} onDismiss={() => dismiss(r.id)}>
+            <div className={`ov-row-wrap ov-row--${r.status}`}>
+              <button className="ov-row">
+                <span className="ov-date">
+                  <b>{r.date}</b>
+                  <small>週{r.wd}</small>
+                </span>
+                {TYPE_BADGE[r.type]}
+                <span className="ov-main">
+                  <span className="ov-title">{r.title}</span>
+                  <span className="ov-keys">
+                    {r.keys.map((k, j) => (
+                      <span key={j} className={`ov-key${/未指派|未排定|尚未/.test(k) ? ' ov-key--miss' : ''}`}>
+                        {k}
+                      </span>
+                    ))}
                   </span>
-                ))}
-              </span>
-            </span>
-            {r.status === 'gap' ? STAT_BADGE.gap(r) : (STAT_BADGE[r.status] ?? null)}
-            <span className="ov-caret">›</span>
+                </span>
+                {r.status === 'gap' ? STAT_BADGE.gap(r) : (STAT_BADGE[r.status] ?? null)}
+              </button>
+              <button
+                className="ov-dismiss-btn"
+                aria-label="隱藏"
+                onClick={() => dismiss(r.id)}
+              >
+                ×
+              </button>
+            </div>
+          </SwipeRow>
+        ))}
+
+        {!loading && hiddenPastCount > 0 && (
+          <button
+            className="ov-past-toggle"
+            onClick={() => setShowPast((v) => !v)}
+          >
+            {showPast ? '▲ 隱藏過去的安排' : `▼ 查看過去 ${hiddenPastCount} 項安排`}
           </button>
+        )}
+
+        {!loading && showPast && pastRows.map((r) => (
+          <SwipeRow key={r.id} onDismiss={() => dismiss(r.id)}>
+            <div className={`ov-row-wrap ov-row--${r.status} ov-row--past`}>
+              <button className="ov-row">
+                <span className="ov-date">
+                  <b>{r.date}</b>
+                  <small>週{r.wd}</small>
+                </span>
+                {TYPE_BADGE[r.type]}
+                <span className="ov-main">
+                  <span className="ov-title">{r.title}</span>
+                  <span className="ov-keys">
+                    {r.keys.map((k, j) => (
+                      <span key={j} className={`ov-key${/未指派|未排定|尚未/.test(k) ? ' ov-key--miss' : ''}`}>
+                        {k}
+                      </span>
+                    ))}
+                  </span>
+                </span>
+                {r.status === 'gap' ? STAT_BADGE.gap(r) : (STAT_BADGE[r.status] ?? null)}
+              </button>
+              <button
+                className="ov-dismiss-btn"
+                aria-label="隱藏"
+                onClick={() => dismiss(r.id)}
+              >
+                ×
+              </button>
+            </div>
+          </SwipeRow>
         ))}
       </div>
+
+      <OvToast toast={toast} onHide={() => setToast(null)} />
     </section>
   );
 }

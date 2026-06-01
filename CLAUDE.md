@@ -31,22 +31,29 @@ app/
   join/[token]/
     page.js            — Invite link handler (joins congregation via token)
   api/
-    auth/sync/         — POST: upsert Firebase user into Postgres
+    auth/sync/         — POST: upsert Firebase user into Postgres (does NOT
+                         overwrite displayName on update — only sets it on create)
     congregations/     — POST: create congregation (caller becomes ADMIN)
     congregations/join/— POST: join via inviteToken
     congregations/settings/ — GET/PATCH: congregation settings (admin only)
     congregations/data/— GET: load all congregation data (weeks, people, weekend rows)
     midweek-weeks/import/ — POST: save imported weeks + parts to DB
     people/            — GET: list members, POST: create member
-    people/[id]/       — PATCH: update member
+    people/[id]/       — PATCH: update member, DELETE: remove member
     users/me/          — PATCH: update current user's displayName
-    assignments/       — POST: upsert/delete a single assignment by slotId
-    meetings/publish/  — POST: diff vs publishedSnapshot, push LINE messages to opted-in people, save new snapshot
-    line/webhook/      — POST: LINE Messaging API webhook; handles follow (prompt for name) + text (name-link or "查詢安排")
+    assignments/       — POST: upsert/delete a single midweek assignment by slotId
+    weekend-rows/[id]/ — PATCH: update a single field on a WeekendRow (speaker,
+                         chair, wt, read, host, away, topic, no, cong, note, label, date)
+    meetings/publish/  — POST: diff current vs publishedSnapshot (future weeks only),
+                         push LINE messages for changed assignments, save new snapshot
+    line/webhook/      — POST: LINE Messaging API webhook; two-step registration flow
+                         (congregation name → person name) + "查詢安排" query
   data/
     index.js           — seed/demo data: midweekWeeks, weekendData, peopleData,
                          overviewData, POOL, CATS
-                         CATS is used by AssignSheet; POOL is seed-only demo data
+                         CATS is used by AssignSheet; POOL is seed-only demo data.
+                         All names in demo data are fictional — no real congregation
+                         member names are hardcoded in app code.
   lib/
     db.js              — Prisma singleton (PrismaClient, reused across hot reloads)
     firebase-client.js — Firebase client SDK (auth, googleProvider)
@@ -58,21 +65,33 @@ app/
   components/
     Sidebar.js         — desktop left nav (shows congregation name + scheduleStats vacancy card)
     TopBar.js          — mobile top bar
-    TabBar.js          — mobile bottom tab bar
-    MeetingsPage.js    — midweek/weekend tab switcher + export menu
+    TabBar.js          — mobile bottom tab bar (5 items: grid-template-columns: repeat(5, 1fr))
+    MeetingsPage.js    — midweek/weekend tab switcher + export menu + 發布通知 button
     MidweekWeek.js     — single midweek week card (WhoSlot / PairSlot)
-    WeekendView.js     — weekend schedule table
+    WeekendView.js     — weekend schedule table/cards; filter chips (未來/本月/半年/全部)
+                         + year selector (auto-shown when multiple years present);
+                         slot IDs use r._id (DB row id) not array index
     OverviewPage.js    — month overview list
-    PeoplePage.js      — congregation member list; name input uses local state + onBlur to avoid race conditions on every-keystroke API calls
+    PeoplePage.js      — congregation member list; 近期指派 + 未來安排 both auto-derived
+                         from loaded week data (past/future split by today); delete button
     ImportPage.js      — EPUB import + congregation schedule settings
     SettingsPage.js    — ⚙ congregation info, invite link, members, schedule
     AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed data)
     Toast.js           — undo toast notification
 prisma/
   schema.prisma        — Prisma schema (Congregation, User, MidweekWeek, Part,
-                         Assignment, WeekendRow, Person)
+                         Assignment, WeekendRow, Person, LinePendingLink)
                          binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
                          required for Alpine-based Docker image on fly.io
+scripts/
+  import-people.mjs    — one-time: upsert congregation members from historical data
+                         (node --env-file=.env scripts/import-people.mjs)
+  import-assignments.mjs — one-time: upsert midweek assignments from historical schedule
+                         (node --env-file=.env scripts/import-assignments.mjs)
+  import-weekend.mjs   — one-time: clear + re-import weekend schedule rows
+                         (node --env-file=.env scripts/import-weekend.mjs)
+  merge-person.mjs     — one-time: rename/merge a person record + update all assignments
+                         (node --env-file=.env scripts/merge-person.mjs)
 Dockerfile             — multi-stage build: deps → builder (prisma generate + next build) → runner
 fly.toml               — fly.io config: primary_region=ams, internal_port=3000,
                          NEXT_PUBLIC_* build args. NO release_command — `prisma
@@ -103,19 +122,22 @@ Every user belongs to one `Congregation`. The flow:
 
 **Invite link:** `{origin}/join/{inviteToken}` — clicking joins the congregation after login.
 
+**All data API routes are congregation-scoped** — every route verifies `user.congregationId` from the Firebase token and constrains all DB queries to that congregation. The LINE webhook is the only unauthenticated route; it scopes name lookups to the congregation chosen during the two-step registration flow.
+
 ---
 
 ## Prisma schema (key models)
 
 | Model | Key fields |
 |---|---|
-| `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON), `publishedSnapshot` (JSON — last published assignments per person, for diff) |
+| `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON), `publishedSnapshot` (JSON — future-only assignments per person, for diff) |
 | `User` | `firebaseUid`, `email`, `displayName`, `role` (ADMIN/MEMBER), `congregationId` |
 | `MidweekWeek` | `congregationId`, `date`, `dateLabel`, `weekStart` (original EPUB Monday date), `weekdayPill`, songs, times |
 | `Part` | `weekId`, `partKey`, `section`, `partNum`, `title`, `dur`, `cat`, `roleLabel`, `cbsRef` |
 | `Assignment` | `slotId` (unique string key), `weekId`, `name` |
-| `WeekendRow` | `congregationId`, `date`, `type`, `speaker`, `chair`, `wt`, `read`, etc. |
+| `WeekendRow` | `congregationId`, `sortOrder`, `date`, `type`, `no`, `topic`, `cong`, `speaker`, `chair`, `wt`, `read`, `host`, `away`, `label`, `note` |
 | `Person` | `congregationId`, `name`, `gender`, `appointment`, `tags[]`, `status`, `lineUserId` (nullable — opt-in LINE notifications) |
+| `LinePendingLink` | `lineUserId` (PK), `congregationId` — stores mid-flow state during two-step LINE registration; deleted once linking completes |
 
 All API routes export `dynamic = 'force-dynamic'` to prevent Next.js build-time execution.
 
@@ -169,28 +191,51 @@ On EPUB import, each week's `date` is computed as `shiftDate(w.date, schedule.da
 ## Slot ID convention
 
 ```
-mw{weekId}_{section}      e.g. mw0_chairman, mw0_openPrayer
-mw{weekId}_{partId}_0     e.g. mw0_t0_0  (single-person or student)
-mw{weekId}_{partId}_1     e.g. mw0_m0_1  (helper of a pair)
+mw{weekId}_{section}      e.g. mw42_chairman, mw42_openPrayer
+mw{weekId}_{partId}_0     e.g. mw42_t0_0  (single-person or student)
+mw{weekId}_{partId}_1     e.g. mw42_m0_1  (helper of a pair)
+
+we{rowId}_{field}         e.g. we7_speaker, we7_chair, we7_wt, we7_read
 ```
 
-Week prefix = `slotId.split('_')[0]` — used to detect same-week assignments.
+Midweek week prefix = `slotId.split('_')[0]` — used to detect same-week assignments.
+
+Weekend slots use the WeekendRow DB `id` (not array index) so `persistAssignment` can extract the row id and route to `PATCH /api/weekend-rows/[id]`.
 
 ---
 
 ## Data layer (`app/data/index.js`)
 
-Seed/demo data only — not shown to new congregations by default. Accessible via "重置為示範資料" on the import page.
+Seed/demo data only — not shown to new congregations by default. Accessible via "重置為示範資料" on the import page. **All names in this file are fictional** — real congregation member names must never be hardcoded in app code; they live only in the DB.
 
 **`POOL`** — hardcoded demo members (used only by seed data reset, not by AssignSheet).
 
-**`CATS`** — `catKey` → `{ tag, g, name }` mapping. This **is** used in production by `AssignSheet.js` to know which `quals` tag and gender filter to apply for each slot type. Tags must match `QUAL_OPTIONS` in `PeoplePage.js` exactly — the current aligned set is: `主席`, `禱告`, `寶藏演講`, `朗讀`, `傳道示範`, `生活演講`, `研經班主持`, `公眾演講`.
+**`CATS`** — `catKey` → `{ tag, g, name }` mapping. This **is** used in production by `AssignSheet.js`. Tags must match `QUAL_OPTIONS` in `PeoplePage.js` exactly:
 
-`AssignSheet` builds candidates from the live `people` state (loaded from DB), not from `POOL`. The `buildCandidates(people, catKey, jitter, spread)` function inside `AssignSheet.js` filters by `status !== 'inactive'`, matches `people[].quals` against `CATS[catKey].tag`, and weights by a hash-derived fairness score (days since last / load count — placeholder until real assignment history is tracked).
+```js
+export const CATS = {
+  chairman:   { tag: "主席",       g: "M",   name: "主席" },
+  prayer:     { tag: "禱告",       g: "M",   name: "禱告" },
+  treasures:  { tag: "寶藏演講",   g: "M",   name: "寶藏演講" },
+  gems:       { tag: "經文寶石",   g: "M",   name: "經文寶石" },
+  reading:    { tag: "經文朗讀",   g: "M",   name: "經文朗讀（學生）" },
+  ministry:   { tag: "傳道示範",   g: "any", name: "傳道訓練" },
+  living:     { tag: "生活演講",   g: "M",   name: "生活演講" },
+  cbs:        { tag: "研經班主持", g: "M",   name: "會眾研經班主持" },
+  cbsread:    { tag: "研經班朗讀", g: "M",   name: "研經班朗讀" },
+  publictalk: { tag: "公眾演講",   g: "M",   name: "公眾演講 講者" },
+  wt:         { tag: "主席",       g: "M",   name: "守望台主持" },
+  wtread:     { tag: "守望台朗讀", g: "M",   name: "守望台朗讀" },
+};
+```
+
+QUAL_OPTIONS in PeoplePage.js: `主席`, `禱告`, `寶藏演講`, `經文寶石`, `經文朗讀`, `傳道示範`, `助手`, `生活演講`, `研經班主持`, `研經班朗讀`, `守望台朗讀`, `公眾演講`.
+
+`AssignSheet` builds candidates from the live `people` state (loaded from DB), not from `POOL`.
 
 **`people` shape** (from `/api/congregations/data`):
 ```js
-{ id, name, g: "M"|"F", appt: "長老"|"助理僕人"|"傳道員"|"", quals: ["tag1",...], status: "active"|"inactive" }
+{ id, name, g: "M"|"F", appt: "長老"|"助理僕人"|"傳道員"|"", quals: ["tag1",...], status: "active"|"inactive", lineUserId: "" }
 ```
 
 ---
@@ -212,6 +257,8 @@ Seed/demo data only — not shown to new congregations by default. Accessible vi
 --treasures: #6f6f6f  --ministry: #b58a08  --living: #8c2b22
 ```
 
+Button variants: `.btn--primary`, `.btn--ghost`, `.btn--danger`, `.btn--sm`, `.btn--notify`
+
 ---
 
 ## Export (JPG / PDF / Excel)
@@ -222,6 +269,29 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 - **Copy** — `toPng` → `ClipboardItem`
 - **PDF** — `toPng` → embedded in a print window → browser "Save as PDF"
 - **Excel** — custom `buildXlsxBuffer()` in `midweekExport.js` (JSZip)
+
+---
+
+## LINE Messaging API (Phase 3)
+
+Env vars required: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. Disable auto-reply in LINE Official Account Manager (prevents duplicate messages when webhook replies).
+
+### Registration flow (two-step, multi-congregation safe)
+
+1. **Follow event** → bot replies asking for congregation name
+2. **User sends congregation name** (e.g. "新屋") → lookup priority: exact → starts-with → contains. If one match: save `LinePendingLink` row and ask for person name. If multiple: list all with codes and ask to be more specific or enter a code directly.
+3. **User sends person name** → look up within pending congregation → link `Person.lineUserId` → delete `LinePendingLink`
+
+Name lookup is always scoped to the selected congregation — no cross-congregation collision. `LinePendingLink` is deleted on successful link.
+
+### Publish diff logic
+
+`POST /api/meetings/publish` (admin only):
+- `collectAssignments(name, weeks)` — only includes weeks whose date ≥ today
+- Compares `current` vs `prevSnapshot[name]` filtered to future dates only (prevents "false cancellation" notifications when a past meeting date rolls over between two publishes)
+- First publish (`snapshot = null`): sends full upcoming list
+- Subsequent: sends only ✚ added / ✖ removed items; skips if no change
+- Saves new snapshot after sending
 
 ---
 
@@ -240,6 +310,9 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 - Do not run `prisma migrate deploy` as the release command — no migration files exist; use `prisma db push` instead
 - Do not rely on `prisma db push` as a fly.io `release_command` — Neon free-tier auto-suspend makes the release machine time out connecting, which aborts the whole deploy. The release command was removed; run `fly ssh console -C "npx prisma db push"` manually after a schema change
 - `NEXT_PUBLIC_*` Firebase vars must be in `fly.toml [build.args]` — they are baked in at build time and are not available from fly.io secrets at runtime
+- Do not use array index (`i`) for weekend slot IDs — always use `r._id` (DB row id) so `persistAssignment` can route to `PATCH /api/weekend-rows/[id]`
+- Do not add real congregation member names to `app/data/index.js` — all demo/seed data must use fictional names; real data lives only in the DB
+- Do not overwrite `displayName` in `/api/auth/sync` update block — only set it on `create`. The settings page (`PATCH /api/users/me`) is the authoritative way to change display names
 
 ---
 
@@ -249,6 +322,6 @@ JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM e
 |---|---|
 | **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet, EPUB import, week picker, export (JPG/PDF/Excel) |
 | **Phase 2 — Auth + Multi-tenancy** | Done — Firebase auth, congregation model, invite links, ⚙ settings page, Prisma 6 + Neon Postgres schema live |
-| **Phase 2B — Data persistence** | Mostly done — `POST /api/assignments` persists picks to DB; assignments loaded into state on mount; `GET /api/congregations/data` loads all data. Remaining: save inline week/part edits to DB (titles, songs, times), delete week API |
+| **Phase 2B — Data persistence** | Done — midweek assignments persist via `POST /api/assignments`; weekend row field edits persist via `PATCH /api/weekend-rows/[id]`; both load on mount. Remaining: save inline week/part edits (titles, songs, times), delete week API |
 | **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. No release command (Neon cold-start timed it out); `prisma db push` run manually. Admin SDK creds via `FIREBASE_SERVICE_ACCOUNT` secret. |
-| **Phase 3 — Notifications** | In progress — LINE Messaging API integrated. Webhook at `/api/line/webhook`: follow event prompts name entry; text message links by name or queries assignments ("查詢安排"). Publish at `/api/meetings/publish`: diffs current vs `publishedSnapshot`, sends only changed assignments (first-time users get full list), saves new snapshot. Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. LINE auto-reply must be disabled in LINE Official Account Manager. |
+| **Phase 3 — Notifications** | Done — LINE Messaging API integrated. Two-step registration (congregation name → person name) with multi-congregation safety. `LinePendingLink` table tracks mid-flow state. Webhook at `/api/line/webhook`; publish at `/api/meetings/publish` with future-only diff logic. Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. |

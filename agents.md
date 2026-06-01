@@ -8,7 +8,10 @@ This file documents where and how AI agents (Claude API) are used or planned in 
 
 ### None in production yet
 
-The app is live at https://jwscheduler.fly.dev/ but has no Claude API calls yet. The EPUB parser (`app/lib/epubParser.js`) is deterministic — JSZip + DOMParser, no LLM. Phase 3 route stubs (`/api/meetings/publish`, `/api/line/webhook`) exist but are not yet wired to any AI logic.
+The app is live at https://jwscheduler.fly.dev/ but has no Claude API calls in production. All core features are deterministic:
+- EPUB parser (`app/lib/epubParser.js`) — JSZip + DOMParser, no LLM
+- Assignment suggestions — hash-based fairness weighting, no LLM
+- LINE notifications — rule-based diff logic, no LLM
 
 ---
 
@@ -18,19 +21,19 @@ When an admin uploads a **JPG/PNG photo of the schedule** or a **PDF scan**, the
 
 ### What it does
 
-Send the image/PDF page to `claude-opus-4-8` (or `claude-sonnet-4-6`) with a vision prompt. The model extracts the schedule as structured JSON, which then goes through the same review screen as EPUB import.
+Send the image/PDF page to `claude-sonnet-4-6` with a vision prompt. The model extracts the schedule as structured JSON, which then goes through the same review screen as EPUB import.
 
-### Proposed API call (server-side, Phase 2)
+### Proposed API call (server-side)
 
 ```js
-// POST /api/import/vision  (Fastify/Express route)
+// POST /api/import/vision
 import Anthropic from '@anthropic-ai/sdk';
 
 const client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
 
 async function parseScheduleImage(imageBase64, mediaType) {
   const message = await client.messages.create({
-    model: 'claude-opus-4-8',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2048,
     messages: [
       {
@@ -43,6 +46,7 @@ async function parseScheduleImage(imageBase64, mediaType) {
           {
             type: 'text',
             text: VISION_PROMPT,
+            cache_control: { type: 'ephemeral' }, // cache the static prompt
           },
         ],
       },
@@ -84,53 +88,33 @@ dur 格式: "10 分鐘"（數字 + 空格 + 分鐘）
 
 The review screen (already built) is the safety net — the admin confirms before anything is committed.
 
-### Prompt caching
-
-The vision prompt is long and static. Cache it with a `cache_control` breakpoint:
-
-```js
-messages: [
-  {
-    role: 'user',
-    content: [
-      { type: 'image', source: { ... } },
-      {
-        type: 'text',
-        text: VISION_PROMPT,
-        cache_control: { type: 'ephemeral' },  // cache the prompt, not the image
-      },
-    ],
-  },
-],
-```
-
 ---
 
 ## Planned: Assignment suggestions via Claude
 
-Once historical assignments are stored in Postgres, an optional "ask Claude" button could explain *why* a candidate is recommended ("陳志強 已 43 天未擔任寶藏演講，且本週未有其他安排") or flag edge cases the algorithm misses (e.g. a brother is scheduled for the same role two weekends in a row due to a manual override).
+Once historical assignments are stored in Postgres (they are, as of Phase 2B), an optional "ask Claude" button could explain *why* a candidate is recommended or flag edge cases the algorithm misses (e.g. a brother is scheduled for the same role two weekends in a row due to a manual override).
 
-This is a UX enhancement, not a core feature — the weighted algorithm already does the heavy lifting.
+This is a UX enhancement, not a core feature — the weighted hash algorithm already does the heavy lifting.
 
 ---
 
 ## Claude Code development guidelines
 
-These apply when Claude Code (this tool) works on this repo.
+These apply when Claude Code works on this repo.
 
 ### State ownership
 
 All interactive state stays flat in `app/page.js`. Do not introduce React Context, Zustand, or any other state manager. Two local-state exceptions are fine:
-- `ImportPage` owns `stage` / `parsedWeeks` / `error` — transient import state.
-- `WeekPicker` (inside `MeetingsPage.js`) owns its `open` boolean — ephemeral UI state.
+- `ImportPage` owns `stage` / `parsedWeeks` / `error` — transient import state
+- `WeekPicker` (inside `MeetingsPage.js`) owns its `open` boolean — ephemeral UI state
 
 ### CSS convention
 
-All styles go in `app/globals.css`. No CSS Modules, no Tailwind, no `style={}` props. Token names are in `globals.css :root`. When adding new component styles, append them above the final `@media (max-width: 860px)` block.
+All styles go in `app/globals.css`. No CSS Modules, no Tailwind, no `style={}` props except for one-off positioning. Token names are in `globals.css :root`. When adding new component styles, append them above the final `@media (max-width: 860px)` block.
 
 ### Layout: midweek card alignment
 
-The midweek view wraps the toolbar, nav strip, and card in a single `.mw-container` (max-width 880px). This ensures the toolbar's 編輯/匯出 buttons always align with the card's right edge. If you add new toolbar controls for the midweek view, place them **inside** the `.mw-container` block in `MeetingsPage.js`, not outside it. The weekend view has a separate minimal toolbar.
+The midweek view wraps the toolbar, nav strip, and card in a single `.mw-container` (max-width 880px). If you add new toolbar controls for the midweek view, place them **inside** the `.mw-container` block in `MeetingsPage.js`, not outside it.
 
 ### EPUB parser is client-only
 
@@ -138,42 +122,54 @@ The midweek view wraps the toolbar, nav strip, and card in a single `.mw-contain
 
 ### Adding new week fields
 
-The `midweekWeeks` array shape is defined by the seed data in `app/data/index.js` and produced by `epubParser.js`. If you add a field, update both. The shape is consumed by `MidweekWeek.js` (renders the card) and `MeetingsPage.js` (WeekPicker reads `dateLabel`). Check those before adding or removing fields.
+The `midweekWeeks` array shape is defined by the seed data in `app/data/index.js` and produced by `epubParser.js`. If you add a field, update both. The shape is consumed by `MidweekWeek.js` and `MeetingsPage.js`.
 
 **Current optional fields** (absent on seed data, present on EPUB-parsed weeks):
-- `dateLabel` — full week range string from the EPUB `<h1>`, e.g. `"9月7-13日"`. Used by `WeekPicker` to show the range. Falls back to computing `"X月Y-Z日"` from `date` if absent.
-- `cbsRef` — book+chapter string from the CBS DUR line, e.g. `"《勇氣》第7章"`. Rendered inline on the CBS row in `MidweekWeek.js`. Absent on non-CBS parts and seed data.
+- `dateLabel` — full week range string from the EPUB `<h1>`, e.g. `"9月7-13日"`. Used by `WeekPicker` to show the range.
+- `cbsRef` — book+chapter string from the CBS DUR line. Rendered inline on the CBS row in `MidweekWeek.js`.
+
+### Weekend slot IDs
+
+Always use `r._id` (the DB row id) when generating slot IDs in `WeekendView.js`, not the array index. `persistAssignment` in `page.js` matches `we{id}_{field}` and routes to `PATCH /api/weekend-rows/[id]`. Using array index breaks persistence.
 
 ### Auth & deployment gotchas (learned the hard way)
 
-Full detail is in `CLAUDE.md`; the short version for anyone touching auth or deploy:
+Full detail is in `CLAUDE.md`; the short version:
 
-- **Admin SDK credentials** come from the `FIREBASE_SERVICE_ACCOUNT` JSON blob, never a bare `FIREBASE_PRIVATE_KEY` — the standalone key's `\n` newlines get mangled in shells/secret stores and `cert()` throws `DECODER routines::unsupported`.
-- **Google sign-in must stay `signInWithPopup`.** Redirect breaks cross-domain (fly.dev app vs firebaseapp.com authDomain) because it needs third-party cookies. The `Cross-Origin-Opener-Policy ... window.closed` console warnings from popup are benign — login still completes.
-- **`login/page.js` must redirect after auth** via an effect on `useAuth().firebaseUser` → `router.replace('/')`. The sign-in calls themselves don't navigate; without the effect a successful login stays stuck on `/login`.
-- **`page.js` gates on `dbSyncing` / `syncError`** from `useAuth()`. If a login succeeds but `/api/auth/sync` fails, show the error screen — never the empty app shell.
-- **No fly.io `release_command`.** `prisma db push` times out on Neon's cold start and aborts the deploy. Run schema pushes manually: `fly ssh console -C "npx prisma db push"`.
-- **fly CLI from WSL may fail with IPv6 `network is unreachable`.** Deploy from Windows PowerShell, or hit the fly GraphQL / Machines API directly over IPv4.
+- **Admin SDK credentials** come from `FIREBASE_SERVICE_ACCOUNT` JSON blob, never a bare `FIREBASE_PRIVATE_KEY`
+- **Google sign-in must stay `signInWithPopup`** — redirect breaks cross-domain (fly.dev + firebaseapp.com)
+- **`login/page.js` must redirect after auth** via an effect on `useAuth().firebaseUser` → `router.replace('/')`
+- **No fly.io `release_command`** — `prisma db push` times out on Neon cold start
+- **`auth/sync` must not overwrite `displayName` on update** — only set it on create; the settings page is authoritative
+
+### Privacy: no real names in code
+
+Real congregation member names must never be hardcoded in app source files. They live only in the DB. Import scripts (`scripts/*.mjs`) are one-time loaders — acceptable to have names there since they're not served to clients. All names in `app/data/index.js` (demo data) must be fictional.
 
 ### The review screen is non-negotiable
 
-Per `meeting-scheduler-plan.md §3`: never auto-commit any import. EPUB, PDF, image — all go through the review UI before touching app state or (in Phase 2) the database. Do not add a "skip review" shortcut.
+Per `meeting-scheduler-plan.md §3`: never auto-commit any import. EPUB, PDF, image — all go through the review UI. Do not add a "skip review" shortcut.
 
 ### Testing the parser
 
-A real EPUB is at `sample/mwb_CH_202609.epub` (2026 Sept–Oct issue, Traditional Chinese). Use it to verify any parser changes before claiming they work. Run the dev server and test via the Import page UI — the parser runs in the browser so server-side scripts will not catch DOM-dependent bugs.
+A real EPUB is at `sample/mwb_CH_202609.epub` (2026 Sept–Oct issue, Traditional Chinese). Use it to verify any parser changes. Run the dev server and test via the Import page UI — the parser runs in the browser so server-side scripts will not catch DOM-dependent bugs.
 
-### Phase 2B backend shape (current)
+### Phase 2B+ backend shape (current)
 
-The import flow now saves to DB:
 ```
 parseEpub(file) → review UI → onImportWeeks(weeks)
   → POST /api/midweek-weeks/import  (saves MidweekWeek + Part rows)
   → merged into midweekWeeks state
+
+onPick(slotId, name)
+  → if slotId starts with "mw": POST /api/assignments (upsert/delete)
+  → if slotId starts with "we{id}_": PATCH /api/weekend-rows/{id} (update field)
+
+GET /api/congregations/data (on mount)
+  → returns { midweekWeeks, weekendRows, people, congregation }
+  → all three set into React state; week auto-set via findCurrentWeekIndex
 ```
 
-`GET /api/congregations/data` is called on mount and returns `{ midweekWeeks, weekendRows, people, congregation }`. All three are set into React state; `week` index is auto-set to the current week via `findCurrentWeekIndex`.
-
-**Still using client state only (not yet persisted to DB):**
-- `assignments` — slot→name map; saving to DB is the next persistence milestone
-- Weekend row edits — inline edits are not yet written back to DB
+**Still not persisted to DB:**
+- Inline week/part edits (titles, songs, times, dates) — state only
+- Delete week — no API yet
