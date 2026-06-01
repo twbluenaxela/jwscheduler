@@ -165,7 +165,7 @@ function OnboardingScreen({ onCreated, onJoined }) {
 }
 
 export default function App() {
-  const { firebaseUser, dbUser } = useAuth();
+  const { firebaseUser, dbUser, dbSyncing, syncError } = useAuth();
   const router = useRouter();
   const [page, setPage] = useState('meetings');
   const [midweekWeeks, setMidweekWeeks] = useState([]);
@@ -326,15 +326,25 @@ export default function App() {
   })();
 
   // ── Auth gating ──────────────────────────────────────────────────────────────
-  if (firebaseUser === undefined) {
+  if (firebaseUser === undefined || dbSyncing) {
     return <div className="login-shell"><div className="login-card" style={{alignItems:'center'}}><div className="spin" style={{fontSize:28}}>⟳</div><div className="login-brand__sub">載入中…</div></div></div>;
   }
   if (!firebaseUser) {
-    // Redirect handled by router — show nothing while navigating
     if (typeof window !== 'undefined') router.replace('/login');
     return null;
   }
-  if (dbUser && !dbUser.congregationId) {
+  if (syncError) {
+    return (
+      <div className="login-shell">
+        <div className="login-card" style={{alignItems:'center', gap:16}}>
+          <div className="login-brand__title">連線錯誤</div>
+          <div className="login-brand__sub" style={{color:'var(--special)', textAlign:'center'}}>{syncError}</div>
+          <button className="btn btn--primary" onClick={() => window.location.reload()}>重新載入</button>
+        </div>
+      </div>
+    );
+  }
+  if (!dbUser?.congregationId) {
     return <OnboardingScreen />;
   }
 
