@@ -142,6 +142,25 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     });
   }
 
+  async function deletePerson(person) {
+    if (!person || String(person.id).startsWith('new-')) return;
+    if (!window.confirm(`確定要刪除「${person.name}」嗎？此操作無法復原。`)) return;
+    setError('');
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/people/${person.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '刪除人員失敗');
+      setPeople((prev) => prev.filter((p) => p.id !== person.id));
+      setSelectedId('');
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function addPerson() {
     setError('');
     const names = new Set(people.map((person) => person.name));
@@ -251,6 +270,14 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
                     {selectedPerson.g === 'M' ? '弟兄' : '姊妹'} · {selectedPerson.appt || '—'}
                   </div>
                 </div>
+                {!String(selectedPerson.id).startsWith('new-') && (
+                  <button
+                    className="btn btn--danger btn--sm"
+                    onClick={() => deletePerson(selectedPerson)}
+                  >
+                    刪除
+                  </button>
+                )}
               </div>
 
               <div className="people-detail__form">

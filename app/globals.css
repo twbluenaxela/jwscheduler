@@ -877,6 +877,9 @@ body.editing .week-edit__input { background: #fff; }
 .imp-reset-label { font-size: 13px; color: var(--ink-3); font-weight: 600; }
 .btn--ghost { background: transparent; border-color: var(--line); color: var(--ink-2); }
 .btn--ghost:hover { background: var(--surface-2); color: var(--ink-1); }
+.btn--danger { background: transparent; border-color: var(--special); color: var(--special); }
+.btn--danger:hover { background: #fdf0ef; }
+.btn--sm { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
 
 @media (max-width: 860px) {
   .imp-grid { grid-template-columns: 1fr; }

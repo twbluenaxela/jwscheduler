@@ -29,6 +29,26 @@ function mapPerson(person) {
   };
 }
 
+export async function DELETE(request, context) {
+  try {
+    const decoded = await verifyIdToken(request);
+    const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
+    if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
+
+    const params = await context.params;
+    const id = Number(params.id);
+    const existing = await db.person.findFirst({
+      where: { id, congregationId: user.congregationId },
+    });
+    if (!existing) return NextResponse.json({ error: '找不到人員' }, { status: 404 });
+
+    await db.person.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
 export async function PATCH(request, context) {
   try {
     const decoded = await verifyIdToken(request);

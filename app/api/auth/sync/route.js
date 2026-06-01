@@ -12,7 +12,7 @@ export async function POST(request) {
 
     const user = await db.user.upsert({
       where: { firebaseUid: decoded.uid },
-      update: { email: email ?? decoded.email, displayName: displayName ?? decoded.name },
+      update: { email: email ?? decoded.email },
       create: {
         firebaseUid: decoded.uid,
         email: email ?? decoded.email ?? '',
