@@ -5,16 +5,20 @@ import WeekendView from './WeekendView';
 import {
   getMidweekExportFilename,
   downloadWeekXlsx,
+  jpegImagesToPdfBlob,
+  jpegDataUrlToImage,
+  triggerDownload,
+  buildWeekText,
 } from '../lib/midweekExport';
 import { getToken } from '../lib/auth-context';
 
 const EXPORT_ITEMS = [
   { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組', action: 'jpg' },
-  { ic: '▭', label: '複製到剪貼簿', action: 'copy' },
+  { ic: '▭', label: '複製圖片到剪貼簿', action: 'copy' },
+  { ic: '✎', label: '複製文字', sub: '手動貼到 LINE 群組', action: 'text' },
   null,
   { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
-  { ic: '▥', label: '匯出 PDF', action: 'pdf' },
-  { ic: '⎙', label: '列印', action: 'print' },
+  { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
 ];
 
 function getDateLabel(week) {
@@ -107,25 +111,19 @@ function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, me
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       } else if (type === 'xlsx') {
         await downloadWeekXlsx(week, getAssign);
-      } else if (type === 'pdf' || type === 'print') {
-        const { toPng } = await import('html-to-image');
-        const dataUrl = await toPng(captureRef.current, { pixelRatio: 2, skipFonts: false });
-        const popup = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
-        if (!popup) throw new Error('瀏覽器阻擋了列印視窗。');
-        popup.document.write(`<!doctype html><html><head><meta charset="utf-8">
-          <title>${getMidweekExportFilename(week, 'pdf')}</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { background: #ecebe7; display: flex; justify-content: center; padding: 24px; }
-            img { max-width: 100%; height: auto; border-radius: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
-            @media print { body { background: #ecebe7; padding: 0; } img { border-radius: 0; box-shadow: none; max-width: 100%; } }
-          </style>
-        </head><body>
-          <img src="${dataUrl}" />
-          <script>window.addEventListener('load', () => setTimeout(() => window.print(), 200));<\/script>
-        </body></html>`);
-        popup.document.close();
-        popup.focus();
+      } else if (type === 'text') {
+        const text = buildWeekText(week, getAssign);
+        if (!navigator.clipboard?.writeText) throw new Error('目前瀏覽器不支援複製文字。');
+        await navigator.clipboard.writeText(text);
+        window.alert('已複製本週節目文字，可貼到 LINE 群組。');
+      } else if (type === 'pdf') {
+        // Generate the PDF entirely client-side and download it directly —
+        // no print dialog / popup (which browsers block).
+        const { toJpeg } = await import('html-to-image');
+        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
+        const image = await jpegDataUrlToImage(dataUrl);
+        const blob = jpegImagesToPdfBlob([image]);
+        triggerDownload(blob, getMidweekExportFilename(week, 'pdf'));
       }
     } catch (error) {
       window.alert(error?.message || '匯出失敗');
@@ -172,11 +170,14 @@ export default function MeetingsPage({
   weekendEditMode, setWeekendEditMode,
   addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField,
   getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, setPage,
+  getSuggestion, onAccept, onClear,
+  suggestions = {}, fetchMidweekSuggestions, acceptAllSuggestions, clearSuggestions,
 }) {
   const menuRef = useRef(null);
   const captureRef = useRef(null);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null); // { sent, failed, total } | { error }
+  const [suggestingMw, setSuggestingMw] = useState(false);
 
   async function handlePublish() {
     if (!window.confirm('確定要發送 LINE 通知給所有已設定 LINE ID 的成員嗎？')) return;
@@ -207,8 +208,19 @@ export default function MeetingsPage({
   }, [exportOpen, setExportOpen]);
 
   const totalWeeks = midweekWeeks.length;
-  const prev = () => setWeek(w => (w - 1 + totalWeeks) % totalWeeks);
-  const next = () => setWeek(w => (w + 1) % totalWeeks);
+  const currentWeekId = midweekWeeks[week]?.id;
+  const mwPrefix = currentWeekId ? `mw${currentWeekId}_` : null;
+  const hasMwSuggestions = mwPrefix && Object.keys(suggestions).some(k => k.startsWith(mwPrefix));
+  const hasWeSuggestions = Object.keys(suggestions).some(k => k.startsWith('we'));
+
+  const prev = () => {
+    if (mwPrefix) clearSuggestions?.(mwPrefix);
+    setWeek(w => (w - 1 + totalWeeks) % totalWeeks);
+  };
+  const next = () => {
+    if (mwPrefix) clearSuggestions?.(mwPrefix);
+    setWeek(w => (w + 1) % totalWeeks);
+  };
 
   const tabs = (
     <div className="tabs" role="tablist">
@@ -232,7 +244,10 @@ export default function MeetingsPage({
             <button
               className={`btn${editMode ? ' btn--primary' : ''}`}
               onClick={() => {
-                if (editMode) saveMidweekWeek(midweekWeeks[week]);
+                if (editMode) {
+                  saveMidweekWeek(midweekWeeks[week]);
+                  if (mwPrefix) clearSuggestions?.(mwPrefix);
+                }
                 setEditMode(e => !e);
               }}
             >
@@ -247,6 +262,12 @@ export default function MeetingsPage({
               setExportOpen={setExportOpen}
               menuRef={menuRef}
             />
+            {hasMwSuggestions && (
+              <>
+                <button className="btn btn--primary btn--sm" onClick={() => acceptAllSuggestions?.(mwPrefix)}>接受全部</button>
+                <button className="btn btn--sm" onClick={() => clearSuggestions?.(mwPrefix)}>清除建議</button>
+              </>
+            )}
             {midweekWeeks.length > 0 && (
               <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
                 {publishing ? '發送中…' : '發布通知'}
@@ -285,6 +306,21 @@ export default function MeetingsPage({
                 <button className="iconbtn" aria-label="下一週" onClick={next}>›</button>
                 {editMode && (
                   <button
+                    className="iconbtn iconbtn--suggest"
+                    aria-label="自動建議"
+                    title="自動建議空缺"
+                    disabled={suggestingMw}
+                    onClick={async () => {
+                      const w = midweekWeeks[week];
+                      if (!w) return;
+                      setSuggestingMw(true);
+                      await fetchMidweekSuggestions?.(w.id);
+                      setSuggestingMw(false);
+                    }}
+                  >{suggestingMw ? '…' : '✦'}</button>
+                )}
+                {editMode && (
+                  <button
                     className="iconbtn iconbtn--danger"
                     aria-label="刪除此週"
                     title="刪除此週"
@@ -304,6 +340,9 @@ export default function MeetingsPage({
                 openSheet={openSheet}
                 updateMidweekWeek={updateMidweekWeek}
                 cardRef={captureRef}
+                getSuggestion={getSuggestion}
+                onAccept={onAccept}
+                onClear={onClear}
               />
             </>
           )}
@@ -317,7 +356,10 @@ export default function MeetingsPage({
             <div className="toolbar__spacer" />
             <button
               className={`btn${weekendEditMode ? ' btn--primary' : ''}`}
-              onClick={() => setWeekendEditMode(e => !e)}
+              onClick={() => {
+                if (weekendEditMode) clearSuggestions?.('we');
+                setWeekendEditMode(e => !e);
+              }}
             >
               <span className="pen">{weekendEditMode ? '✓' : '✎'}</span>
               <span>{weekendEditMode ? '完成' : '編輯'}</span>
@@ -326,6 +368,12 @@ export default function MeetingsPage({
               <>
                 <button className="btn" onClick={() => addWeekendRow('schedule')}>＋ 新增安排</button>
                 <button className="btn" onClick={() => addWeekendRow('event')}>＋ 新增事項</button>
+              </>
+            )}
+            {hasWeSuggestions && (
+              <>
+                <button className="btn btn--primary btn--sm" onClick={() => acceptAllSuggestions?.('we')}>接受全部</button>
+                <button className="btn btn--sm" onClick={() => clearSuggestions?.('we')}>清除建議</button>
               </>
             )}
             <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
@@ -357,6 +405,10 @@ export default function MeetingsPage({
               persistWeekendField(rowId, field, value);
             }}
             deleteRow={deleteWeekendRow}
+            getSuggestion={getSuggestion}
+            onAccept={onAccept}
+            onClear={onClear}
+            fetchWeekendSuggestions={fetchWeekendSuggestions}
           />
         </div>
       )}

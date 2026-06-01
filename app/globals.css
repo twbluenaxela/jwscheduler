@@ -218,6 +218,9 @@ body { padding-bottom: 64px; }
 .iconbtn:active { transform: scale(.95); }
 .iconbtn--danger { color: var(--special); }
 .iconbtn--danger:hover { background: var(--living-soft); border-color: var(--special); }
+.iconbtn--suggest { color: var(--accent); }
+.iconbtn--suggest:hover { background: var(--accent-soft); border-color: var(--accent); }
+.iconbtn--suggest:disabled { opacity: .5; cursor: default; }
 
 .btn {
   appearance: none; font-family: inherit; font-size: 14px; font-weight: 700;
@@ -291,11 +294,11 @@ body { padding-bottom: 64px; }
 .row:hover { background: var(--surface-2); }
 .row__time { font-family: var(--mono); font-size: 13.5px; font-weight: 500; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
-.dotwrap { display: flex; align-items: center; gap: 0; }
+.dotwrap { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
 .dot--treasures { background: var(--treasures); }
 .dot--ministry  { background: var(--ministry); }
 .dot--living    { background: var(--living); }
-.partnum { font-size: 11px; font-weight: 800; color: var(--ink-3); margin-left: 4px; font-variant-numeric: tabular-nums; min-width: 12px; }
+.partnum { font-size: 11px; font-weight: 800; color: var(--ink-3); margin-left: 4px; font-variant-numeric: tabular-nums; min-width: 12px; white-space: nowrap; }
 .row__part { font-size: 15.5px; font-weight: 600; color: var(--ink); line-height: 1.35; }
 .row__part .dur { color: var(--ink-3); font-weight: 500; font-size: 14px; }
 .cbs-ref { color: var(--ink-3); font-weight: 600; font-size: 13px; margin-left: 6px; }
@@ -422,6 +425,35 @@ body { padding-bottom: 64px; }
 .we-type-btn:hover { border-color: var(--special); color: var(--special); }
 .we-type-btn--special { background: #fbeeec; border-color: var(--special); color: var(--special); }
 .we-type-btn--suspended { background: #fbeeec; border-color: var(--special); color: var(--special); }
+.we-suggest-btn {
+  appearance: none; border: 1px solid var(--accent); background: var(--accent-soft); cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 700; color: var(--accent);
+  padding: 2px 7px; border-radius: 6px; transition: all .14s ease; flex-shrink: 0;
+}
+.we-suggest-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+.we-suggest-btn:disabled { opacity: .5; cursor: default; }
+
+/* Ghost pills — suggested (unconfirmed) assignments */
+.who--ghost {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px dashed var(--accent); background: var(--accent-soft);
+  border-radius: 8px; padding: 2px 6px 2px 8px;
+  color: var(--accent); font-style: italic;
+}
+.who__ghost-name { font-size: 14px; font-weight: 700; }
+.who__ghost-btn {
+  appearance: none; border: none; background: transparent; cursor: pointer;
+  font-size: 12px; font-weight: 800; padding: 1px 3px; border-radius: 4px;
+  line-height: 1; transition: all .12s ease; color: var(--ink-3);
+}
+.who__ghost-btn:hover { background: #d4edda; color: #2f7a4d; }
+.who__ghost-btn--clear:hover { background: var(--living-soft); color: var(--special); }
+.name-pill--ghost {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px dashed var(--accent); background: var(--accent-soft);
+  border-radius: 999px; padding: 2px 6px 2px 8px;
+  color: var(--accent); font-style: italic; font-size: 13px; font-weight: 700;
+}
 .legend { display: flex; gap: 18px; flex-wrap: wrap; padding: 14px 24px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
 .legend span { display: inline-flex; align-items: center; gap: 7px; }
 .legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
@@ -539,6 +571,7 @@ body { padding-bottom: 64px; }
 .people-kpi__value { font-size: 24px; line-height: 1; font-weight: 900; }
 .people-subtitle { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 14px; }
 .people-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 14px; align-items: start; }
+.people-detail--inline { grid-column: 1 / -1; margin: 2px 0 4px; border-color: var(--accent); box-shadow: 0 0 0 1px rgba(47,111,143,.14), var(--shadow); }
 .people-detail {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -709,6 +742,10 @@ body { padding-bottom: 64px; }
 .exp-card b { font-size: 15px; }
 .exp-card small { font-size: 12px; color: var(--ink-3); font-weight: 500; }
 .exp-ic { font-size: 22px; color: var(--accent); margin-bottom: 5px; }
+.exp-card:disabled { opacity: .45; cursor: default; box-shadow: none; border-color: var(--line); }
+.exp-range { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+.exp-range__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.exp-range__count { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
 
 /* ============================= Bottom sheet ============================= */
 .sheet-backdrop {
@@ -747,6 +784,8 @@ body { padding-bottom: 64px; }
 .reshuffle { white-space: nowrap; }
 .rs-ic { font-size: 15px; display: inline-block; }
 .reshuffle:hover .rs-ic { transform: rotate(-90deg); transition: transform .25s ease; }
+.sheet__clear { display: block; margin: 4px 20px 0; appearance: none; border: 1px dashed var(--line-2); background: var(--surface-2); color: var(--ink-2); font-family: inherit; font-size: 13px; font-weight: 700; border-radius: 10px; padding: 9px 12px; cursor: pointer; transition: all .12s; }
+.sheet__clear:hover { border-color: var(--special); color: var(--special); background: var(--living-soft); }
 .sheet__list { overflow-y: auto; padding: 4px 12px 8px; display: flex; flex-direction: column; gap: 6px; }
 .sheet__spread {
   padding: 0 20px 6px;
@@ -865,7 +904,7 @@ body.editing .week-edit__input { background: #fff; }
   .mw-head__roles { width: 100%; grid-template-columns: auto 1fr; justify-items: start; }
   .role-label { text-align: left; }
   .row {
-    grid-template-columns: 48px 22px 1fr;
+    grid-template-columns: 48px auto 1fr;
     grid-template-areas: "time dot part" ".    .   assign";
     row-gap: 7px; padding: 11px 16px;
   }

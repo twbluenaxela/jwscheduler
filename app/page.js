@@ -174,6 +174,7 @@ export default function App() {
   const [editMode, setEditMode] = useState(false);
   const [congSettings, setCongSettings] = useState({ dayOffset: 2, time: '19:30' });
   const [people, setPeople] = useState([]);
+  const [congCode, setCongCode] = useState('');
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
 
   useEffect(() => {
@@ -191,6 +192,7 @@ export default function App() {
   const [weekendExportOpen, setWeekendExportOpen] = useState(false);
   const nextWeekendId = useRef(0);
   const [assignments, setAssignments] = useState({});
+  const [suggestions, setSuggestions] = useState({});
   const [sheet, setSheet] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -236,6 +238,7 @@ export default function App() {
             time: data.congregation.meetingTime ?? '19:30',
             exceptions: data.congregation.exceptions ?? [],
           });
+          if (data.congregation.code) setCongCode(data.congregation.code);
         }
       } catch (err) {
         if (!cancelled) setToast({ msg: err.message });
@@ -288,7 +291,7 @@ export default function App() {
           closingTime: weekObj.closingTime,
           closingDur: weekObj.closingDur,
           closeSongTime: weekObj.closeSongTime,
-          parts: allParts.map((p) => ({ id: p.id, title: p.title, dur: p.dur, time: p.time })),
+          parts: allParts.map((p) => ({ id: p.dbId, title: p.title, dur: p.dur, time: p.time })),
         }),
       });
     } catch (err) {
@@ -314,16 +317,35 @@ export default function App() {
 
   const addWeekendRow = useCallback(async (type = 'schedule') => {
     const tempId = `temp-${nextWeekendId.current++}`;
+    const defaultDate = (() => {
+      for (let i = weekendRows.length - 1; i >= 0; i--) {
+        const m = String(weekendRows[i].date ?? '').match(/^(\d+)\/(\d+)$/);
+        if (m) {
+          const now = new Date();
+          let yr = now.getFullYear();
+          const mo = parseInt(m[1]);
+          if (mo < now.getMonth() + 1 - 6) yr++;
+          else if (mo > now.getMonth() + 1 + 6) yr--;
+          const d = new Date(yr, mo - 1, parseInt(m[2]));
+          d.setDate(d.getDate() + 7);
+          return `${d.getMonth() + 1}/${d.getDate()}`;
+        }
+      }
+      const d = new Date();
+      const toSun = (7 - d.getDay()) % 7 || 7;
+      d.setDate(d.getDate() + toSun);
+      return `${d.getMonth() + 1}/${d.getDate()}`;
+    })();
     const optimistic = type === 'event'
-      ? { _id: tempId, date: '', type: 'event', label: '', note: '' }
-      : { _id: tempId, date: '', no: '', topic: '', cong: '', speaker: '', chair: '', wt: '', read: '', host: '', away: '' };
+      ? { _id: tempId, date: defaultDate, type: 'event', label: '', note: '' }
+      : { _id: tempId, date: defaultDate, no: '', topic: '', cong: '', speaker: '', chair: '', wt: '', read: '', host: '', away: '' };
     setWeekendRows(prev => [...prev, optimistic]);
     try {
       const token = await getToken();
       const res = await fetch('/api/weekend-rows', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type, date: defaultDate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -332,7 +354,7 @@ export default function App() {
       setWeekendRows(prev => prev.filter(r => r._id !== tempId));
       setToast({ msg: `新增失敗：${err.message}` });
     }
-  }, []);
+  }, [weekendRows]);
 
   const deleteWeekendRow = useCallback(async (rowId) => {
     setWeekendRows(prev => prev.filter(r => r._id !== rowId));
@@ -415,7 +437,7 @@ export default function App() {
     setSheet(null);
     persistAssignment(slotId, name);
     setToast({
-      msg: `已指派 ${name}`,
+      msg: name ? `已指派 ${name}` : '已清除指派',
       undo: () => {
         const restoreName = prevName ?? '';
         setAssignments((prev) => {
@@ -429,8 +451,96 @@ export default function App() {
     });
   }, []);
 
-  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek };
-  const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField };
+  const getSuggestion = useCallback((slotId) => {
+    if (assignments[slotId]) return null;
+    return suggestions[slotId] ?? null;
+  }, [assignments, suggestions]);
+
+  const clearSuggestions = useCallback((prefix = '') => {
+    setSuggestions(prev => {
+      if (!prefix) return {};
+      const next = { ...prev };
+      for (const k of Object.keys(next)) { if (k.startsWith(prefix)) delete next[k]; }
+      return next;
+    });
+  }, []);
+
+  const acceptSuggestion = useCallback((slotId, name) => {
+    setSuggestions(prev => { const n = { ...prev }; delete n[slotId]; return n; });
+    onPick(slotId, name, assignments[slotId] ?? '');
+  }, [assignments, onPick]);
+
+  const acceptAllSuggestions = useCallback((prefix = '') => {
+    const entries = Object.entries(suggestions).filter(([k]) => !prefix || k.startsWith(prefix));
+    if (!entries.length) return;
+    const snap = Object.fromEntries(entries.map(([k]) => [k, assignments[k] ?? '']));
+    setAssignments(prev => ({ ...prev, ...Object.fromEntries(entries) }));
+    setSuggestions(prev => {
+      const n = { ...prev };
+      for (const [k] of entries) delete n[k];
+      return n;
+    });
+    for (const [slotId, name] of entries) persistAssignment(slotId, name);
+    setToast({
+      msg: `已接受 ${entries.length} 項建議`,
+      undo: () => {
+        setAssignments(prev => {
+          const n = { ...prev };
+          for (const [k, v] of Object.entries(snap)) { if (v) n[k] = v; else delete n[k]; }
+          return n;
+        });
+        for (const [slotId, prev] of Object.entries(snap)) persistAssignment(slotId, prev ?? '');
+      },
+    });
+  }, [suggestions, assignments]);
+
+  const fetchWeekendSuggestions = useCallback(async (rowId, existing = {}) => {
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/suggest/weekend-row', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ existing }),
+      });
+      if (!res.ok) return;
+      const { suggestion } = await res.json();
+      const key = `we${rowId}`;
+      setSuggestions(prev => ({
+        ...prev,
+        ...(suggestion.speaker ? { [`${key}_speaker`]: suggestion.speaker } : {}),
+        ...(suggestion.chair   ? { [`${key}_chair`]:   suggestion.chair   } : {}),
+        ...(suggestion.wt      ? { [`${key}_wt`]:      suggestion.wt      } : {}),
+        ...(suggestion.read    ? { [`${key}_read`]:     suggestion.read    } : {}),
+      }));
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchMidweekSuggestions = useCallback(async (weekId) => {
+    try {
+      const token = await getToken();
+      const prefix = `mw${weekId}_`;
+      const weekAssignments = Object.fromEntries(
+        Object.entries(assignments).filter(([k]) => k.startsWith(prefix))
+      );
+      const res = await fetch('/api/suggest/midweek-week', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weekId, assignments: weekAssignments }),
+      });
+      if (!res.ok) return;
+      const { suggestions: result } = await res.json();
+      setSuggestions(prev => ({ ...prev, ...result }));
+    } catch { /* silent */ }
+  }, [assignments]);
+
+  const ghostProps = {
+    getSuggestion,
+    onAccept: acceptSuggestion,
+    onClear: useCallback((slotId) => setSuggestions(prev => { const n = { ...prev }; delete n[slotId]; return n; }), []),
+  };
+
+  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, ...ghostProps };
+  const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField, fetchWeekendSuggestions };
 
   const scheduleStats = (() => {
     if (!midweekWeeks.length) return null;
@@ -500,6 +610,10 @@ export default function App() {
               {...weekendProps}
               setPage={setPage}
               {...sharedProps}
+              suggestions={suggestions}
+              fetchMidweekSuggestions={fetchMidweekSuggestions}
+              acceptAllSuggestions={acceptAllSuggestions}
+              clearSuggestions={clearSuggestions}
             />
           )}
           {page === 'overview' && (
@@ -516,6 +630,7 @@ export default function App() {
               midweekWeeks={midweekWeeks}
               weekendRows={weekendRows}
               loading={workspaceLoading}
+              congCode={congCode}
             />
           )}
           {page === 'settings' && (
@@ -535,6 +650,7 @@ export default function App() {
           {page === 'import' && (
             <ImportPage
               existingWeeks={midweekWeeks}
+              getAssign={getAssign}
               congSettings={congSettings}
               setCongSettings={setCongSettings}
               onReapplySchedule={() => {

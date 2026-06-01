@@ -172,9 +172,18 @@ parseEpub(file) → review UI → onImportWeeks(weeks)
 onPick(slotId, name)
   → if slotId starts with "mw": POST /api/assignments (upsert/delete)
   → if slotId starts with "we{id}_": PATCH /api/weekend-rows/{id} (update field)
+  → name may be "" (AssignSheet "✕ 留空此項" / clear) → assignment row deleted,
+    weekend field set to empty; toast reads 已清除指派
+
+saveMidweekWeek(weekObj)            ← called on edit-mode exit (✓ 完成)
+  → PATCH /api/midweek-weeks/{id}   (week fields + all parts in one transaction)
+  → NOTE: sends p.dbId (numeric), NOT p.id (partKey string) for parts
+
+deleteMidweekWeek(weekId)           ← admin only
+  → DELETE /api/midweek-weeks/{id}
 
 addWeekendRow(type)
-  → POST /api/weekend-rows (create, returns DB row with _id alias)
+  → POST /api/weekend-rows (create; date defaults to last row + 7 days)
 
 deleteWeekendRow(rowId)
   → DELETE /api/weekend-rows/{rowId}
@@ -182,14 +191,28 @@ deleteWeekendRow(rowId)
 persistWeekendField(rowId, field, value)
   → PATCH /api/weekend-rows/{rowId} (called from edit mode for text fields + type toggle)
 
+fetchMidweekSuggestions(weekId)     ← ✦ button in midweek navstrip
+  → POST /api/suggest/midweek-week  (sends filtered assignments for that week)
+  → setSuggestions(prev => ({ ...prev, ...result }))
+
+fetchWeekendSuggestions(rowId, existing)  ← ✦ button per weekend row
+  → POST /api/suggest/weekend-row
+  → setSuggestions(prev => ({ ...prev, we{rowId}_speaker: ..., ... }))
+
+acceptSuggestion(slotId, name)      ← ghost pill ✓ button
+  → removes from suggestions state
+  → calls onPick (persists to DB, shows undo toast)
+
+acceptAllSuggestions(prefix)        ← toolbar 接受全部
+  → batch: setAssignments + persist all + single undo toast
+
 GET /api/congregations/data (on mount)
   → returns { midweekWeeks, weekendRows, people, congregation }
-  → all three set into React state; week auto-set via findCurrentWeekIndex
+  → all set into React state; week auto-set via findCurrentWeekIndex
+  → congregation.code stored in congCode state (used for iCal UIDs)
 ```
 
-**Still not persisted to DB:**
-- Inline midweek week/part edits (titles, songs, times, dates) — state only
-- Delete midweek week — no API yet
+**All data is now persisted to DB.** No remaining "state only" items.
 
 ### WeekendRow `type` values
 
@@ -201,3 +224,82 @@ GET /api/congregations/data (on mount)
 | `suspended` | Red full-width banner — for 本週聚會暫停, cancelled meetings |
 
 Type is toggled via a chip button in weekend edit mode. Persists to DB via `persistWeekendField`.
+
+### Suggestion engine (`app/lib/suggest.js`)
+
+Pure function library — no DB, no fetch, no React. Two exports:
+
+**`suggestWeekendRow(people, pastRows, existing = {})`**
+- Suggests `{ speaker, chair, wt, read }` for a new weekend row
+- `existing` names pre-populate `used` Set to avoid double-assigning already-filled slots
+- History: scans `pastRows` per field to build recency data
+
+**`suggestMidweekWeek(people, week, existingAssignments, pastHistory)`**
+- `week` = frontend shape `{ id, treasures, ministry, living }` with parts having `.id` (partKey) and `.cat`
+- `existingAssignments` = `{ [slotId]: name }` — slots already confirmed (skipped)
+- `pastHistory` = `[{ name, cat, date }]` built in the API route by joining assignments → parts
+- Returns `{ [slotId]: name }` for all empty slots
+
+**Core algorithm (`rankCandidates`)**:
+1. Filter active members by qualification tag + gender from `CAT_REQS`
+2. Score each: `daysSince` = days since last assigned to this cat (9999 if never)
+3. Sort: `daysSince` descending, total count ascending as tiebreaker
+4. `pickOne` walks ranked list, skips names already in `used` Set
+
+**`CAT_REQS` maps part category → `{ tag, g }`** — must stay in sync with `CATS` in `app/data/index.js`.
+
+### Ghost suggestion state (`app/page.js`)
+
+`suggestions: { [slotId]: name }` — separate from `assignments`. Rules:
+- `getSuggestion(slotId)` returns null if `assignments[slotId]` exists (real assignment takes precedence)
+- Accepting a ghost calls `onPick` (same DB persist + undo toast path as manual picks)
+- Ghosts clear on edit-mode exit (`clearSuggestions(prefix)`) and week navigation
+- `ghostProps = { getSuggestion, onAccept, onClear }` spread into `sharedProps` and through component tree
+
+### iCal export (`app/lib/icalExport.js`)
+
+Pure client-side generator. Key details:
+- **Timezone:** `Asia/Taipei` (UTC+8, no DST) — hardcoded for Taiwan
+- **Midweek time:** extracted from `weekdayPill` (e.g. `"星期三 · 19:30"`) → 19:30
+- **Weekend time:** defaults to 10:00 (Sunday morning)
+- **Duration:** 1h45m per event
+- **UID:** `{YYYYMMDD}-{encodedRole}-{encodedName}@{congCode}` — stable across re-exports so Outlook deduplicates
+- Triggered from PeoplePage 未來安排 section ("↓ iCal (N)"); downloads `{name}-schedule.ics`
+
+### PeoplePage writes are serialized + optimistic
+
+Member edits (`updateSelected` → `persistPerson`) are queued on a `writeChainRef`
+promise chain so overlapping PATCHes apply in order. **Do not apply the PATCH
+response back into `people` state** — the optimistic local update is authoritative.
+Applying a stale/out-of-order response is what made qualifications "deselect on
+their own" when toggled quickly. If you need server-canonical data, reload via
+`/api/congregations/data`, not the per-write response.
+
+### Export helpers (`app/lib/midweekExport.js`)
+
+- **Silent PDF, no popup.** `jpegImagesToPdfBlob(images)` hand-builds a multi-page
+  PDF in the browser (baseline JPEG embedded with `DCTDecode`, fit to A4) and
+  `triggerDownload` saves it. Do **not** reintroduce a `window.open(...).print()`
+  flow for PDF — browsers block it.
+- **Text export.** `buildWeekText(week, getAssign)` returns a plain-text schedule
+  for pasting into LINE manually (meetings 複製文字 menu item).
+- **Multi-week / range.** `exportWeeks{Jpeg,Pdf,Xlsx}` and `openWeeksPrintWindow`
+  build off `renderWeekToCanvas` (canvas, no DOM node) so ImportPage can export a
+  range of weeks without a rendered card on screen. ImportPage filters
+  `existingWeeks` by the 範圍 selector (全部/本月/自訂) and needs the `getAssign`
+  prop so exports reflect current assignments.
+
+### PWA / service worker
+
+`app/manifest.js` (Next 16 app-router manifest convention) + `public/sw.js` +
+`components/PWARegister.js` make the app installable. The worker is **network-first**
+and must **never cache `/api/`** requests (fresh auth + data). Bump the `CACHE`
+constant in `sw.js` when changing caching behaviour so old caches are purged on
+`activate`.
+
+### Dev-server gotcha (this environment)
+
+`next dev` may fail with `--env-file is not allowed in NODE_OPTIONS` under Node 22 /
+Next 16. This is an environment quirk, not a code bug. When you can't boot the dev
+server, syntax-check changed files with `tsc --noEmit --allowJs --checkJs false --jsx
+preserve --ignoreConfig <files>` instead.

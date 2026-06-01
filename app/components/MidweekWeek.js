@@ -18,13 +18,23 @@ function TextField({ editMode, value, onChange, className, inputClassName, ariaL
   return <span className={className}>{value}</span>;
 }
 
-function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet }) {
+function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
   const name = getAssign(slotId, defaultName);
-  const isEmpty = !name;
+  const ghost = !name ? (getSuggestion?.(slotId) ?? null) : null;
+
+  if (ghost) {
+    return (
+      <span className="who who--ghost">
+        <span className="who__ghost-name">{ghost}</span>
+        <button className="who__ghost-btn" title="接受" onClick={() => onAccept?.(slotId, ghost)}>✓</button>
+        <button className="who__ghost-btn who__ghost-btn--clear" title="清除" onClick={() => onClear?.(slotId)}>✕</button>
+      </span>
+    );
+  }
 
   return (
     <span
-      className={`who${isEmpty ? ' who--empty' : ''}`}
+      className={`who${!name ? ' who--empty' : ''}`}
       onClick={() => openSheet(slotId, catKey, ctxLabel, name)}
     >
       {name || '未指派'}
@@ -32,7 +42,8 @@ function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet }
   );
 }
 
-function PairSlot({ baseId, catKey, ctxLabel, defaultNames, getAssign, openSheet }) {
+function PairSlot({ baseId, catKey, ctxLabel, defaultNames, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
+  const ghostProps = { getSuggestion, onAccept, onClear };
   return (
     <span className="who--pair">
       <WhoSlot
@@ -42,6 +53,7 @@ function PairSlot({ baseId, catKey, ctxLabel, defaultNames, getAssign, openSheet
         defaultName={defaultNames[0] ?? ''}
         getAssign={getAssign}
         openSheet={openSheet}
+        {...ghostProps}
       />
       <span className="who-sep">/</span>
       <WhoSlot
@@ -51,6 +63,7 @@ function PairSlot({ baseId, catKey, ctxLabel, defaultNames, getAssign, openSheet
         defaultName={defaultNames[1] ?? ''}
         getAssign={getAssign}
         openSheet={openSheet}
+        {...ghostProps}
       />
     </span>
   );
@@ -76,6 +89,9 @@ function PartRow({
   updateMidweekWeek,
   getAssign,
   openSheet,
+  getSuggestion,
+  onAccept,
+  onClear,
 }) {
   const isPair = part.assign.length === 2;
   const updatePart = (patch) => updateWeekSection(weekId, sectionName, part.id, updateMidweekWeek, patch);
@@ -145,6 +161,9 @@ function PartRow({
             defaultNames={shownPart.assign}
             getAssign={getAssign}
             openSheet={openSheet}
+            getSuggestion={getSuggestion}
+            onAccept={onAccept}
+            onClear={onClear}
           />
         ) : (
           <WhoSlot
@@ -154,6 +173,9 @@ function PartRow({
             defaultName={shownPart.assign[0] ?? ''}
             getAssign={getAssign}
             openSheet={openSheet}
+            getSuggestion={getSuggestion}
+            onAccept={onAccept}
+            onClear={onClear}
           />
         )}
       </span>
@@ -161,7 +183,7 @@ function PartRow({
   );
 }
 
-export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, cardRef }) {
+export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, cardRef, getSuggestion, onAccept, onClear }) {
   const wId = `mw${week.id}`;
   const ctx = week.date;
   const [draftWeek, setDraftWeek] = useState(week);
@@ -226,23 +248,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
         </div>
         <div className="mw-head__roles">
           <span className="role-label">主席</span>
-          <WhoSlot
-            slotId={`${wId}_chairman`}
-            catKey="chairman"
-            ctxLabel={ctx}
-            defaultName={shownWeek.chairman}
-            getAssign={getAssign}
-            openSheet={openSheet}
-          />
+          <WhoSlot slotId={`${wId}_chairman`} catKey="chairman" ctxLabel={ctx} defaultName={shownWeek.chairman} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} />
           <span className="role-label">開始禱告</span>
-          <WhoSlot
-            slotId={`${wId}_openPrayer`}
-            catKey="prayer"
-            ctxLabel={ctx}
-            defaultName={shownWeek.openPrayer}
-            getAssign={getAssign}
-            openSheet={openSheet}
-          />
+          <WhoSlot slotId={`${wId}_openPrayer`} catKey="prayer" ctxLabel={ctx} defaultName={shownWeek.openPrayer} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} />
         </div>
       </div>
 
@@ -302,6 +310,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
             updateMidweekWeek={updateMidweekWeek}
             getAssign={getAssign}
             openSheet={openSheet}
+            getSuggestion={getSuggestion}
+            onAccept={onAccept}
+            onClear={onClear}
           />
         ))}
       </div>
@@ -323,6 +334,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
             updateMidweekWeek={updateMidweekWeek}
             getAssign={getAssign}
             openSheet={openSheet}
+            getSuggestion={getSuggestion}
+            onAccept={onAccept}
+            onClear={onClear}
           />
         ))}
       </div>
@@ -373,6 +387,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
             updateMidweekWeek={updateMidweekWeek}
             getAssign={getAssign}
             openSheet={openSheet}
+            getSuggestion={getSuggestion}
+            onAccept={onAccept}
+            onClear={onClear}
           />
         ))}
 
@@ -440,6 +457,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
               defaultName={shownWeek.closePrayer}
               getAssign={getAssign}
               openSheet={openSheet}
+              getSuggestion={getSuggestion}
+              onAccept={onAccept}
+              onClear={onClear}
             />
           </span>
         </div>

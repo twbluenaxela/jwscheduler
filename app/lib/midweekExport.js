@@ -706,3 +706,215 @@ export function openWeekendPrintWindow(rows, getAssign, thisYear) {
   popup.focus();
   return popup;
 }
+
+/* ===================== Shared download / PDF helpers ===================== */
+
+export function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function dataUrlToUint8(dataUrl) {
+  const base64 = String(dataUrl).split(',')[1] || '';
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function jpegImageFromCanvas(canvas) {
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  return { bytes: dataUrlToUint8(dataUrl), width: canvas.width, height: canvas.height };
+}
+
+// Reads a JPEG data URL into { bytes, width, height } (used for DOM screenshots
+// where we don't already have the source canvas dimensions).
+export async function jpegDataUrlToImage(dataUrl) {
+  const bytes = dataUrlToUint8(dataUrl);
+  const dims = await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error('無法讀取圖片尺寸。'));
+    img.src = dataUrl;
+  });
+  return { bytes, width: dims.width, height: dims.height };
+}
+
+// Builds a multi-page PDF (one baseline-JPEG image per A4 page) entirely in the
+// browser — no print dialog, no external library. Each image is embedded with
+// the DCTDecode filter and scaled to fit the page within margins.
+export function jpegImagesToPdfBlob(images) {
+  const PAGE_W = 595.28;
+  const PAGE_H = 841.89;
+  const MARGIN = 24;
+  const enc = new TextEncoder();
+  const chunks = [];
+  let offset = 0;
+  const offsets = [];
+
+  const push = (data) => {
+    const bytes = typeof data === 'string' ? enc.encode(data) : data;
+    chunks.push(bytes);
+    offset += bytes.length;
+  };
+  const startObj = (n) => { offsets[n] = offset; push(`${n} 0 obj\n`); };
+
+  push('%PDF-1.4\n');
+  push(new Uint8Array([0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a]));
+
+  const numImages = images.length;
+  const pageObjNums = images.map((_, i) => 3 + i * 3);
+  const totalObjs = 2 + numImages * 3;
+
+  startObj(1);
+  push('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  startObj(2);
+  push(`<< /Type /Pages /Kids [${pageObjNums.map((n) => `${n} 0 R`).join(' ')}] /Count ${numImages} >>\nendobj\n`);
+
+  images.forEach((img, i) => {
+    const pageNum = 3 + i * 3;
+    const contentNum = 4 + i * 3;
+    const imageNum = 5 + i * 3;
+    const availW = PAGE_W - MARGIN * 2;
+    const availH = PAGE_H - MARGIN * 2;
+    const scale = Math.min(availW / img.width, availH / img.height);
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
+    const x = (PAGE_W - drawW) / 2;
+    const y = (PAGE_H - drawH) / 2;
+
+    startObj(pageNum);
+    push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W.toFixed(2)} ${PAGE_H.toFixed(2)}] /Resources << /XObject << /Im0 ${imageNum} 0 R >> >> /Contents ${contentNum} 0 R >>\nendobj\n`);
+
+    const content = `q ${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im0 Do Q`;
+    startObj(contentNum);
+    push(`<< /Length ${enc.encode(content).length} >>\nstream\n`);
+    push(content);
+    push('\nendstream\nendobj\n');
+
+    startObj(imageNum);
+    push(`<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.bytes.length} >>\nstream\n`);
+    push(img.bytes);
+    push('\nendstream\nendobj\n');
+  });
+
+  const xrefOffset = offset;
+  const objCount = totalObjs + 1;
+  push(`xref\n0 ${objCount}\n`);
+  push('0000000000 65535 f \n');
+  for (let n = 1; n <= totalObjs; n += 1) {
+    push(`${String(offsets[n]).padStart(10, '0')} 00000 n \n`);
+  }
+  push(`trailer\n<< /Size ${objCount} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+
+  const total = chunks.reduce((sum, c) => sum + c.length, 0);
+  const out = new Uint8Array(total);
+  let p = 0;
+  for (const c of chunks) { out.set(c, p); p += c.length; }
+  return new Blob([out], { type: 'application/pdf' });
+}
+
+/* ===================== Plain-text export ===================== */
+
+// Plain-text version of a week's schedule, suitable for pasting into a LINE group.
+export function buildWeekText(week, getAssign) {
+  if (!week) return '';
+  const wId = `mw${week.id}`;
+  const get = (slot, fb) => (typeof getAssign === 'function' ? getAssign(slot, fb) : fb) || '';
+  const lines = [];
+  lines.push(`📋 本週聚會 — ${getWeekLabel(week)}`);
+  if (week.weekdayPill) lines.push(week.weekdayPill);
+  if (week.reading) lines.push(`每週閱讀經文：${week.reading}`);
+  lines.push('');
+
+  const chairman = get(`${wId}_chairman`, week.chairman);
+  const openPrayer = get(`${wId}_openPrayer`, week.openPrayer);
+  if (chairman) lines.push(`主席：${chairman}`);
+  if (openPrayer) lines.push(`開始禱告：${openPrayer}`);
+  lines.push('');
+
+  const section = (title, parts) => {
+    if (!parts?.length) return;
+    lines.push(`【${title}】`);
+    parts.forEach((part) => {
+      const names = part.assign
+        .map((_, i) => get(`${wId}_${part.id}_${i}`, part.assign[i] ?? ''))
+        .filter(Boolean);
+      lines.push(`${part.partNum}. ${part.title}：${names.length ? names.join(' / ') : '—'}`);
+    });
+    lines.push('');
+  };
+  section('上帝話語的寶藏', week.treasures);
+  section('用心準備傳道工作', week.ministry);
+  section('基督徒的生活', week.living);
+
+  const closePrayer = get(`${wId}_closePrayer`, week.closePrayer);
+  if (closePrayer) lines.push(`結束禱告：${closePrayer}`);
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export function buildWeeksText(weeks, getAssign) {
+  return weeks.map((w) => buildWeekText(w, getAssign)).join('\n\n──────────\n\n');
+}
+
+/* ===================== Multi-week exporters (匯出 page) ===================== */
+
+export async function exportWeeksJpeg(weeks, getAssign) {
+  if (!weeks.length) return;
+  if (weeks.length === 1) { await downloadWeekJpeg(weeks[0], getAssign); return; }
+  const zip = new JSZip();
+  for (const w of weeks) {
+    const canvas = renderWeekToCanvas(w, getAssign);
+    // eslint-disable-next-line no-await-in-loop
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('無法產生圖片。'))), 'image/jpeg', 0.92);
+    });
+    zip.file(`${sanitizeFilename(getWeekLabel(w))}.jpg`, blob);
+  }
+  const out = await zip.generateAsync({ type: 'blob' });
+  triggerDownload(out, `本週聚會_${weeks.length}週.zip`);
+}
+
+export function exportWeeksPdf(weeks, getAssign) {
+  if (!weeks.length) return;
+  const images = weeks.map((w) => jpegImageFromCanvas(renderWeekToCanvas(w, getAssign)));
+  const blob = jpegImagesToPdfBlob(images);
+  triggerDownload(blob, weeks.length === 1 ? getMidweekExportFilename(weeks[0], 'pdf') : `本週聚會_${weeks.length}週.pdf`);
+}
+
+export async function exportWeeksXlsx(weeks, getAssign) {
+  if (!weeks.length) return;
+  const rows = [];
+  weeks.forEach((w, i) => {
+    if (i > 0) rows.push(['', '', '', '', '', '']);
+    formatRowsForExcel(w, getAssign).forEach((r) => rows.push(r));
+  });
+  const blob = await buildXlsxBuffer(rows);
+  triggerDownload(blob, weeks.length === 1 ? getMidweekExportFilename(weeks[0], 'xlsx') : `本週聚會_${weeks.length}週.xlsx`);
+}
+
+export function openWeeksPrintWindow(weeks, getAssign) {
+  if (!weeks.length) throw new Error('沒有可列印的週次。');
+  const imgs = weeks
+    .map((w) => `<img src="${renderWeekToCanvas(w, getAssign).toDataURL('image/jpeg', 0.92)}" />`)
+    .join('');
+  const popup = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
+  if (!popup) throw new Error('瀏覽器阻擋了列印視窗。');
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>本週聚會</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #ecebe7; }
+      img { display: block; width: 100%; height: auto; page-break-after: always; }
+      @media print { body { background: #fff; } }
+    </style></head><body>${imgs}
+    <script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));<\/script>
+    </body></html>`);
+  popup.document.close();
+  popup.focus();
+  return popup;
+}

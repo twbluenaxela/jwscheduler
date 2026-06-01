@@ -1,6 +1,19 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getToken } from '../lib/auth-context';
+import { generateIcal, downloadIcal } from '../lib/icalExport';
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 720px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return isMobile;
+}
 
 const QUAL_OPTIONS = [
   '傳道與生活主席',
@@ -134,7 +147,7 @@ function createBlankPerson(nextId) {
   };
 }
 
-export default function PeoplePage({ people, setPeople, midweekWeeks = [], weekendRows = [], loading = false }) {
+export default function PeoplePage({ people, setPeople, midweekWeeks = [], weekendRows = [], loading = false, congCode = 'jwscheduler' }) {
   const RECENT_DEFAULT = 3;
 
   const [query, setQuery] = useState('');
@@ -144,6 +157,8 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
   const [localName, setLocalName] = useState('');
   const [showAllRecent, setShowAllRecent] = useState(false);
   const prevSelectedIdRef = useRef('');
+  const writeChainRef = useRef(Promise.resolve());
+  const isMobile = useIsMobile();
 
   const filteredPeople = useMemo(() => {
     return people.filter((person) => !query || person.name.includes(query));
@@ -171,17 +186,28 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     return collectRecentAssignments(selectedPerson.name, midweekWeeks, weekendRows);
   }, [selectedPerson, midweekWeeks, weekendRows]);
 
-  async function persistPerson(person, changes) {
-    if (!person || String(person.id).startsWith('new-')) return;
-    const token = await getToken();
-    const res = await fetch(`/api/people/${person.id}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(changes),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '儲存人員失敗');
-    setPeople((prev) => prev.map((item) => (item.id === person.id ? data.person : item)));
+  // Serialize PATCHes so rapid edits (e.g. toggling several quals quickly) are
+  // applied to the DB in order. We keep the optimistic local state as the source
+  // of truth and do NOT overwrite it with the server response — an out-of-order
+  // stale response was what made quals appear to "deselect on their own".
+  function persistPerson(person, changes) {
+    if (!person || String(person.id).startsWith('new-')) return Promise.resolve();
+    const personId = person.id;
+    const run = async () => {
+      const token = await getToken();
+      const res = await fetch(`/api/people/${personId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(changes),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '儲存人員失敗');
+      }
+    };
+    const result = writeChainRef.current.then(run, run);
+    writeChainRef.current = result.catch(() => {});
+    return result;
   }
 
   function updateSelected(changes) {
@@ -255,6 +281,175 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     }
   }
 
+  const detailBody = selectedPerson ? (
+    <>
+      <div className="people-detail__head">
+        <div>
+          <div className="people-detail__eyebrow">個人檢視</div>
+          <div className="people-detail__name">{selectedPerson.name || '未命名人員'}</div>
+          <div className="people-detail__meta">
+            {selectedPerson.g === 'M' ? '弟兄' : '姊妹'} · {selectedPerson.appt || '—'}
+          </div>
+        </div>
+        {!String(selectedPerson.id).startsWith('new-') && (
+          <button
+            className="btn btn--danger btn--sm"
+            onClick={() => deletePerson(selectedPerson)}
+          >
+            刪除
+          </button>
+        )}
+      </div>
+
+      <div className="people-detail__form">
+        <label className="field">
+          <span className="field__label">姓名</span>
+          <input
+            className="field__input"
+            value={localName}
+            onChange={(e) => setLocalName(e.target.value)}
+            onBlur={() => {
+              if (localName !== selectedPerson.name) updateSelected({ name: localName });
+            }}
+            placeholder="輸入中文姓名"
+          />
+        </label>
+
+        <label className="field">
+          <span className="field__label">LINE ID</span>
+          <input
+            className="field__input field__input--mono"
+            defaultValue={selectedPerson.lineUserId ?? ''}
+            key={selectedPerson.id}
+            onBlur={(e) => {
+              const val = e.target.value.trim();
+              if (val !== (selectedPerson.lineUserId ?? '')) updateSelected({ lineUserId: val });
+            }}
+            placeholder="U…（選填，用於推播通知）"
+          />
+        </label>
+
+        <div className="field">
+          <span className="field__label">性別</span>
+          <div className="chips">
+            <button
+              className="chip"
+              aria-pressed={selectedPerson.g === 'M' ? 'true' : 'false'}
+              onClick={() => setGender('M')}
+            >
+              弟兄
+            </button>
+            <button
+              className="chip"
+              aria-pressed={selectedPerson.g === 'F' ? 'true' : 'false'}
+              onClick={() => setGender('F')}
+            >
+              姊妹
+            </button>
+          </div>
+        </div>
+
+        <label className="field">
+          <span className="field__label">職務</span>
+          <select
+            className="field__input field__select"
+            value={selectedPerson.appt || DEFAULT_OFFICE}
+            onChange={(e) => updateSelected({ appt: e.target.value })}
+          >
+            {OFFICE_OPTIONS[selectedPerson.g ?? 'M'].map((office) => (
+              <option key={office} value={office}>{office}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="people-detail__section">
+        <div className="people-detail__section-head">
+          <span>資格</span>
+          <small>點選切換</small>
+        </div>
+        <div className="chips people-quals">
+          {QUAL_OPTIONS.map((qual) => (
+            <button
+              key={qual}
+              className="chip"
+              aria-pressed={selectedPerson.quals.includes(qual) ? 'true' : 'false'}
+              onClick={() => toggleQualification(qual)}
+            >
+              {qual}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="people-detail__section">
+        <div className="people-detail__section-head">
+          <span>近期指派</span>
+          <small>從本地節目資料自動整理</small>
+        </div>
+        <div className="timeline">
+          {recent.length ? (
+            <>
+              {(showAllRecent ? recent : recent.slice(0, RECENT_DEFAULT)).map((item, index) => (
+                <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
+                  <span className="timeline__date">{item.date}</span>
+                  <span className="timeline__main">
+                    <b>{item.label}</b>
+                    <small>{item.context}</small>
+                  </span>
+                </div>
+              ))}
+              {recent.length > RECENT_DEFAULT && (
+                <button
+                  className="timeline__expand"
+                  onClick={() => setShowAllRecent((v) => !v)}
+                >
+                  {showAllRecent
+                    ? '▲ 收起'
+                    : `＋ ${recent.length - RECENT_DEFAULT} 筆更多記錄`}
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="people-empty people-empty--compact">目前沒有過去的指派記錄。</div>
+          )}
+        </div>
+      </div>
+
+      <div className="people-detail__section">
+        <div className="people-detail__section-head">
+          <span>未來安排</span>
+          {upcoming.length > 0 && (
+            <button
+              className="btn btn--sm btn--ghost"
+              onClick={() => {
+                const ical = generateIcal(upcoming, selectedPerson.name, congCode);
+                downloadIcal(ical, `${selectedPerson.name}-schedule.ics`);
+              }}
+            >↓ iCal ({upcoming.length})</button>
+          )}
+        </div>
+        <div className="timeline">
+          {upcoming.length ? upcoming.map((item, index) => (
+            <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
+              <span className="timeline__date">{item.date}</span>
+              <span className="timeline__main">
+                <b>{item.label}</b>
+                <small>{item.context}</small>
+              </span>
+            </div>
+          )) : (
+            <div className="people-empty people-empty--compact">目前沒有排定的未來項目。</div>
+          )}
+        </div>
+      </div>
+    </>
+  ) : (
+    <div className="people-empty">
+      選擇一位人員來查看與編輯資料。
+    </div>
+  );
+
   return (
     <section>
       <div className="people-header">
@@ -294,8 +489,8 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
       <div className="people-layout">
         <div className="people-list">
           {filteredPeople.length > 0 ? filteredPeople.map((person) => (
+            <Fragment key={person.id}>
             <button
-              key={person.id}
               className={`person${selectedPerson?.id === person.id ? ' is-selected' : ''}`}
               onClick={() => setSelectedId(person.id)}
             >
@@ -318,6 +513,10 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
               </div>
               <span className="ov-caret">›</span>
             </button>
+            {isMobile && selectedPerson?.id === person.id && (
+              <aside className="people-detail people-detail--inline">{detailBody}</aside>
+            )}
+            </Fragment>
           )) : (
             <div className="people-empty">
               沒有符合條件的人員。
@@ -325,168 +524,9 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
           )}
         </div>
 
-        <aside className="people-detail">
-          {selectedPerson ? (
-            <>
-              <div className="people-detail__head">
-                <div>
-                  <div className="people-detail__eyebrow">個人檢視</div>
-                  <div className="people-detail__name">{selectedPerson.name || '未命名人員'}</div>
-                  <div className="people-detail__meta">
-                    {selectedPerson.g === 'M' ? '弟兄' : '姊妹'} · {selectedPerson.appt || '—'}
-                  </div>
-                </div>
-                {!String(selectedPerson.id).startsWith('new-') && (
-                  <button
-                    className="btn btn--danger btn--sm"
-                    onClick={() => deletePerson(selectedPerson)}
-                  >
-                    刪除
-                  </button>
-                )}
-              </div>
-
-              <div className="people-detail__form">
-                <label className="field">
-                  <span className="field__label">姓名</span>
-                  <input
-                    className="field__input"
-                    value={localName}
-                    onChange={(e) => setLocalName(e.target.value)}
-                    onBlur={() => {
-                      if (localName !== selectedPerson.name) updateSelected({ name: localName });
-                    }}
-                    placeholder="輸入中文姓名"
-                  />
-                </label>
-
-                <label className="field">
-                  <span className="field__label">LINE ID</span>
-                  <input
-                    className="field__input field__input--mono"
-                    defaultValue={selectedPerson.lineUserId ?? ''}
-                    key={selectedPerson.id}
-                    onBlur={(e) => {
-                      const val = e.target.value.trim();
-                      if (val !== (selectedPerson.lineUserId ?? '')) updateSelected({ lineUserId: val });
-                    }}
-                    placeholder="U…（選填，用於推播通知）"
-                  />
-                </label>
-
-                <div className="field">
-                  <span className="field__label">性別</span>
-                  <div className="chips">
-                    <button
-                      className="chip"
-                      aria-pressed={selectedPerson.g === 'M' ? 'true' : 'false'}
-                      onClick={() => setGender('M')}
-                    >
-                      弟兄
-                    </button>
-                    <button
-                      className="chip"
-                      aria-pressed={selectedPerson.g === 'F' ? 'true' : 'false'}
-                      onClick={() => setGender('F')}
-                    >
-                      姊妹
-                    </button>
-                  </div>
-                </div>
-
-                <label className="field">
-                  <span className="field__label">職務</span>
-                  <select
-                    className="field__input field__select"
-                    value={selectedPerson.appt || DEFAULT_OFFICE}
-                    onChange={(e) => updateSelected({ appt: e.target.value })}
-                  >
-                    {OFFICE_OPTIONS[selectedPerson.g ?? 'M'].map((office) => (
-                      <option key={office} value={office}>{office}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="people-detail__section">
-                <div className="people-detail__section-head">
-                  <span>資格</span>
-                  <small>點選切換</small>
-                </div>
-                <div className="chips people-quals">
-                  {QUAL_OPTIONS.map((qual) => (
-                    <button
-                      key={qual}
-                      className="chip"
-                      aria-pressed={selectedPerson.quals.includes(qual) ? 'true' : 'false'}
-                      onClick={() => toggleQualification(qual)}
-                    >
-                      {qual}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="people-detail__section">
-                <div className="people-detail__section-head">
-                  <span>近期指派</span>
-                  <small>從本地節目資料自動整理</small>
-                </div>
-                <div className="timeline">
-                  {recent.length ? (
-                    <>
-                      {(showAllRecent ? recent : recent.slice(0, RECENT_DEFAULT)).map((item, index) => (
-                        <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
-                          <span className="timeline__date">{item.date}</span>
-                          <span className="timeline__main">
-                            <b>{item.label}</b>
-                            <small>{item.context}</small>
-                          </span>
-                        </div>
-                      ))}
-                      {recent.length > RECENT_DEFAULT && (
-                        <button
-                          className="timeline__expand"
-                          onClick={() => setShowAllRecent((v) => !v)}
-                        >
-                          {showAllRecent
-                            ? '▲ 收起'
-                            : `＋ ${recent.length - RECENT_DEFAULT} 筆更多記錄`}
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <div className="people-empty people-empty--compact">目前沒有過去的指派記錄。</div>
-                  )}
-                </div>
-              </div>
-
-              <div className="people-detail__section">
-                <div className="people-detail__section-head">
-                  <span>未來安排</span>
-                  <small>從本地節目資料自動整理</small>
-                </div>
-                <div className="timeline">
-                  {upcoming.length ? upcoming.map((item, index) => (
-                    <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
-                      <span className="timeline__date">{item.date}</span>
-                      <span className="timeline__main">
-                        <b>{item.label}</b>
-                        <small>{item.context}</small>
-                      </span>
-                    </div>
-                  )) : (
-                    <div className="people-empty people-empty--compact">目前沒有排定的未來項目。</div>
-                  )}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="people-empty">
-              選擇一位人員來查看與編輯資料。
-            </div>
-          )}
-        </aside>
+        {!isMobile && (
+          <aside className="people-detail">{detailBody}</aside>
+        )}
       </div>
     </section>
   );

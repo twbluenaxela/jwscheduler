@@ -23,7 +23,11 @@ Touch-friendly web app replacing the Excel scheduling workflow for 新屋 (Xinwu
 ```
 app/
   page.js              — root component; auth gating + all shared state
-  layout.js            — AuthProvider wrapper, font loading, html/body
+  layout.js            — AuthProvider wrapper, font loading, html/body; PWA
+                         metadata (manifest, themeColor viewport, apple-web-app)
+                         + <PWARegister/> for service-worker registration
+  manifest.js          — PWA web app manifest (name, icons, standalone display,
+                         theme/background colour) — Next 16 app-router convention
   globals.css          — full design system (tokens, all component styles)
   login/
     page.js            — Firebase login UI (email/password + Google popup);
@@ -42,10 +46,16 @@ app/
     people/[id]/       — PATCH: update member, DELETE: remove member
     users/me/          — PATCH: update current user's displayName
     assignments/       — POST: upsert/delete a single midweek assignment by slotId
-    weekend-rows/      — POST: create a new WeekendRow (returns row with _id alias)
+    midweek-weeks/[id]/— PATCH: update week fields + all parts in one transaction
+                         (called on edit-mode exit); DELETE: remove week + cascade
+    weekend-rows/      — POST: create a new WeekendRow (date defaults to last row + 7 days)
     weekend-rows/[id]/ — PATCH: update one or more fields on a WeekendRow (speaker,
                          chair, wt, read, host, away, topic, no, cong, note, label,
                          date, type); DELETE: remove a WeekendRow
+    suggest/weekend-row/   — POST: suggest speaker/chair/wt/read for a new row
+                             (recency-scoring algorithm, no AI)
+    suggest/midweek-week/  — POST: suggest all empty slots in a week
+                             body: { weekId, assignments: {[slotId]:name} }
     meetings/publish/  — POST: diff current vs publishedSnapshot (future weeks only),
                          push LINE messages for changed assignments (midweek + weekend),
                          save new snapshot
@@ -64,27 +74,53 @@ app/
                          credentials from FIREBASE_SERVICE_ACCOUNT JSON blob
     auth-context.js    — AuthProvider + useAuth() hook + getToken() helper
     epubParser.js      — client-side EPUB parser; exports parseEpub(file) → week[]
-    midweekExport.js   — JPG/Excel/print export functions
+    midweekExport.js   — JPG/Excel/PDF/text export. `jpegImagesToPdfBlob()` builds
+                         a multi-page PDF entirely in-browser (baseline-JPEG embed via
+                         DCTDecode, A4 fit) — no print dialog / popup; `buildWeekText()`
+                         = plain-text week schedule for pasting into LINE; `triggerDownload()`
+                         = blob → download anchor; `exportWeeks{Jpeg,Pdf,Xlsx}` +
+                         `openWeeksPrintWindow` = multi-week (range) exports for ImportPage
+    suggest.js         — pure recency-scoring suggestion engine (no DB, no fetch);
+                         exports suggestWeekendRow(people, pastRows, existing) and
+                         suggestMidweekWeek(people, week, existingAssignments, pastHistory)
+    icalExport.js      — pure iCal (.ics) generator; exports generateIcal(assignments,
+                         personName, congCode) → RFC-5545 string and downloadIcal(str, filename)
   components/
     Sidebar.js         — desktop left nav (shows congregation name + scheduleStats vacancy card)
     TopBar.js          — mobile top bar
     TabBar.js          — mobile bottom tab bar (5 items: grid-template-columns: repeat(5, 1fr))
     MeetingsPage.js    — midweek/weekend tab switcher; both tabs share same toolbar
                          pattern (edit toggle, add row, 發布通知); export menu on midweek only
-    MidweekWeek.js     — single midweek week card (WhoSlot / PairSlot)
+                         (匯出 JPG / 複製圖片 / 複製文字 / 匯出 Excel / 下載 PDF — PDF
+                         downloads silently, no print popup); ✦ suggest button in midweek
+                         navstrip + weekend per-row; batch 接受全部/清除建議 toolbar
+                         buttons when ghost suggestions exist
+    MidweekWeek.js     — single midweek week card (WhoSlot / PairSlot); WhoSlot renders
+                         ghost pill when getSuggestion(slotId) returns a name
     WeekendView.js     — weekend schedule table/cards; filter chips (未來/本月/半年/全部)
                          + year selector (auto-shown when multiple years present);
                          slot IDs use r._id (DB row id) not array index;
                          editMode prop enables inline editing of all text fields + row
-                         type toggle (schedule/special/event/suspended) + delete button
+                         type toggle (schedule/special/event/suspended) + ✦ suggest + delete;
+                         NamePill renders ghost pill for unconfirmed suggestions
     OverviewPage.js    — overview list with sort (最近/最緊迫/最早), past-items toggle
                          (hidden by default), swipe/button dismiss with undo toast + reset
     PeoplePage.js      — congregation member list; 近期指派 shows 3 most-recent by default
                          with expand button for full history; detail panel is sticky +
-                         scrollable on desktop, static flow on mobile; delete button
-    ImportPage.js      — EPUB import + congregation schedule settings
+                         scrollable on desktop. On mobile (useIsMobile via matchMedia) the
+                         detail renders INLINE directly under the selected person's card,
+                         not at the page bottom. Writes are serialized through a promise
+                         chain and the optimistic local state is authoritative (server PATCH
+                         response is NOT applied — see "What NOT to do"); delete button;
+                         "↓ iCal (N)" export button in 未來安排 section
+    ImportPage.js      — EPUB import + congregation schedule settings; the 匯出與分享 cards
+                         are wired (JPG/Excel/PDF/列印) and scoped by a 範圍 selector
+                         (全部 / 本月 / 自訂 month-day range); needs `getAssign` prop so
+                         exports reflect current assignments
     SettingsPage.js    — ⚙ congregation info, invite link, members, schedule
-    AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed data)
+    AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed
+                         data); "✕ 留空此項" button clears a slot (leaves it unassigned)
+    PWARegister.js     — 'use client' component; registers /sw.js on window load
     Toast.js           — undo toast notification
 prisma/
   schema.prisma        — Prisma schema (Congregation, User, MidweekWeek, Part,
@@ -107,6 +143,10 @@ Dockerfile             — multi-stage build: deps → builder (prisma generate 
 fly.toml               — fly.io config: primary_region=ams, internal_port=3000,
                          NEXT_PUBLIC_* build args. NO release_command — `prisma
                          db push` timed out on Neon cold-start; run it manually
+public/
+  sw.js                — PWA service worker (network-first; never caches /api/);
+                         registered by components/PWARegister.js
+  jwschedulerlogo.png  — app icon (used by manifest + favicon)
 sample/
   mwb_CH_202609.epub   — sample EPUB for local dev/testing
 ```
@@ -283,14 +323,27 @@ Button variants: `.btn--primary`, `.btn--ghost`, `.btn--danger`, `.btn--sm`, `.b
 
 ---
 
-## Export (JPG / PDF / Excel)
+## Export (JPG / PDF / Excel / Text)
 
-JPG and PDF both use `html-to-image` to screenshot the live `article.card` DOM element (`cardRef` passed into `MidweekWeek`). This guarantees the export matches exactly what's on screen.
+**Meetings page (current week)** — JPG, copy and PDF screenshot the live `article.card`
+DOM element (`cardRef` passed into `MidweekWeek`) via `html-to-image`, so the export matches
+exactly what's on screen:
 
 - **JPG** — `toJpeg(cardRef.current, { quality: 0.95, pixelRatio: 2 })` → download
-- **Copy** — `toPng` → `ClipboardItem`
-- **PDF** — `toPng` → embedded in a print window → browser "Save as PDF"
+- **複製圖片** — `toPng` → `ClipboardItem`
+- **複製文字** — `buildWeekText(week, getAssign)` → `navigator.clipboard.writeText` (plain-text
+  schedule for manually pasting into a LINE group)
+- **下載 PDF** — `toJpeg` → `jpegDataUrlToImage` → `jpegImagesToPdfBlob([img])` → `triggerDownload`.
+  Built entirely client-side and downloaded directly — **no print dialog/popup** (browsers block
+  those). Do not reintroduce the `window.open(...).print()` flow.
 - **Excel** — custom `buildXlsxBuffer()` in `midweekExport.js` (JSZip)
+
+**Import/匯出 page (multi-week, range-scoped)** — the 匯出與分享 cards call `exportWeeksJpeg`
+(single → JPG, many → zip), `exportWeeksXlsx` (one workbook, weeks concatenated),
+`exportWeeksPdf` (one PDF page per week via `renderWeekToCanvas` → `jpegImagesToPdfBlob`), and
+`openWeeksPrintWindow`. These use `renderWeekToCanvas` (canvas, no DOM node needed) so they work
+off raw week data + `getAssign`. The 範圍 selector (全部/本月/自訂) filters `existingWeeks` by
+parsed Chinese date before exporting.
 
 ---
 
@@ -353,6 +406,8 @@ Year is inferred relative to today with a ±6-month window to handle year bounda
 - Do not use array index (`i`) for weekend slot IDs — always use `r._id` (DB row id) so `persistAssignment` can route to `PATCH /api/weekend-rows/[id]`
 - Do not add real congregation member names to `app/data/index.js` — all demo/seed data must use fictional names; real data lives only in the DB
 - Do not overwrite `displayName` in `/api/auth/sync` update block — only set it on `create`. The settings page (`PATCH /api/users/me`) is the authoritative way to change display names
+- Do not apply the `PATCH /api/people/[id]` response back into local `people` state in `PeoplePage`. Rapid edits (e.g. toggling several quals quickly) fire overlapping PATCHes; an out-of-order/stale response would clobber newer optimistic state, making quals appear to "deselect on their own". Writes are serialized through a promise chain (`writeChainRef`) and the optimistic state is authoritative
+- Do not bring back the `window.open(...).print()` popup for PDF export — browsers block it. PDF is generated client-side with `jpegImagesToPdfBlob` and downloaded directly
 
 ---
 
@@ -366,3 +421,6 @@ Year is inferred relative to today with a ±6-month window to handle year bounda
 | **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. No release command (Neon cold-start timed it out); `prisma db push` run manually. Admin SDK creds via `FIREBASE_SERVICE_ACCOUNT` secret. |
 | **Phase 3 — Notifications** | Done — LINE Messaging API integrated. Two-step registration (congregation name → person name) with multi-congregation safety. `LinePendingLink` table tracks mid-flow state. Webhook at `/api/line/webhook`; publish at `/api/meetings/publish` with future-only diff logic covering both midweek and weekend rows. User commands: `我的安排` (query), `說明` (help). Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. |
 | **Phase 3B — Weekend edit mode** | Done — weekend view has a full matching toolbar (edit toggle, ＋ 新增安排, ＋ 新增事項, 發布通知). Edit mode: inline inputs for all text fields, type toggle chips (正常/特別/暫停) for row colour coding (special=red schedule row, suspended=red event row), delete buttons. All changes persist to DB. |
+| **Phase 4 — Suggestions** | Done — recency-scoring algorithm in `app/lib/suggest.js` (no AI). Ghost pills (dashed blue border, italic) for unconfirmed suggestions. ✦ button in midweek navstrip fills all empty slots; ✦ button per weekend row fills speaker/chair/wt/read. 接受全部/清除建議 toolbar batch actions. Ghosts clear on edit-mode exit and week navigation. Part-ID bug fix (p.dbId not p.id). Weekend row default date = last row + 7 days. |
+| **Phase 5 — iCal Export** | Done — `app/lib/icalExport.js` generates RFC-5545 `.ics` (Taiwan UTC+8, stable UIDs, 1h45m events). "↓ iCal (N)" button in PeoplePage 未來安排 section downloads `{name}-schedule.ics` for import into Outlook/Google Calendar/Apple Calendar. |
+| **Phase 6 — PWA + UX polish** | Done — installable PWA (`app/manifest.js` + `public/sw.js` network-first worker + `PWARegister`, themeColor/apple-web-app meta in `layout.js`). Plus: clear/留空 button in AssignSheet; serialized people writes (quals no longer self-deselect); mobile people detail renders inline under the tapped card; mobile row dot+partnum no longer squished; silent client-side PDF + 複製文字 in meetings export menu; wired ImportPage 匯出 cards with 全部/本月/自訂 range. |

@@ -1,7 +1,13 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { parseEpub } from '../lib/epubParser';
+import {
+  exportWeeksJpeg,
+  exportWeeksPdf,
+  exportWeeksXlsx,
+  openWeeksPrintWindow,
+} from '../lib/midweekExport';
 
 const SECTION_LABELS = {
   treasures: { label: '上帝話語的寶藏', color: 'treasures' },
@@ -15,11 +21,20 @@ const CAT_LABELS = {
 };
 
 const EXPORT_CARDS = [
-  { ic: '▦', label: '分享圖片', sub: 'JPG · 貼到 LINE 群組' },
-  { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式' },
-  { ic: '▥', label: '匯出 PDF', sub: '列印用排版' },
-  { ic: '⎙', label: '列印', sub: '直接送印表機' },
+  { ic: '▦', label: '分享圖片', sub: 'JPG · 貼到 LINE 群組', action: 'jpg' },
+  { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
+  { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
+  { ic: '⎙', label: '列印', sub: '直接送印表機', action: 'print' },
 ];
+
+function weekDateKey(week) {
+  const m = String(week?.date ?? '').match(/(\d+)月\s*(\d+)日/);
+  return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0;
+}
+function weekMonth(week) {
+  const m = String(week?.date ?? '').match(/(\d+)月/);
+  return m ? parseInt(m[1]) : 0;
+}
 
 function WeekReviewCard({ week, idx }) {
   const [open, setOpen] = useState(idx === 0);
@@ -78,13 +93,52 @@ function removeException(settings, id) {
   return { ...settings, exceptions: settings.exceptions.filter(e => e.id !== id) };
 }
 
-export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySchedule, existingWeeks = [], congSettings = { dayOffset: 2, time: '19:30', exceptions: [] }, setCongSettings }) {
+export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySchedule, existingWeeks = [], getAssign, congSettings = { dayOffset: 2, time: '19:30', exceptions: [] }, setCongSettings }) {
   const [stage, setStage] = useState('upload'); // upload | parsing | review | done
   const [parsedWeeks, setParsedWeeks] = useState([]);
   const [error, setError] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Export range
+  const [range, setRange] = useState('all'); // all | month | custom
+  const [customFrom, setCustomFrom] = useState({ m: 1, d: 1 });
+  const [customTo, setCustomTo] = useState({ m: 12, d: 31 });
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState(null);
+
+  const selectedWeeks = useMemo(() => {
+    if (range === 'month') {
+      const mk = new Date().getMonth() + 1;
+      return existingWeeks.filter((w) => weekMonth(w) === mk);
+    }
+    if (range === 'custom') {
+      const from = customFrom.m * 100 + customFrom.d;
+      const to = customTo.m * 100 + customTo.d;
+      return existingWeeks.filter((w) => {
+        const k = weekDateKey(w);
+        return k >= from && k <= to;
+      });
+    }
+    return existingWeeks;
+  }, [range, existingWeeks, customFrom, customTo]);
+
+  const runExport = useCallback(async (action) => {
+    if (!selectedWeeks.length) { setExportError('所選範圍沒有可匯出的週次。'); return; }
+    setExportError(null);
+    setExporting(true);
+    try {
+      if (action === 'jpg') await exportWeeksJpeg(selectedWeeks, getAssign);
+      else if (action === 'xlsx') await exportWeeksXlsx(selectedWeeks, getAssign);
+      else if (action === 'pdf') exportWeeksPdf(selectedWeeks, getAssign);
+      else if (action === 'print') openWeeksPrintWindow(selectedWeeks, getAssign);
+    } catch (err) {
+      setExportError(err?.message || '匯出失敗');
+    } finally {
+      setExporting(false);
+    }
+  }, [selectedWeeks, getAssign]);
 
   const existingDates = new Set(existingWeeks.map((w) => w.date));
   const mergeStats = {
@@ -268,9 +322,48 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
             </div>
 
             <h3 className="imp-h" style={{ marginTop: 20 }}>匯出與分享</h3>
+            <div className="exp-range">
+              <div className="exp-range__row">
+                <span className="cong-settings__label">範圍</span>
+                <div className="chips" role="group">
+                  {[['all', '全部'], ['month', '本月'], ['custom', '自訂']].map(([k, label]) => (
+                    <button
+                      key={k}
+                      className="chip"
+                      aria-pressed={range === k ? 'true' : 'false'}
+                      onClick={() => setRange(k)}
+                    >{label}</button>
+                  ))}
+                </div>
+                <span className="exp-range__count">已選 {selectedWeeks.length} 週</span>
+              </div>
+              {range === 'custom' && (
+                <div className="cong-exc" style={{ marginTop: 8 }}>
+                  <span className="cong-exc__label">從</span>
+                  <input className="cong-exc__num" type="number" min="1" max="12" value={customFrom.m}
+                    onChange={(e) => setCustomFrom((s) => ({ ...s, m: +e.target.value }))} />
+                  <span className="cong-exc__label">月</span>
+                  <input className="cong-exc__num" type="number" min="1" max="31" value={customFrom.d}
+                    onChange={(e) => setCustomFrom((s) => ({ ...s, d: +e.target.value }))} />
+                  <span className="cong-exc__label">日 至</span>
+                  <input className="cong-exc__num" type="number" min="1" max="12" value={customTo.m}
+                    onChange={(e) => setCustomTo((s) => ({ ...s, m: +e.target.value }))} />
+                  <span className="cong-exc__label">月</span>
+                  <input className="cong-exc__num" type="number" min="1" max="31" value={customTo.d}
+                    onChange={(e) => setCustomTo((s) => ({ ...s, d: +e.target.value }))} />
+                  <span className="cong-exc__label">日</span>
+                </div>
+              )}
+            </div>
+            {exportError && <div className="imp-error" style={{ marginTop: 10 }}>{exportError}</div>}
             <div className="exp-grid">
-              {EXPORT_CARDS.map((c, i) => (
-                <button key={i} className="exp-card">
+              {EXPORT_CARDS.map((c) => (
+                <button
+                  key={c.action}
+                  className="exp-card"
+                  disabled={exporting || selectedWeeks.length === 0}
+                  onClick={() => runExport(c.action)}
+                >
                   <span className="exp-ic">{c.ic}</span>
                   <b>{c.label}</b>
                   <small>{c.sub}</small>

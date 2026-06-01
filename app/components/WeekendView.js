@@ -1,12 +1,23 @@
 'use client';
 import { useMemo, useRef, useState } from 'react';
 
-function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet }) {
+function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
   const name = getAssign(slotId, defaultName);
-  const isEmpty = !name;
+  const ghost = !name ? (getSuggestion?.(slotId) ?? null) : null;
+
+  if (ghost) {
+    return (
+      <span className="name-pill name-pill--ghost">
+        <span className="who__ghost-name">{ghost}</span>
+        <button className="who__ghost-btn" title="接受" onClick={() => onAccept?.(slotId, ghost)}>✓</button>
+        <button className="who__ghost-btn who__ghost-btn--clear" title="清除" onClick={() => onClear?.(slotId)}>✕</button>
+      </span>
+    );
+  }
+
   return (
     <span
-      className={`name-pill${isEmpty ? ' name-pill--empty' : ''}`}
+      className={`name-pill${!name ? ' name-pill--empty' : ''}`}
       data-cat={catKey}
       onClick={() => openSheet(slotId, catKey, ctxLabel, name)}
     >
@@ -48,7 +59,7 @@ function EditCell({ value, onCommit, placeholder = '—', mono = false }) {
   );
 }
 
-export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow }) {
+export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow, getSuggestion, onAccept, onClear, fetchWeekendSuggestions }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const thisYear = today.getFullYear();
@@ -76,6 +87,8 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
   }, [weekendRows]);
 
   const [selectedYear, setSelectedYear] = useState(() => thisYear);
+  const [loadingRow, setLoadingRow] = useState(null);
+  const ghostProps = { getSuggestion, onAccept, onClear };
 
   const isEventLike = (r) => r.type === 'event' || r.type === 'suspended';
 
@@ -158,6 +171,7 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
               <th>招待</th><th>外地演講安排</th>
               {editMode && <th></th>}
               {editMode && <th></th>}
+              {editMode && <th></th>}
             </tr>
           </thead>
           <tbody>
@@ -215,10 +229,10 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
                   <td className="td-cong">
                     {editMode ? <EditCell value={r.cong} onCommit={v => updateRow(r._id, 'cong', v)} placeholder="會眾" /> : r.cong}
                   </td>
-                  <td><NamePill slotId={`${key}_speaker`} defaultName={r.speaker} catKey="publictalk" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
-                  <td><NamePill slotId={`${key}_chair`}   defaultName={r.chair}   catKey="weekendchair" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
-                  <td><NamePill slotId={`${key}_wt`}      defaultName={r.wt}      catKey="wt"         ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
-                  <td><NamePill slotId={`${key}_read`}    defaultName={r.read}    catKey="wtread"     ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} /></td>
+                  <td><NamePill slotId={`${key}_speaker`} defaultName={r.speaker} catKey="publictalk" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></td>
+                  <td><NamePill slotId={`${key}_chair`}   defaultName={r.chair}   catKey="weekendchair" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></td>
+                  <td><NamePill slotId={`${key}_wt`}      defaultName={r.wt}      catKey="wt"         ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></td>
+                  <td><NamePill slotId={`${key}_read`}    defaultName={r.read}    catKey="wtread"     ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></td>
                   <td>
                     {editMode
                       ? <EditCell value={r.host} onCommit={v => updateRow(r._id, 'host', v)} placeholder="招待" />
@@ -237,6 +251,18 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
                           onClick={() => updateRow(r._id, 'type', cycleType(r))}
                           title="切換樣式"
                         >{typeLabel(r.type)}</button>
+                      </td>
+                      <td>
+                        <button
+                          className="we-suggest-btn"
+                          disabled={loadingRow === r._id}
+                          title="自動建議"
+                          onClick={async () => {
+                            setLoadingRow(r._id);
+                            await fetchWeekendSuggestions?.(r._id, { speaker: r.speaker, chair: r.chair, wt: r.wt, read: r.read });
+                            setLoadingRow(null);
+                          }}
+                        >{loadingRow === r._id ? '…' : '✦'}</button>
                       </td>
                       <td>
                         <button className="we-del-btn" onClick={() => deleteRow(r._id)} title="刪除">✕</button>
@@ -298,6 +324,17 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
                     onClick={() => updateRow(r._id, 'type', cycleType(r))}
                   >{typeLabel(r.type)}</button>
                 )}
+                {editMode && (
+                  <button
+                    className="we-suggest-btn"
+                    disabled={loadingRow === r._id}
+                    onClick={async () => {
+                      setLoadingRow(r._id);
+                      await fetchWeekendSuggestions?.(r._id, { speaker: r.speaker, chair: r.chair, wt: r.wt, read: r.read });
+                      setLoadingRow(null);
+                    }}
+                  >{loadingRow === r._id ? '…' : '✦'}</button>
+                )}
                 {editMode && <button className="we-del-btn" onClick={() => deleteRow(r._id)}>✕</button>}
               </div>
               {editMode
@@ -306,10 +343,10 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
               <dl className="wk-card__grid">
                 <dt>會眾</dt>
                 <dd>{editMode ? <EditCell value={r.cong} onCommit={v => updateRow(r._id, 'cong', v)} placeholder="會眾" /> : r.cong}</dd>
-                <dt>講者</dt><dd>{getAssign(`${key}_speaker`, r.speaker) || '—'}</dd>
-                <dt>主席</dt><dd>{getAssign(`${key}_chair`, r.chair) || '—'}</dd>
-                <dt>守望台</dt><dd>{getAssign(`${key}_wt`, r.wt) || '—'}</dd>
-                <dt>朗讀</dt><dd>{getAssign(`${key}_read`, r.read) || '—'}</dd>
+                <dt>講者</dt><dd><NamePill slotId={`${key}_speaker`} defaultName={r.speaker} catKey="publictalk" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></dd>
+                <dt>主席</dt><dd><NamePill slotId={`${key}_chair`} defaultName={r.chair} catKey="weekendchair" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></dd>
+                <dt>守望台</dt><dd><NamePill slotId={`${key}_wt`} defaultName={r.wt} catKey="wt" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></dd>
+                <dt>朗讀</dt><dd><NamePill slotId={`${key}_read`} defaultName={r.read} catKey="wtread" ctxLabel={`${r.date}（日）`} getAssign={getAssign} openSheet={openSheet} {...ghostProps} /></dd>
                 <dt>招待</dt>
                 <dd>{editMode
                   ? <EditCell value={r.host} onCommit={v => updateRow(r._id, 'host', v)} placeholder="招待" />

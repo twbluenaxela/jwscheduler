@@ -83,6 +83,10 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
     onPick(sheet.slotId, name, currentName);
   }
 
+  function clearAssign() {
+    onPick(sheet.slotId, '', currentName);
+  }
+
   return (
     <div
       className="sheet-backdrop open"
@@ -134,6 +138,10 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
           />
           <div className="sheet__spread-hint">低 = 較平均 · 高 = 更偏向久未擔任的人選</div>
         </div>
+
+        <button type="button" className="sheet__clear" onClick={clearAssign}>
+          ✕ 留空此項{currentName ? `（清除「${currentName}」）` : ''}
+        </button>
 
         <div className="sheet__list">
           {filtered.length === 0 ? (
