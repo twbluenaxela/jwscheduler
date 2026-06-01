@@ -1,10 +1,9 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   updateProfile,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase-client';
@@ -16,18 +15,6 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Complete any in-progress Google redirect sign-in and surface errors
-  useEffect(() => {
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result) setLoading(false); // success — onAuthStateChanged will redirect
-      })
-      .catch((err) => {
-        setError(friendlyError(err.code, err.message));
-        setLoading(false);
-      });
-  }, []);
 
   const handle = async (e) => {
     e.preventDefault();
@@ -47,13 +34,21 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogle = () => {
+  const handleGoogle = async () => {
     setError('');
     setLoading(true);
-    signInWithRedirect(auth, googleProvider).catch((err) => {
-      setError(friendlyError(err.code));
+    try {
+      // Popup is more reliable than redirect when authDomain (firebaseapp.com)
+      // differs from the app's origin (fly.dev) — redirect needs 3rd-party cookies.
+      await signInWithPopup(auth, googleProvider);
+      // success — onAuthStateChanged fires and the app redirects
+    } catch (err) {
+      // user closing the popup is not a real error worth showing
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        setError(friendlyError(err.code, err.message));
+      }
       setLoading(false);
-    });
+    }
   };
 
   return (

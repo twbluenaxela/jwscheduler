@@ -15,7 +15,6 @@ primary_region = 'ams'
   NEXT_PUBLIC_FIREBASE_APP_ID = "1:304748231430:web:69e26186c14ce2f19ebc87"
 
 [deploy]
-  release_command = 'npx prisma db push'
 
 [http_service]
   internal_port = 3000
