@@ -154,7 +154,7 @@ Per `meeting-scheduler-plan.md §3`: never auto-commit any import. EPUB, PDF, im
 
 A real EPUB is at `sample/mwb_CH_202609.epub` (2026 Sept–Oct issue, Traditional Chinese). Use it to verify any parser changes. Run the dev server and test via the Import page UI — the parser runs in the browser so server-side scripts will not catch DOM-dependent bugs.
 
-### Phase 2B+ backend shape (current)
+### Current backend shape
 
 ```
 parseEpub(file) → review UI → onImportWeeks(weeks)
@@ -165,11 +165,31 @@ onPick(slotId, name)
   → if slotId starts with "mw": POST /api/assignments (upsert/delete)
   → if slotId starts with "we{id}_": PATCH /api/weekend-rows/{id} (update field)
 
+addWeekendRow(type)
+  → POST /api/weekend-rows (create, returns DB row with _id alias)
+
+deleteWeekendRow(rowId)
+  → DELETE /api/weekend-rows/{rowId}
+
+persistWeekendField(rowId, field, value)
+  → PATCH /api/weekend-rows/{rowId} (called from edit mode for text fields + type toggle)
+
 GET /api/congregations/data (on mount)
   → returns { midweekWeeks, weekendRows, people, congregation }
   → all three set into React state; week auto-set via findCurrentWeekIndex
 ```
 
 **Still not persisted to DB:**
-- Inline week/part edits (titles, songs, times, dates) — state only
-- Delete week — no API yet
+- Inline midweek week/part edits (titles, songs, times, dates) — state only
+- Delete midweek week — no API yet
+
+### WeekendRow `type` values
+
+| type | Rendering |
+|---|---|
+| `schedule` | Normal white row (default) |
+| `special` | Red-tinted row — for special talks, circuit overseer visits |
+| `event` | Beige full-width banner — for conventions, special events (no speaker fields) |
+| `suspended` | Red full-width banner — for 本週聚會暫停, cancelled meetings |
+
+Type is toggled via a chip button in weekend edit mode. Persists to DB via `persistWeekendField`.

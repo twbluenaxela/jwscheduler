@@ -5,6 +5,26 @@ import db from '../../../lib/db';
 
 const ALLOWED_FIELDS = new Set(['speaker', 'chair', 'wt', 'read', 'host', 'away', 'topic', 'no', 'cong', 'note', 'label', 'date']);
 
+export async function DELETE(request, context) {
+  try {
+    const decoded = await verifyIdToken(request);
+    const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
+    if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
+
+    const params = await context.params;
+    const id = Number(params.id);
+    const existing = await db.weekendRow.findFirst({
+      where: { id, congregationId: user.congregationId },
+    });
+    if (!existing) return NextResponse.json({ error: '找不到週末排程' }, { status: 404 });
+
+    await db.weekendRow.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
 export async function PATCH(request, context) {
   try {
     const decoded = await verifyIdToken(request);

@@ -22,17 +22,29 @@ async function replyMessage(replyToken, text) {
 }
 
 function parseCnDate(dateStr) {
-  const m = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
-  if (!m) return null;
-  const now = new Date();
-  let year = now.getFullYear();
-  const mo = parseInt(m[1]);
-  if (mo < now.getMonth() + 1 - 6) year++;
-  else if (mo > now.getMonth() + 1 + 6) year--;
-  return new Date(year, mo - 1, parseInt(m[2]));
+  const text = String(dateStr ?? '');
+  const cn = text.match(/(\d+)月\s*(\d+)日/);
+  if (cn) {
+    const now = new Date();
+    let year = now.getFullYear();
+    const mo = parseInt(cn[1]);
+    if (mo < now.getMonth() + 1 - 6) year++;
+    else if (mo > now.getMonth() + 1 + 6) year--;
+    return new Date(year, mo - 1, parseInt(cn[2]));
+  }
+  const slash = text.match(/^(\d+)\/(\d+)$/);
+  if (slash) {
+    const now = new Date();
+    let year = now.getFullYear();
+    const mo = parseInt(slash[1]);
+    if (mo < now.getMonth() + 1 - 6) year++;
+    else if (mo > now.getMonth() + 1 + 6) year--;
+    return new Date(year, mo - 1, parseInt(slash[2]));
+  }
+  return null;
 }
 
-function collectAssignments(name, weeks) {
+function collectAssignments(name, weeks, weekendRows) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const items = [];
   for (const week of weeks) {
@@ -47,10 +59,41 @@ function collectAssignments(name, weeks) {
       if (aMap.get(`mw${week.id}_${part.partKey}_1`) === name) items.push({ date: week.date, role: `${part.title}（助手）` });
     }
   }
+  for (const row of weekendRows) {
+    if (row.type === 'event' || row.type === 'suspended') continue;
+    const d = parseCnDate(row.date);
+    if (!d || d < today) continue;
+    if (row.speaker === name) items.push({ date: row.date, role: '公眾演講' });
+    if (row.chair === name) items.push({ date: row.date, role: '主席' });
+    if (row.wt === name) items.push({ date: row.date, role: '守望台主持' });
+    if (row.read === name) items.push({ date: row.date, role: '朗讀' });
+    if (row.host === name) items.push({ date: row.date, role: '招待' });
+  }
+  items.sort((a, b) => (parseCnDate(a.date) ?? 0) - (parseCnDate(b.date) ?? 0));
   return items;
 }
 
-const QUERY_KEYWORDS = ['我的安排', '查詢', '安排', '節目', 'schedule', 'assignment'];
+const QUERY_KEYWORDS = ['我的安排', '查詢安排', '安排查詢', '節目查詢'];
+const HELP_KEYWORDS  = ['說明', '幫助', '指令', 'help', '?', '？'];
+const HELP_LINKED = `📋 可用指令：
+
+▸ 我的安排 — 查詢你目前所有未來排班
+▸ 說明 — 顯示此說明
+
+收到排班通知後如有疑問，請聯絡編排負責人。`;
+const HELP_UNLINKED = `📋 使用說明：
+
+尚未完成連結。請按照以下步驟：
+
+1️⃣ 傳送你所屬的會眾名稱
+   例如：新屋
+
+2️⃣ 再傳送你在排班表上的姓名
+   例如：王大明
+
+完成後即可收到排班通知，並可隨時傳送「我的安排」查詢。
+
+如有問題請聯絡編排負責人。`;
 
 // ── Step 1: Follow event ──────────────────────────────────────────────────────
 async function handleFollow(event) {
@@ -73,14 +116,23 @@ async function handleMessage(event) {
   });
 
   if (linked) {
+    const isHelp  = HELP_KEYWORDS.some((kw) => text === kw);
     const isQuery = QUERY_KEYWORDS.some((kw) => text.includes(kw));
-    if (isQuery) {
-      const weeks = await db.midweekWeek.findMany({
-        where: { congregationId: linked.congregationId },
-        orderBy: { id: 'asc' },
-        include: { parts: true, assignments: true },
-      });
-      const items = collectAssignments(linked.name, weeks);
+    if (isHelp) {
+      await replyMessage(event.replyToken, HELP_LINKED);
+    } else if (isQuery) {
+      const [weeks, weekendRows] = await Promise.all([
+        db.midweekWeek.findMany({
+          where: { congregationId: linked.congregationId },
+          orderBy: { id: 'asc' },
+          include: { parts: true, assignments: true },
+        }),
+        db.weekendRow.findMany({
+          where: { congregationId: linked.congregationId },
+          orderBy: { sortOrder: 'asc' },
+        }),
+      ]);
+      const items = collectAssignments(linked.name, weeks, weekendRows);
       if (!items.length) {
         await replyMessage(event.replyToken, `${linked.name}，目前你沒有排定的安排。`);
       } else {
@@ -88,7 +140,7 @@ async function handleMessage(event) {
         await replyMessage(event.replyToken, `${linked.name}，你目前的安排（共 ${items.length} 項）：\n\n${list}`);
       }
     } else {
-      await replyMessage(event.replyToken, `✓ 你已連結為「${linked.name}」（${linked.congregation.name}）。\n\n傳送「我的安排」可查詢你目前的排班。`);
+      await replyMessage(event.replyToken, `✓ 你已連結為「${linked.name}」（${linked.congregation.name}）。\n\n傳送「我的安排」查詢排班，或傳送「說明」查看可用指令。`);
     }
     return;
   }
@@ -111,6 +163,12 @@ async function handleMessage(event) {
       db.linePendingLink.delete({ where: { lineUserId: userId } }),
     ]);
     await replyMessage(event.replyToken, `✓ 連結成功！${person.name}（${person.congregation.name}），你將收到後續的排班通知。\n\n傳送「我的安排」可隨時查詢你的排班。`);
+    return;
+  }
+
+  // ── Help for unlinked users ────────────────────────────────────────────────
+  if (HELP_KEYWORDS.some((kw) => text === kw)) {
+    await replyMessage(event.replyToken, HELP_UNLINKED);
     return;
   }
 

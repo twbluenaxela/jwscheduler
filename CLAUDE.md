@@ -42,12 +42,15 @@ app/
     people/[id]/       — PATCH: update member, DELETE: remove member
     users/me/          — PATCH: update current user's displayName
     assignments/       — POST: upsert/delete a single midweek assignment by slotId
-    weekend-rows/[id]/ — PATCH: update a single field on a WeekendRow (speaker,
-                         chair, wt, read, host, away, topic, no, cong, note, label, date)
+    weekend-rows/      — POST: create a new WeekendRow (returns row with _id alias)
+    weekend-rows/[id]/ — PATCH: update one or more fields on a WeekendRow (speaker,
+                         chair, wt, read, host, away, topic, no, cong, note, label,
+                         date, type); DELETE: remove a WeekendRow
     meetings/publish/  — POST: diff current vs publishedSnapshot (future weeks only),
-                         push LINE messages for changed assignments, save new snapshot
+                         push LINE messages for changed assignments (midweek + weekend),
+                         save new snapshot
     line/webhook/      — POST: LINE Messaging API webhook; two-step registration flow
-                         (congregation name → person name) + "查詢安排" query
+                         (congregation name → person name) + user commands (see below)
   data/
     index.js           — seed/demo data: midweekWeeks, weekendData, peopleData,
                          overviewData, POOL, CATS
@@ -66,14 +69,19 @@ app/
     Sidebar.js         — desktop left nav (shows congregation name + scheduleStats vacancy card)
     TopBar.js          — mobile top bar
     TabBar.js          — mobile bottom tab bar (5 items: grid-template-columns: repeat(5, 1fr))
-    MeetingsPage.js    — midweek/weekend tab switcher + export menu + 發布通知 button
+    MeetingsPage.js    — midweek/weekend tab switcher; both tabs share same toolbar
+                         pattern (edit toggle, add row, 發布通知); export menu on midweek only
     MidweekWeek.js     — single midweek week card (WhoSlot / PairSlot)
     WeekendView.js     — weekend schedule table/cards; filter chips (未來/本月/半年/全部)
                          + year selector (auto-shown when multiple years present);
-                         slot IDs use r._id (DB row id) not array index
-    OverviewPage.js    — month overview list
-    PeoplePage.js      — congregation member list; 近期指派 + 未來安排 both auto-derived
-                         from loaded week data (past/future split by today); delete button
+                         slot IDs use r._id (DB row id) not array index;
+                         editMode prop enables inline editing of all text fields + row
+                         type toggle (schedule/special/event/suspended) + delete button
+    OverviewPage.js    — overview list with sort (最近/最緊迫/最早), past-items toggle
+                         (hidden by default), swipe/button dismiss with undo toast + reset
+    PeoplePage.js      — congregation member list; 近期指派 shows 3 most-recent by default
+                         with expand button for full history; detail panel is sticky +
+                         scrollable on desktop, static flow on mobile; delete button
     ImportPage.js      — EPUB import + congregation schedule settings
     SettingsPage.js    — ⚙ congregation info, invite link, members, schedule
     AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed data)
@@ -284,10 +292,28 @@ Env vars required: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. Disable a
 
 Name lookup is always scoped to the selected congregation — no cross-congregation collision. `LinePendingLink` is deleted on successful link.
 
+### User commands (after linking)
+
+| Message | Action |
+|---|---|
+| `我的安排` / `查詢安排` / `安排查詢` / `節目查詢` | Returns all upcoming assignments (midweek + weekend) sorted by date |
+| `說明` / `幫助` / `指令` / `help` / `?` / `？` | Shows command list |
+| Anything else | Reminds user they are linked and shows available commands |
+
+Unlinked users who send `說明`/`help` etc. receive registration instructions instead of the linked help text.
+
+### Date parsing in webhook and publish
+
+Both `line/webhook` and `meetings/publish` use the same `parseCnDate()` that handles:
+- Chinese format: `"6月 3日"` 
+- Slash format: `"8/9"` (used by weekend rows)
+
+Year is inferred relative to today with a ±6-month window to handle year boundaries.
+
 ### Publish diff logic
 
 `POST /api/meetings/publish` (admin only):
-- `collectAssignments(name, weeks)` — only includes weeks whose date ≥ today
+- `collectAssignments(name, weeks, weekendRows)` — includes both midweek and weekend rows, only dates ≥ today
 - Compares `current` vs `prevSnapshot[name]` filtered to future dates only (prevents "false cancellation" notifications when a past meeting date rolls over between two publishes)
 - First publish (`snapshot = null`): sends full upcoming list
 - Subsequent: sends only ✚ added / ✖ removed items; skips if no change
@@ -322,6 +348,7 @@ Name lookup is always scoped to the selected congregation — no cross-congregat
 |---|---|
 | **Phase 1 — Frontend UI** | Done — full design system, all views, AssignSheet, EPUB import, week picker, export (JPG/PDF/Excel) |
 | **Phase 2 — Auth + Multi-tenancy** | Done — Firebase auth, congregation model, invite links, ⚙ settings page, Prisma 6 + Neon Postgres schema live |
-| **Phase 2B — Data persistence** | Done — midweek assignments persist via `POST /api/assignments`; weekend row field edits persist via `PATCH /api/weekend-rows/[id]`; both load on mount. Remaining: save inline week/part edits (titles, songs, times), delete week API |
+| **Phase 2B — Data persistence** | Done — midweek assignments persist via `POST /api/assignments`; week/part edits persist via `PATCH /api/midweek-weeks/[id]` (saves week fields + all parts in one transaction when edit mode is toggled off); delete week via `DELETE /api/midweek-weeks/[id]` (admin only); weekend rows: create via `POST /api/weekend-rows`, field edits via `PATCH /api/weekend-rows/[id]`, delete via `DELETE /api/weekend-rows/[id]`; all load on mount |
 | **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. No release command (Neon cold-start timed it out); `prisma db push` run manually. Admin SDK creds via `FIREBASE_SERVICE_ACCOUNT` secret. |
-| **Phase 3 — Notifications** | Done — LINE Messaging API integrated. Two-step registration (congregation name → person name) with multi-congregation safety. `LinePendingLink` table tracks mid-flow state. Webhook at `/api/line/webhook`; publish at `/api/meetings/publish` with future-only diff logic. Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. |
+| **Phase 3 — Notifications** | Done — LINE Messaging API integrated. Two-step registration (congregation name → person name) with multi-congregation safety. `LinePendingLink` table tracks mid-flow state. Webhook at `/api/line/webhook`; publish at `/api/meetings/publish` with future-only diff logic covering both midweek and weekend rows. User commands: `我的安排` (query), `說明` (help). Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. |
+| **Phase 3B — Weekend edit mode** | Done — weekend view has a full matching toolbar (edit toggle, ＋ 新增安排, ＋ 新增事項, 發布通知). Edit mode: inline inputs for all text fields, type toggle chips (正常/特別/暫停) for row colour coding (special=red schedule row, suspended=red event row), delete buttons. All changes persist to DB. |

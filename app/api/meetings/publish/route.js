@@ -4,19 +4,32 @@ import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 
 function parseCnDate(dateStr) {
-  const m = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
-  if (!m) return null;
-  const now = new Date();
-  let year = now.getFullYear();
-  const mo = parseInt(m[1]);
-  if (mo < now.getMonth() + 1 - 6) year++;
-  else if (mo > now.getMonth() + 1 + 6) year--;
-  return new Date(year, mo - 1, parseInt(m[2]));
+  const text = String(dateStr ?? '');
+  const cn = text.match(/(\d+)月\s*(\d+)日/);
+  if (cn) {
+    const now = new Date();
+    let year = now.getFullYear();
+    const mo = parseInt(cn[1]);
+    if (mo < now.getMonth() + 1 - 6) year++;
+    else if (mo > now.getMonth() + 1 + 6) year--;
+    return new Date(year, mo - 1, parseInt(cn[2]));
+  }
+  const slash = text.match(/^(\d+)\/(\d+)$/);
+  if (slash) {
+    const now = new Date();
+    let year = now.getFullYear();
+    const mo = parseInt(slash[1]);
+    if (mo < now.getMonth() + 1 - 6) year++;
+    else if (mo > now.getMonth() + 1 + 6) year--;
+    return new Date(year, mo - 1, parseInt(slash[2]));
+  }
+  return null;
 }
 
-function collectAssignments(name, weeks) {
+function collectAssignments(name, weeks, weekendRows) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const items = [];
+
   for (const week of weeks) {
     const d = parseCnDate(week.date);
     if (!d || d < today) continue;
@@ -29,6 +42,19 @@ function collectAssignments(name, weeks) {
       if (aMap.get(`mw${week.id}_${part.partKey}_1`) === name) items.push({ date: week.date, role: `${part.title}（助手）` });
     }
   }
+
+  for (const row of weekendRows) {
+    if (row.type === 'event') continue;
+    const d = parseCnDate(row.date);
+    if (!d || d < today) continue;
+    if (row.speaker === name) items.push({ date: row.date, role: '公眾演講' });
+    if (row.chair === name) items.push({ date: row.date, role: '主席' });
+    if (row.wt === name) items.push({ date: row.date, role: '守望台主持' });
+    if (row.read === name) items.push({ date: row.date, role: '朗讀' });
+    if (row.host === name) items.push({ date: row.date, role: '招待' });
+  }
+
+  items.sort((a, b) => (parseCnDate(a.date) ?? 0) - (parseCnDate(b.date) ?? 0));
   return items;
 }
 
@@ -95,12 +121,16 @@ export async function POST(request) {
 
     const congId = user.congregationId;
 
-    const [congregation, weeks, people] = await Promise.all([
+    const [congregation, weeks, weekendRows, people] = await Promise.all([
       db.congregation.findUnique({ where: { id: congId }, select: { publishedSnapshot: true } }),
       db.midweekWeek.findMany({
         where: { congregationId: congId },
         orderBy: { id: 'asc' },
         include: { parts: true, assignments: true },
+      }),
+      db.weekendRow.findMany({
+        where: { congregationId: congId },
+        orderBy: { sortOrder: 'asc' },
       }),
       db.person.findMany({
         where: { congregationId: congId, lineUserId: { not: null }, status: 'active' },
@@ -113,7 +143,7 @@ export async function POST(request) {
     const errors = [];
 
     for (const person of people) {
-      const current = collectAssignments(person.name, weeks);
+      const current = collectAssignments(person.name, weeks, weekendRows);
       newSnapshot[person.name] = current;
       const previous = prevSnapshot ? (prevSnapshot[person.name] ?? []) : null;
       const text = buildMessage(person.name, current, previous);

@@ -263,16 +263,105 @@ export default function App() {
     )));
   }, []);
 
-  const addWeekendRow = useCallback((type = 'schedule') => {
-    const id = nextWeekendId.current++;
-    const row = type === 'event'
-      ? { _id: id, date: '', type: 'event', label: '', note: '' }
-      : { _id: id, date: '', no: '', topic: '', cong: '', speaker: '', chair: '', wt: '', read: '', host: '', away: '' };
-    setWeekendRows(prev => [...prev, row]);
+  const saveMidweekWeek = useCallback(async (weekObj) => {
+    if (!weekObj?.id) return;
+    try {
+      const token = await getToken();
+      const allParts = [
+        ...(weekObj.treasures ?? []),
+        ...(weekObj.ministry ?? []),
+        ...(weekObj.living ?? []),
+      ];
+      await fetch(`/api/midweek-weeks/${weekObj.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: weekObj.date,
+          dateLabel: weekObj.dateLabel,
+          weekdayPill: weekObj.weekdayPill,
+          reading: weekObj.reading,
+          openSong: weekObj.openSong,
+          midSong: weekObj.midSong,
+          closeSong: weekObj.closeSong,
+          openIntroTime: weekObj.openIntroTime,
+          midSongTime: weekObj.midSongTime,
+          closingTime: weekObj.closingTime,
+          closingDur: weekObj.closingDur,
+          closeSongTime: weekObj.closeSongTime,
+          parts: allParts.map((p) => ({ id: p.id, title: p.title, dur: p.dur, time: p.time })),
+        }),
+      });
+    } catch (err) {
+      setToast({ msg: `儲存失敗：${err.message}` });
+    }
   }, []);
 
-  const deleteWeekendRow = useCallback((rowId) => {
+  const deleteMidweekWeek = useCallback(async (weekId) => {
+    const idx = midweekWeeks.findIndex((w) => w.id === weekId);
+    setMidweekWeeks((prev) => prev.filter((w) => w.id !== weekId));
+    setWeek((prev) => Math.max(0, prev > idx ? prev - 1 : prev));
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/midweek-weeks/${weekId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+    } catch (err) {
+      setToast({ msg: `刪除失敗：${err.message}` });
+    }
+  }, [midweekWeeks]);
+
+  const addWeekendRow = useCallback(async (type = 'schedule') => {
+    const tempId = `temp-${nextWeekendId.current++}`;
+    const optimistic = type === 'event'
+      ? { _id: tempId, date: '', type: 'event', label: '', note: '' }
+      : { _id: tempId, date: '', no: '', topic: '', cong: '', speaker: '', chair: '', wt: '', read: '', host: '', away: '' };
+    setWeekendRows(prev => [...prev, optimistic]);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/weekend-rows', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setWeekendRows(prev => prev.map(r => r._id === tempId ? { ...data.row, _id: data.row.id } : r));
+    } catch (err) {
+      setWeekendRows(prev => prev.filter(r => r._id !== tempId));
+      setToast({ msg: `新增失敗：${err.message}` });
+    }
+  }, []);
+
+  const deleteWeekendRow = useCallback(async (rowId) => {
     setWeekendRows(prev => prev.filter(r => r._id !== rowId));
+    if (String(rowId).startsWith('temp-')) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/weekend-rows/${rowId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+    } catch (err) {
+      setToast({ msg: `刪除失敗：${err.message}` });
+    }
+  }, []);
+
+  const persistWeekendField = useCallback(async (rowId, field, value) => {
+    if (String(rowId).startsWith('temp-')) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/weekend-rows/${rowId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+    } catch (err) {
+      setToast({ msg: `儲存失敗：${err.message}` });
+    }
   }, []);
 
   const updateWeekendRow = useCallback((rowId, field, value) => {
@@ -340,8 +429,8 @@ export default function App() {
     });
   }, []);
 
-  const sharedProps = { getAssign, openSheet, updateMidweekWeek };
-  const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow };
+  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek };
+  const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField };
 
   const scheduleStats = (() => {
     if (!midweekWeeks.length) return null;

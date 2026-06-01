@@ -169,7 +169,9 @@ export default function MeetingsPage({
   view, setView, week, setWeek,
   editMode, setEditMode, exportOpen, setExportOpen,
   weekendFilter, setWeekendFilter, weekendRows,
-  getAssign, openSheet, updateMidweekWeek, setPage,
+  weekendEditMode, setWeekendEditMode,
+  addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField,
+  getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, setPage,
 }) {
   const menuRef = useRef(null);
   const captureRef = useRef(null);
@@ -229,7 +231,10 @@ export default function MeetingsPage({
             <div className="toolbar__spacer" />
             <button
               className={`btn${editMode ? ' btn--primary' : ''}`}
-              onClick={() => setEditMode(e => !e)}
+              onClick={() => {
+                if (editMode) saveMidweekWeek(midweekWeeks[week]);
+                setEditMode(e => !e);
+              }}
             >
               <span className="pen">{editMode ? '✓' : '✎'}</span>
               <span>{editMode ? '完成' : '編輯'}</span>
@@ -278,6 +283,19 @@ export default function MeetingsPage({
                 <button className="iconbtn" aria-label="上一週" onClick={prev}>‹</button>
                 <WeekPicker weeks={midweekWeeks} currentWeek={week} onSelect={setWeek} />
                 <button className="iconbtn" aria-label="下一週" onClick={next}>›</button>
+                {editMode && (
+                  <button
+                    className="iconbtn iconbtn--danger"
+                    aria-label="刪除此週"
+                    title="刪除此週"
+                    onClick={async () => {
+                      const w = midweekWeeks[week];
+                      if (!window.confirm(`確定要刪除「${w.dateLabel || w.date}」？`)) return;
+                      setEditMode(false);
+                      await deleteMidweekWeek(w.id);
+                    }}
+                  >−</button>
+                )}
               </div>
               <MidweekWeek
                 week={midweekWeeks[week]}
@@ -293,18 +311,54 @@ export default function MeetingsPage({
       )}
 
       {view === 'weekend' && (
-        <>
+        <div className="mw-container">
           <div className="toolbar">
             {tabs}
+            <div className="toolbar__spacer" />
+            <button
+              className={`btn${weekendEditMode ? ' btn--primary' : ''}`}
+              onClick={() => setWeekendEditMode(e => !e)}
+            >
+              <span className="pen">{weekendEditMode ? '✓' : '✎'}</span>
+              <span>{weekendEditMode ? '完成' : '編輯'}</span>
+            </button>
+            {weekendEditMode && (
+              <>
+                <button className="btn" onClick={() => addWeekendRow('schedule')}>＋ 新增安排</button>
+                <button className="btn" onClick={() => addWeekendRow('event')}>＋ 新增事項</button>
+              </>
+            )}
+            <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
+              {publishing ? '發送中…' : '發布通知'}
+            </button>
           </div>
+          {publishResult && (
+            <div className={`publish-banner${publishResult.error || publishResult.failed > 0 ? ' publish-banner--err' : ' publish-banner--ok'}`}>
+              {publishResult.error
+                ? `發送失敗：${publishResult.error}`
+                : `已發送 ${publishResult.sent} / ${publishResult.total} 人${publishResult.failed > 0 ? `，${publishResult.failed} 人失敗` : ''}`}
+            </div>
+          )}
+          {weekendEditMode && (
+            <div className="edit-banner">
+              <span className="pen">✎</span>
+              編輯模式 — 可直接修改日期、主題、會眾等欄位，並新增或刪除列。
+            </div>
+          )}
           <WeekendView
             filter={weekendFilter}
             setFilter={setWeekendFilter}
             weekendRows={weekendRows}
             getAssign={getAssign}
             openSheet={openSheet}
+            editMode={weekendEditMode}
+            updateRow={(rowId, field, value) => {
+              updateWeekendRow(rowId, field, value);
+              persistWeekendField(rowId, field, value);
+            }}
+            deleteRow={deleteWeekendRow}
           />
-        </>
+        </div>
       )}
     </section>
   );
