@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth } from './firebase-client';
 
 const AuthContext = createContext(null);
@@ -11,6 +11,10 @@ export function AuthProvider({ children }) {
   const [dbUser, setDbUser] = useState(null);
 
   useEffect(() => {
+    // Consume any pending redirect result (Google sign-in); errors are surfaced
+    // via onAuthStateChanged not firing — nothing to do here on success.
+    getRedirectResult(auth).catch(() => {});
+
     return onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (!fbUser) { setDbUser(null); return; }

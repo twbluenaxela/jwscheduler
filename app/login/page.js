@@ -3,7 +3,7 @@ import { useState } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
   updateProfile,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase-client';
@@ -34,16 +34,13 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogle = async () => {
+  const handleGoogle = () => {
     setError('');
     setLoading(true);
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    signInWithRedirect(auth, googleProvider).catch((err) => {
       setError(friendlyError(err.code));
-    } finally {
       setLoading(false);
-    }
+    });
   };
 
   return (
