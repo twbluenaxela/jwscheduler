@@ -39,7 +39,9 @@ app/
                          overwrite displayName on update — only sets it on create)
     congregations/     — POST: create congregation (caller becomes ADMIN) — SYSADMIN only now
     congregations/list/— GET: {id,name,code}[] for the onboarding dropdown (logged-in)
-    congregations/join/— POST: { congregationId } (dropdown → VIEWER) or { inviteToken } (legacy → VIEWER)
+    congregations/join/— POST: { code } (enter congregation code → VIEWER) or { congregationId }
+                         (dropdown) or { inviteToken } (legacy). 409 if already in a congregation
+                         (congregation is set once; only SYSADMIN can move a user)
     congregations/settings/ — GET/PATCH: congregation settings (canManageCongregation = ADMIN/SYSADMIN)
     congregations/members/ — PATCH: set a member's role (ADMIN/VIEWER; not self) — ADMIN/SYSADMIN
     congregations/data/— GET: load all congregation data (weeks, people, weekend rows)
@@ -244,10 +246,14 @@ via `scripts/set-roles.mjs`, which also sets the first SYSADMIN by email.)
   congregation. A congregation-less SYSADMIN is redirected from `/` to `/admin`; otherwise a
   系統管理 nav link appears.
 
-**Joining:** new users pick a congregation from a dropdown on the onboarding screen
-(`GET /api/congregations/list` → `POST /api/congregations/join { congregationId }`) and join as
-read-only VIEWER. Only SYSADMIN creates congregations (the old self-serve `POST /api/congregations`
-is now SYSADMIN-only). Legacy `/join/{token}` links still work but also grant VIEWER.
+**Joining:** a logged-in user with no congregation (e.g. after Google sign-in — no separate
+register step) lands on onboarding and **enters the congregation code** (or picks from the
+`GET /api/congregations/list` dropdown) → `POST /api/congregations/join { code }` → joins as
+read-only VIEWER. **Congregation is set once** — the join route 409s if already joined, so an admin
+can't switch to peek at another congregation; only SYSADMIN moves a user (`admin/users/[id]`).
+Only SYSADMIN creates congregations. Web join + the LINE webhook registration both look congregations
+up in the same `congregation` table, so adding one in `/admin` reflects everywhere. Settings shows
+the **code** to share (the old invite-link cards were removed). Legacy `/join/{token}` still grants VIEWER.
 
 **All data API routes are congregation-scoped** — every route verifies `user.congregationId` from the Firebase token and constrains all DB queries to that congregation. The LINE webhook is the only unauthenticated route; it scopes name lookups to the congregation chosen during the two-step registration flow.
 

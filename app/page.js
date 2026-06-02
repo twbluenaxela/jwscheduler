@@ -181,6 +181,13 @@ export default function App() {
     if (!canEdit && page === 'import') setPage('meetings');
   }, [canEdit, page]);
 
+  // Auth-driven navigation — must run in an effect, never during render.
+  useEffect(() => {
+    if (firebaseUser === undefined || dbSyncing) return;
+    if (!firebaseUser) { router.replace('/login'); return; }
+    if (dbUser && !dbUser.congregationId && isSysadmin) router.replace('/admin');
+  }, [firebaseUser, dbSyncing, dbUser, isSysadmin, router]);
+
   useEffect(() => {
     localStorage.setItem('jwscheduler_congSettings', JSON.stringify(congSettings));
   }, [congSettings]);
@@ -578,8 +585,7 @@ export default function App() {
     return <div className="login-shell"><div className="login-card" style={{alignItems:'center'}}><div className="spin" style={{fontSize:28}}>⟳</div><div className="login-brand__sub">載入中…</div></div></div>;
   }
   if (!firebaseUser) {
-    if (typeof window !== 'undefined') router.replace('/login');
-    return null;
+    return null; // redirect to /login handled in effect
   }
   if (syncError) {
     return (
@@ -593,10 +599,7 @@ export default function App() {
     );
   }
   if (!dbUser?.congregationId) {
-    if (isSysadmin) {
-      if (typeof window !== 'undefined') router.replace('/admin');
-      return null;
-    }
+    if (isSysadmin) return null; // redirect to /admin handled in effect
     return <OnboardingScreen />;
   }
 
