@@ -21,6 +21,7 @@ function ChangesPanel() {
       const token = await getToken();
       const res = await fetch('/api/changelog', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
+      console.log("Changelog data from")
       if (!res.ok) throw new Error(data.error || '無法載入變更記錄');
       setEntries(data.entries);
     } catch (err) {
@@ -32,13 +33,65 @@ function ChangesPanel() {
 
   useEffect(() => { load(); }, []);
 
+  const handleCopyText = async () => {
+  if (!entries || entries.length === 0) return;
+
+  // Format the logs into plain text
+  const textToCopy = entries.map((e) => {
+    const time = formatChangeTime(e.createdAt);
+    const actionText = e.action === 'clear' 
+      ? `[清除] ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`
+      : `${e.name} → ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`;
+    
+    return `${time} | ${actionText} | 操作者: ${e.actorName}`;
+  }).join('\n');
+
+  try {
+    await navigator.clipboard.writeText(textToCopy);
+    alert('已複製到剪貼簿！'); // Success alert
+  } catch (err) {
+    console.error('Failed to copy text', err);
+    alert('複製失敗，請手動複製。');
+  }
+};
+// --- 新增的清除功能 (Clear Logs) ---
+const handleClearLogs = async () => {
+  if (!confirm('確定要清除所有變更紀錄嗎？')) return;
+  // 1. Clears them from the screen immediately
+  setEntries([]);
+
+};
+
   return (
     <div className="cl-wrap">
       <div className="cl-head">
         <span className="cl-head__title">最近的指派變更</span>
-        <button className="ov-reset-btn" onClick={load} disabled={loading}>
-          {loading ? '載入中…' : '↻ 重新整理'}
-        </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    
+                    {/* Only show Copy & Clear if there are actually entries to copy/clear */}
+                    {entries && entries.length > 0 && (
+                      <>
+                        <button className="ov-reset-btn" onClick={handleCopyText} disabled={loading}>
+                          📋 複製文字
+                        </button>
+                        
+                        <button 
+                          className="ov-reset-btn" 
+                          onClick={handleClearLogs} 
+                          disabled={loading}
+                          style={{ color: '#d32f2f', borderColor: '#ffcdd2', backgroundColor: '#ffebee' }}
+                        >
+                          🗑️ 清除
+                        </button>
+                      </>
+                    )}
+
+                    {/* Your original Refresh button */}
+                    <button className="ov-reset-btn" onClick={load} disabled={loading}>
+                      {loading ? '載入中…' : '↻ 重新整理'}
+                    </button>
+                    
+                  </div>
       </div>
 
       {error && <div className="imp-error">{error}</div>}
