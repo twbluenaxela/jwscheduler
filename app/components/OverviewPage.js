@@ -284,8 +284,10 @@ function OvToast({ toast, onHide }) {
   );
 }
 
-export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false }) {
+export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false, isAdmin = false }) {
   const [tab, setTab] = useState('schedule'); // 'schedule' | 'changes'
+  // 最近變更 is admin-only (matches /api/changelog gate)
+  const activeTab = tab === 'changes' && !isAdmin ? 'schedule' : tab;
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('upcoming');
   const [showPast, setShowPast] = useState(false);
@@ -345,14 +347,16 @@ export default function OverviewPage({ midweekWeeks = [], weekendRows = [], load
       <div className="toolbar">
         <div className="tabs" role="tablist">
           <button className="tab" role="tab"
-            aria-selected={tab === 'schedule' ? 'true' : 'false'}
+            aria-selected={activeTab === 'schedule' ? 'true' : 'false'}
             onClick={() => setTab('schedule')}>安排</button>
-          <button className="tab" role="tab"
-            aria-selected={tab === 'changes' ? 'true' : 'false'}
-            onClick={() => setTab('changes')}>最近變更</button>
+          {isAdmin && (
+            <button className="tab" role="tab"
+              aria-selected={activeTab === 'changes' ? 'true' : 'false'}
+              onClick={() => setTab('changes')}>最近變更</button>
+          )}
         </div>
         <div className="toolbar__spacer" />
-        {tab === 'schedule' && (
+        {activeTab === 'schedule' && (
           <div className="chips" role="group">
             {FILTERS.map((f) => (
               <button
@@ -368,9 +372,9 @@ export default function OverviewPage({ midweekWeeks = [], weekendRows = [], load
         )}
       </div>
 
-      {tab === 'changes' && <ChangesPanel />}
+      {activeTab === 'changes' && <ChangesPanel />}
 
-      {tab === 'schedule' && (
+      {activeTab === 'schedule' && (
       <>
       <div className="ov-controls">
         <div className="ov-sort-group">

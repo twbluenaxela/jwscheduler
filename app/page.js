@@ -626,6 +626,7 @@ export default function App() {
               midweekWeeks={midweekWeeks}
               weekendRows={weekendRows}
               loading={workspaceLoading}
+              isAdmin={dbUser?.role === 'ADMIN'}
             />
           )}
           {page === 'people' && (
