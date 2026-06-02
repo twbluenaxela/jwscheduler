@@ -38,7 +38,7 @@ export async function handleFollow(event, { reply }) {
 }
 
 // ── Step 2 / Query: Handle text messages ──────────────────────────────────────
-export async function handleMessage(event, { db, reply }) {
+export async function handleMessage(event, { db, reply, now }) {
   const userId = event.source?.userId;
   const text = event.message?.text?.trim();
   if (!userId || !text) return;
@@ -66,7 +66,7 @@ export async function handleMessage(event, { db, reply }) {
           orderBy: { sortOrder: 'asc' },
         }),
       ]);
-      const items = collectAssignments(linked.name, weeks, weekendRows, { skipSuspended: true });
+      const items = collectAssignments(linked.name, weeks, weekendRows, { skipSuspended: true, now });
       if (!items.length) {
         await reply(event.replyToken, `${linked.name}，目前你沒有排定的安排。`);
       } else {

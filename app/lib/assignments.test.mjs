@@ -100,13 +100,12 @@ test('parseCnDate 解析中文與斜線格式並處理跨年', () => {
   assert.equal(dec.getFullYear(), 2027);
 });
 
-// ── Wiring check: webhook still does the individual query via the shared lib ────
+// ── Wiring checks (behaviour is covered in line-webhook.test.mjs) ───────────────
 
-test('LINE webhook 仍支援個別查詢並使用共用 collectAssignments', () => {
+test('LINE webhook 路由委派給共用 handler', () => {
   const src = readFileSync(new URL('../api/line/webhook/route.js', import.meta.url), 'utf8');
-  assert.ok(src.includes('我的安排'), '應保留我的安排指令');
-  assert.ok(src.includes("from '../../../lib/assignments.mjs'"), '應從共用模組匯入');
-  assert.ok(src.includes('collectAssignments(linked.name'), '查詢時應呼叫 collectAssignments');
+  assert.ok(src.includes("from '../../../lib/line-webhook.mjs'"), '應從 line-webhook 模組匯入 handler');
+  assert.ok(src.includes('handleMessage(event, deps)'), '應呼叫 handleMessage');
 });
 
 test('發佈通知未改動：LINE-only 快照、無 collectAssignedNames 填充', () => {

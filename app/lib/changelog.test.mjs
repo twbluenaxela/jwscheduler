@@ -5,8 +5,15 @@ import {
   describeMidweekSlot,
   weekendFieldLabel,
   changeAction,
+  logChange,
   WEEKEND_NAME_FIELDS,
 } from './changelog.mjs';
+
+// A tiny capturing fake — logChange only needs db.changeLog.create.
+function captureDb() {
+  const rows = [];
+  return { rows, changeLog: { create: async ({ data }) => { rows.push(data); return data; } } };
+}
 
 const week = {
   id: 42,
@@ -54,14 +61,45 @@ test('changeAction 分類新增/清除/改派/無變更', () => {
   assert.equal(changeAction('', ''), null);
 });
 
-// ── Wiring checks: the log is written and surfaced in 總覽 ──────────────────────
+// ── logChange behaviour ────────────────────────────────────────────────────────
 
-test('指派與週末路由會寫入變更記錄', () => {
-  const mw = readFileSync(new URL('../api/assignments/route.js', import.meta.url), 'utf8');
-  assert.ok(mw.includes('logChange('), '指派路由應呼叫 logChange');
-  const we = readFileSync(new URL('../api/weekend-rows/[id]/route.js', import.meta.url), 'utf8');
-  assert.ok(we.includes('logChange('), '週末路由應呼叫 logChange');
+test('logChange 寫入新增記錄（prevName 為 null）', async () => {
+  const db = captureDb();
+  await logChange(db, { congregationId: 1, slotId: 'mw1_chairman', date: '6月 3日', label: '主席', prevName: '', name: '王大明', actorName: '管理員' });
+  assert.equal(db.rows.length, 1);
+  assert.deepEqual(db.rows[0], {
+    congregationId: 1, slotId: 'mw1_chairman', date: '6月 3日', label: '主席',
+    prevName: null, name: '王大明', action: 'assign', actorName: '管理員',
+  });
 });
+
+test('logChange 改派保留前任、清除時 name 為 null', async () => {
+  const reassign = captureDb();
+  await logChange(reassign, { congregationId: 1, slotId: 's', date: 'd', label: 'l', prevName: '王大明', name: '李小華' });
+  assert.equal(reassign.rows[0].action, 'reassign');
+  assert.equal(reassign.rows[0].prevName, '王大明');
+
+  const clear = captureDb();
+  await logChange(clear, { congregationId: 1, slotId: 's', date: 'd', label: 'l', prevName: '王大明', name: '' });
+  assert.equal(clear.rows[0].action, 'clear');
+  assert.equal(clear.rows[0].name, null);
+});
+
+test('logChange 對無實質變更不寫入', async () => {
+  const db = captureDb();
+  await logChange(db, { congregationId: 1, slotId: 's', date: 'd', label: 'l', prevName: '王大明', name: '王大明' });
+  await logChange(db, { congregationId: 1, slotId: 's', date: 'd', label: 'l', prevName: '', name: '' });
+  assert.equal(db.rows.length, 0);
+});
+
+test('logChange 為盡力而為：DB 寫入失敗不丟出例外', async () => {
+  const db = { changeLog: { create: async () => { throw new Error('db down'); } } };
+  await assert.doesNotReject(
+    logChange(db, { congregationId: 1, slotId: 's', date: 'd', label: 'l', prevName: '', name: '王大明' }),
+  );
+});
+
+// ── Wiring check: the log is surfaced in 總覽 ───────────────────────────────────
 
 test('總覽提供最近變更分頁並讀取 /api/changelog', () => {
   const src = readFileSync(new URL('../components/OverviewPage.js', import.meta.url), 'utf8');

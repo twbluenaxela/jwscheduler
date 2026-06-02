@@ -102,6 +102,14 @@ app/
     changelog.mjs      — 最近變更 helpers: describeMidweekSlot / weekendFieldLabel /
                          WEEKEND_NAME_FIELDS / changeAction (pure, unit-tested) + logChange(db,
                          entry) (best-effort ChangeLog write, never throws). `.mjs`
+    mutations.mjs      — framework-free cores for the assignment-mutating routes:
+                         applyMidweekAssignment(db, user, slotId, name) and
+                         applyWeekendPatch(db, user, existing, body) — db injected so they're
+                         integration-tested with an in-memory fake. Routes wrap these with auth
+    line-webhook.mjs   — framework-free LINE handlers (handleFollow / handleMessage) + keyword
+                         and help-text constants; db + reply (+ now) injected for testing
+    test-support/fake-db.mjs — in-memory Prisma stand-in (a "fake", not a mock) used by the
+                         integration tests; only the methods the routes use. NOT for app code
   components/
     Sidebar.js         — desktop left nav (shows congregation name + scheduleStats vacancy card)
     TopBar.js          — mobile top bar
@@ -431,11 +439,20 @@ Year is inferred relative to today with a ±6-month window to handle year bounda
 
 ### Tests
 
-`npm test` runs `node --test` (Node's built-in runner, no extra deps). `app/lib/assignments.test.mjs`
-covers the individual LINE query (`collectAssignments`, incl. skipSuspended), date parsing, and
-wiring (webhook query + publish unchanged). `app/lib/changelog.test.mjs` covers the 最近變更
-label resolvers (`describeMidweekSlot` / `weekendFieldLabel` / `changeAction`) and wiring (routes
-write logChange + 總覽 reads /api/changelog).
+`npm test` runs `node --test` (Node's built-in runner, no extra deps). All test files are `.mjs`
+next to their module. **Route logic is tested by dependency injection, never against Neon:** the
+mutating cores live in framework-free libs (`mutations.mjs`, `line-webhook.mjs`) that take the
+Prisma client as an argument; tests pass an in-memory fake (`app/lib/test-support/fake-db.mjs`) and,
+for the webhook, a `reply` spy + injectable `now`. Coverage:
+- `assignments.test.mjs` — `collectAssignments` (incl. skipSuspended), date parsing, wiring guards.
+- `changelog.test.mjs` — label resolvers + `logChange` behaviour (assign/reassign/clear/no-op,
+  best-effort never-throws).
+- `mutations.test.mjs` — `applyMidweekAssignment` / `applyWeekendPatch` end-to-end against the fake
+  DB: assignment state + the right ChangeLog row, 400/403 paths.
+- `line-webhook.test.mjs` — `handleMessage`: `我的安排` query (post-revert), suspended-row exclusion,
+  help text, and the two-step registration flow.
+
+Tests are non-vacuous (verified by mutation: breaking a label produced the expected failures).
 
 ### Publish diff logic
 
