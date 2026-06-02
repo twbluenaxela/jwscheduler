@@ -5,15 +5,12 @@ import { CATS } from '../data/index';
 function buildCandidates(people, catKey, jitter, spread, pastHistory) {
   const c = CATS[catKey];
   if (!c || !people?.length) return [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   return people
     .filter(p => p.status !== 'inactive' && p.quals.includes(c.tag) && (c.g === 'any' || p.g === c.g))
     .map(p => {
       const entry = pastHistory?.[p.name]?.[c.tag];
-      const d = entry?.lastDate
-        ? Math.floor((today - entry.lastDate) / 86400000)
-        : null;
+      // daysSince is precomputed relative to the slot's date in buildPastHistory.
+      const d = entry?.daysSince ?? null;
       const load = entry?.halfYearCount ?? 0;
       const sortDays = d ?? 9999;
       let w = Math.pow(sortDays, spread);
