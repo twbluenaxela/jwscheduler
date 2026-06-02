@@ -284,10 +284,10 @@ function OvToast({ toast, onHide }) {
   );
 }
 
-export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false, isAdmin = false }) {
+export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false, canEdit = false }) {
   const [tab, setTab] = useState('schedule'); // 'schedule' | 'changes'
   // 最近變更 is admin-only (matches /api/changelog gate)
-  const activeTab = tab === 'changes' && !isAdmin ? 'schedule' : tab;
+  const activeTab = tab === 'changes' && !canEdit ? 'schedule' : tab;
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('upcoming');
   const [showPast, setShowPast] = useState(false);
@@ -349,7 +349,7 @@ export default function OverviewPage({ midweekWeeks = [], weekendRows = [], load
           <button className="tab" role="tab"
             aria-selected={activeTab === 'schedule' ? 'true' : 'false'}
             onClick={() => setTab('schedule')}>安排</button>
-          {isAdmin && (
+          {canEdit && (
             <button className="tab" role="tab"
               aria-selected={activeTab === 'changes' ? 'true' : 'false'}
               onClick={() => setTab('changes')}>最近變更</button>
