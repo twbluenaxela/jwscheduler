@@ -1,7 +1,9 @@
 'use client';
 import Image from 'next/image';
 
-export default function Sidebar({ page, setPage, congName, scheduleStats }) {
+export default function Sidebar({ page, setPage, congName, scheduleStats, role, onAdmin }) {
+  const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
+  const isSysadmin = role === 'SYSADMIN';
   const items = [
     {
       id: 'meetings',
@@ -70,7 +72,7 @@ export default function Sidebar({ page, setPage, congName, scheduleStats }) {
         {congName && <span className="brand__cong">{congName}</span>}
       </div>
       <nav className="navlist">
-        {items.map((item) => (
+        {items.filter((i) => canEdit || i.id !== 'import').map((item) => (
           <button
             key={item.id}
             className="navitem"
@@ -81,6 +83,12 @@ export default function Sidebar({ page, setPage, congName, scheduleStats }) {
             <span>{item.label}</span>
           </button>
         ))}
+        {isSysadmin && (
+          <button className="navitem" onClick={onAdmin}>
+            <svg viewBox="0 0 24 24" className="navicon"><path d="M12 3l7 3v6c0 4-3 6.5-7 9-4-2.5-7-5-7-9V6z" /></svg>
+            <span>系統管理</span>
+          </button>
+        )}
       </nav>
       <div className="sidenav__foot">
         <div className={`sidenav__health${scheduleStats && scheduleStats.vacancies === 0 ? ' sidenav__health--ok' : ''}`}>

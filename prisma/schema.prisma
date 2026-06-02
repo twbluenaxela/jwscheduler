@@ -15,6 +15,7 @@ model Congregation {
   name            String
   code            String       @unique  // short readable code e.g. "xinwu"
   inviteToken     String       @unique  @default(uuid())
+  guestInviteToken String      @unique  @default(dbgenerated("gen_random_uuid()::text"))  // read-only GUEST join link
   meetingDayOffset Int         @default(2)
   meetingTime     String       @default("19:30")
   exceptions          Json         @default("[]")
@@ -34,7 +35,7 @@ model User {
   firebaseUid    String        @unique
   email          String        @unique
   displayName    String?
-  role           String        @default("MEMBER")  // "ADMIN" | "MEMBER"
+  role           String        @default("VIEWER")  // "SYSADMIN" | "ADMIN" | "VIEWER"
   congregationId Int?
   congregation   Congregation? @relation(fields: [congregationId], references: [id])
   createdAt      DateTime      @default(now())

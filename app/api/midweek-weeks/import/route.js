@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
+import { canEdit } from '../../../lib/roles.mjs';
 
 const MAX_WEEKS = 40;
 const MAX_PARTS_PER_WEEK = 80;
@@ -122,6 +123,7 @@ export async function POST(request) {
     if (!user?.congregationId) {
       return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
     }
+    if (!canEdit(user.role)) return NextResponse.json({ error: '訪客無法修改' }, { status: 403 });
 
     const body = await request.json();
     const weeksInput = Array.isArray(body.weeks) ? body.weeks : [];

@@ -67,49 +67,40 @@ function getEffectiveSchedule(weekStart, settings) {
   return { dayOffset: settings.dayOffset, time: settings.time };
 }
 
-function OnboardingScreen({ onCreated, onJoined }) {
-  const { dbUser, setDbUser } = useAuth();
-  const [mode, setMode] = useState('choose'); // choose | create | join
-  const [name, setName] = useState('');
+function OnboardingScreen() {
+  const { setDbUser } = useAuth();
+  const [congregations, setCongregations] = useState([]);
   const [code, setCode] = useState('');
-  const [inviteToken, setInviteToken] = useState('');
+  const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function create(e) {
-    e.preventDefault();
-    setError(''); setLoading(true);
-    try {
-      const token = await getToken();
-      const res = await fetch('/api/congregations', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, code }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setDbUser(data.user);
-      onCreated?.(data.congregation);
-    } catch (err) { setError(err.message); }
-    finally { setLoading(false); }
-  }
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/congregations/list', { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (res.ok) setCongregations(data.congregations);
+      } catch {}
+    })();
+  }, []);
 
   async function join(e) {
     e.preventDefault();
+    const payload = code.trim() ? { code: code.trim() } : (selected ? { congregationId: Number(selected) } : null);
+    if (!payload) return;
     setError(''); setLoading(true);
     try {
       const token = await getToken();
-      // Support full URL or bare token
-      const bare = inviteToken.includes('/join/') ? inviteToken.split('/join/')[1] : inviteToken.trim();
       const res = await fetch('/api/congregations/join', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteToken: bare }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setDbUser(data.user);
-      onJoined?.(data.congregation);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
@@ -121,44 +112,44 @@ function OnboardingScreen({ onCreated, onJoined }) {
           <span className="login-brand__icon">📅</span>
           <div>
             <div className="login-brand__title">歡迎使用聚會編排系統</div>
-            <div className="login-brand__sub">請先建立或加入一個會眾</div>
+            <div className="login-brand__sub">請輸入會眾代碼以檢視安排</div>
           </div>
         </div>
 
-        {mode === 'choose' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button className="btn btn--primary" style={{ padding: '12px', fontSize: 15 }} onClick={() => setMode('create')}>建立新會眾</button>
-            <button className="btn" style={{ padding: '12px', fontSize: 15 }} onClick={() => setMode('join')}>加入現有會眾</button>
+        <form onSubmit={join} className="login-form">
+          <div className="login-field">
+            <label className="login-label">會眾代碼</label>
+            <input
+              className="login-input"
+              value={code}
+              onChange={(e) => { setCode(e.target.value); if (e.target.value) setSelected(''); }}
+              placeholder="例：xinwu"
+              autoCapitalize="none"
+            />
           </div>
-        )}
-
-        {mode === 'create' && (
-          <form onSubmit={create} className="login-form">
+          {congregations.length > 0 && (
             <div className="login-field">
-              <label className="login-label">會眾名稱</label>
-              <input className="login-input" placeholder="例：新屋會眾" value={name} onChange={e => setName(e.target.value)} required />
+              <label className="login-label">或從清單選擇</label>
+              <select
+                className="login-input"
+                value={selected}
+                onChange={(e) => { setSelected(e.target.value); if (e.target.value) setCode(''); }}
+              >
+                <option value="">—</option>
+                {congregations.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}（{c.code}）</option>
+                ))}
+              </select>
             </div>
-            <div className="login-field">
-              <label className="login-label">代碼（英文小寫）</label>
-              <input className="login-input" placeholder="例：xinwu" value={code} onChange={e => setCode(e.target.value)} required />
-            </div>
-            {error && <div className="login-error">{error}</div>}
-            <button className="btn btn--primary login-submit" disabled={loading}>{loading ? '建立中…' : '建立會眾'}</button>
-            <button type="button" className="btn" onClick={() => setMode('choose')}>返回</button>
-          </form>
-        )}
-
-        {mode === 'join' && (
-          <form onSubmit={join} className="login-form">
-            <div className="login-field">
-              <label className="login-label">邀請連結或代碼</label>
-              <input className="login-input" placeholder="貼上邀請連結或代碼" value={inviteToken} onChange={e => setInviteToken(e.target.value)} required />
-            </div>
-            {error && <div className="login-error">{error}</div>}
-            <button className="btn btn--primary login-submit" disabled={loading}>{loading ? '加入中…' : '加入會眾'}</button>
-            <button type="button" className="btn" onClick={() => setMode('choose')}>返回</button>
-          </form>
-        )}
+          )}
+          {error && <div className="login-error">{error}</div>}
+          <button className="btn btn--primary login-submit" disabled={loading || (!code.trim() && !selected)}>
+            {loading ? '加入中…' : '以檢視者身份加入'}
+          </button>
+        </form>
+        <p className="settings-hint" style={{ marginTop: 12 }}>
+          加入後預設為唯讀檢視者，編排權限由管理員授予。會眾代碼可向該會眾管理員索取。
+        </p>
       </div>
     </div>
   );
@@ -167,6 +158,9 @@ function OnboardingScreen({ onCreated, onJoined }) {
 export default function App() {
   const { firebaseUser, dbUser, dbSyncing, syncError } = useAuth();
   const router = useRouter();
+  const role = dbUser?.role;
+  const isSysadmin = role === 'SYSADMIN';
+  const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const [page, setPage] = useState('meetings');
   const [midweekWeeks, setMidweekWeeks] = useState([]);
   const [view, setView] = useState('midweek');
@@ -181,6 +175,11 @@ export default function App() {
     const saved = localStorage.getItem('jwscheduler_congSettings');
     if (saved) try { setCongSettings(JSON.parse(saved)); } catch {}
   }, []);
+
+  // Viewers are read-only: they can't open the import/export (editing) page.
+  useEffect(() => {
+    if (!canEdit && page === 'import') setPage('meetings');
+  }, [canEdit, page]);
 
   useEffect(() => {
     localStorage.setItem('jwscheduler_congSettings', JSON.stringify(congSettings));
@@ -403,8 +402,9 @@ export default function App() {
   }, []);
 
   const openSheet = useCallback((slotId, catKey, ctxLabel, currentName) => {
+    if (!canEdit) return; // viewers are read-only: no assigning
     setSheet({ slotId, catKey, ctxLabel, defaultName: currentName });
-  }, []);
+  }, [canEdit]);
 
   async function persistAssignment(slotId, name) {
     try {
@@ -593,6 +593,10 @@ export default function App() {
     );
   }
   if (!dbUser?.congregationId) {
+    if (isSysadmin) {
+      if (typeof window !== 'undefined') router.replace('/admin');
+      return null;
+    }
     return <OnboardingScreen />;
   }
 
@@ -601,7 +605,7 @@ export default function App() {
   return (
     <>
       <div className="shell">
-        <Sidebar page={page} setPage={setPage} congName={congName} scheduleStats={scheduleStats} />
+        <Sidebar page={page} setPage={setPage} congName={congName} scheduleStats={scheduleStats} role={role} onAdmin={() => router.push('/admin')} />
         <TopBar page={page} />
         <div className="content">
           {page === 'meetings' && (
@@ -614,6 +618,7 @@ export default function App() {
               weekendFilter={weekendFilter} setWeekendFilter={setWeekendFilter}
               {...weekendProps}
               setPage={setPage}
+              canEdit={canEdit}
               {...sharedProps}
               suggestions={suggestions}
               fetchMidweekSuggestions={fetchMidweekSuggestions}
@@ -626,7 +631,7 @@ export default function App() {
               midweekWeeks={midweekWeeks}
               weekendRows={weekendRows}
               loading={workspaceLoading}
-              isAdmin={dbUser?.role === 'ADMIN'}
+              isAdmin={canEdit}
             />
           )}
           {page === 'people' && (
@@ -637,6 +642,7 @@ export default function App() {
               weekendRows={weekendRows}
               loading={workspaceLoading}
               congCode={congCode}
+              canEdit={canEdit}
             />
           )}
           {page === 'settings' && (
@@ -699,7 +705,7 @@ export default function App() {
           )}
         </div>
       </div>
-      <TabBar page={page} setPage={setPage} />
+      <TabBar page={page} setPage={setPage} role={role} />
 
       {sheet && (
         <AssignSheet

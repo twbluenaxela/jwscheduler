@@ -23,13 +23,14 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
   const [nameSaving, setNameSaving] = useState(false);
   const [nameStatus, setNameStatus] = useState(''); // '' | 'ok' | 'err'
 
-  const isAdmin = dbUser?.role === 'ADMIN';
+  const isAdmin = dbUser?.role === 'ADMIN' || dbUser?.role === 'SYSADMIN';
 
   useEffect(() => {
     loadSettings();
   }, []);
 
   async function loadSettings() {
+    if (!isAdmin) return; // settings (invite/members/schedule) are admin-only
     try {
       const token = await getToken();
       const res = await fetch('/api/congregations/settings', {
@@ -98,14 +99,31 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
     }
   }
 
-  const inviteUrl = cong ? `${window.location.origin}/join/${cong.inviteToken}` : '';
-
-  function copyInvite() {
-    navigator.clipboard.writeText(inviteUrl).then(() => {
+  function copyCode() {
+    if (!cong?.code) return;
+    navigator.clipboard.writeText(cong.code).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   }
+
+  async function changeRole(userId, role) {
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/congregations/members', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMembers((prev) => prev.map((m) => (m.id === userId ? { ...m, role } : m)));
+    } catch (err) {
+      window.alert(err.message || '變更角色失敗');
+    }
+  }
+
+  const roleLabel = (r) => (r === 'SYSADMIN' ? '系統管理員' : r === 'ADMIN' ? '管理員' : '檢視者');
 
   return (
     <section>
@@ -140,7 +158,18 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
         </div>
       </div>
 
-      {/* ── Congregation info ── */}
+      {!isAdmin && (
+        <div className="settings-card" style={{ maxWidth: 480 }}>
+          <div className="settings-row">
+            <span className="settings-row__label">你的身份</span>
+            <span className="settings-badge">{roleLabel(dbUser?.role)}</span>
+          </div>
+          <p className="settings-hint" style={{ marginTop: 8 }}>你是唯讀檢視者，編排權限由管理員授予。</p>
+        </div>
+      )}
+
+      {/* ── Congregation info + members (admin only) ── */}
+      {isAdmin && (<>
       <div className="settings-grid">
         <div className="settings-section">
           <h3 className="settings-h">會眾資訊</h3>
@@ -158,20 +187,20 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
             <div className="settings-row">
               <span className="settings-row__label">你的身份</span>
               <span className={`settings-badge ${dbUser?.role === 'ADMIN' ? 'settings-badge--admin' : ''}`}>
-                {dbUser?.role === 'ADMIN' ? '管理員' : '成員'}
+                {roleLabel(dbUser?.role)}
               </span>
             </div>
           </div>
 
-          {/* Invite link */}
-          <h3 className="settings-h" style={{ marginTop: 20 }}>邀請連結</h3>
+          {/* Share code — others join (read-only) by entering this code at sign-in */}
+          <h3 className="settings-h" style={{ marginTop: 20 }}>邀請檢視者</h3>
           <div className="settings-card settings-invite">
-            <div className="settings-invite__url">{inviteUrl || '載入中…'}</div>
-            <button className="btn btn--primary" onClick={copyInvite} disabled={!inviteUrl}>
-              {copied ? '已複製！' : '複製連結'}
+            <div className="settings-invite__url settings-row__val--mono">{cong?.code || '載入中…'}</div>
+            <button className="btn btn--primary" onClick={copyCode} disabled={!cong?.code}>
+              {copied ? '已複製！' : '複製代碼'}
             </button>
           </div>
-          <p className="settings-hint">任何人點擊連結並登入即可加入此會眾。</p>
+          <p className="settings-hint">將此會眾代碼分享給他人，登入後輸入即可以唯讀身份檢視安排。編排權限由管理員在下方成員列表授予。</p>
         </div>
 
         {/* ── Meeting schedule ── */}
@@ -262,12 +291,25 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
               <div className="settings-member__name">{m.displayName || m.email}</div>
               <div className="settings-member__email">{m.displayName ? m.email : ''}</div>
             </div>
-            <span className={`settings-badge ${m.role === 'ADMIN' ? 'settings-badge--admin' : ''}`}>
-              {m.role === 'ADMIN' ? '管理員' : '成員'}
-            </span>
+            {isAdmin && m.id !== dbUser?.id ? (
+              <select
+                className="settings-role-select"
+                value={m.role === 'ADMIN' ? 'ADMIN' : 'VIEWER'}
+                onChange={(e) => changeRole(m.id, e.target.value)}
+                aria-label={`${m.displayName || m.email} 的角色`}
+              >
+                <option value="ADMIN">管理員</option>
+                <option value="VIEWER">檢視者</option>
+              </select>
+            ) : (
+              <span className={`settings-badge ${m.role === 'ADMIN' ? 'settings-badge--admin' : ''}`}>
+                {roleLabel(m.role)}
+              </span>
+            )}
           </div>
         ))}
       </div>
+      </>)}
     </section>
   );
 }

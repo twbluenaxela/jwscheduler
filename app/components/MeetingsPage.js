@@ -172,7 +172,7 @@ export default function MeetingsPage({
   getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, clearSlot, setPage,
   getSuggestion, onAccept, onClear,
   suggestions = {}, fetchMidweekSuggestions, acceptAllSuggestions, clearSuggestions,
-  fetchWeekendSuggestions,
+  fetchWeekendSuggestions, canEdit = true,
 }) {
   const menuRef = useRef(null);
   const captureRef = useRef(null);
@@ -242,19 +242,21 @@ export default function MeetingsPage({
           <div className="toolbar">
             {tabs}
             <div className="toolbar__spacer" />
-            <button
-              className={`btn${editMode ? ' btn--primary' : ''}`}
-              onClick={() => {
-                if (editMode) {
-                  saveMidweekWeek(midweekWeeks[week]);
-                  if (mwPrefix) clearSuggestions?.(mwPrefix);
-                }
-                setEditMode(e => !e);
-              }}
-            >
-              <span className="pen">{editMode ? '✓' : '✎'}</span>
-              <span>{editMode ? '完成' : '編輯'}</span>
-            </button>
+            {canEdit && (
+              <button
+                className={`btn${editMode ? ' btn--primary' : ''}`}
+                onClick={() => {
+                  if (editMode) {
+                    saveMidweekWeek(midweekWeeks[week]);
+                    if (mwPrefix) clearSuggestions?.(mwPrefix);
+                  }
+                  setEditMode(e => !e);
+                }}
+              >
+                <span className="pen">{editMode ? '✓' : '✎'}</span>
+                <span>{editMode ? '完成' : '編輯'}</span>
+              </button>
+            )}
             <ExportMenu
               week={midweekWeeks[week]}
               getAssign={getAssign}
@@ -263,13 +265,13 @@ export default function MeetingsPage({
               setExportOpen={setExportOpen}
               menuRef={menuRef}
             />
-            {hasMwSuggestions && (
+            {canEdit && hasMwSuggestions && (
               <>
                 <button className="btn btn--primary btn--sm" onClick={() => acceptAllSuggestions?.(mwPrefix)}>接受全部</button>
                 <button className="btn btn--sm" onClick={() => clearSuggestions?.(mwPrefix)}>清除建議</button>
               </>
             )}
-            {midweekWeeks.length > 0 && (
+            {canEdit && midweekWeeks.length > 0 && (
               <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
                 {publishing ? '發送中…' : '發布通知'}
               </button>
@@ -356,25 +358,29 @@ export default function MeetingsPage({
           <div className="toolbar">
             {tabs}
             <div className="toolbar__spacer" />
-            <button
-              className={`btn${weekendEditMode ? ' btn--primary' : ''}`}
-              onClick={() => {
-                if (weekendEditMode) clearSuggestions?.('we');
-                setWeekendEditMode(e => !e);
-              }}
-            >
-              <span className="pen">{weekendEditMode ? '✓' : '✎'}</span>
-              <span>{weekendEditMode ? '完成' : '編輯'}</span>
-            </button>
-            {hasWeSuggestions && (
+            {canEdit && (
+              <button
+                className={`btn${weekendEditMode ? ' btn--primary' : ''}`}
+                onClick={() => {
+                  if (weekendEditMode) clearSuggestions?.('we');
+                  setWeekendEditMode(e => !e);
+                }}
+              >
+                <span className="pen">{weekendEditMode ? '✓' : '✎'}</span>
+                <span>{weekendEditMode ? '完成' : '編輯'}</span>
+              </button>
+            )}
+            {canEdit && hasWeSuggestions && (
               <>
                 <button className="btn btn--primary btn--sm" onClick={() => acceptAllSuggestions?.('we')}>接受全部</button>
                 <button className="btn btn--sm" onClick={() => clearSuggestions?.('we')}>清除建議</button>
               </>
             )}
-            <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
-              {publishing ? '發送中…' : '發布通知'}
-            </button>
+            {canEdit && (
+              <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
+                {publishing ? '發送中…' : '發布通知'}
+              </button>
+            )}
           </div>
           {publishResult && (
             <div className={`publish-banner${publishResult.error || publishResult.failed > 0 ? ' publish-banner--err' : ' publish-banner--ok'}`}>

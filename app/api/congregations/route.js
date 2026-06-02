@@ -2,8 +2,11 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../lib/firebase-admin';
 import db from '../../lib/db';
+import { isSysadmin } from '../../lib/roles.mjs';
 
-// POST /api/congregations — create a new congregation, make caller the first ADMIN
+// POST /api/congregations — create a new congregation, make caller the first ADMIN.
+// Sysadmin-only (congregations are otherwise created from the /admin panel, which
+// does NOT auto-join the creator). Prevents viewers from self-creating to escalate.
 export async function POST(request) {
   try {
     const decoded = await verifyIdToken(request);
@@ -17,6 +20,7 @@ export async function POST(request) {
 
     const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    if (!isSysadmin(user.role)) return NextResponse.json({ error: '需要系統管理員權限' }, { status: 403 });
     if (user.congregationId) {
       return NextResponse.json({ error: '你已經加入了一個會眾' }, { status: 409 });
     }

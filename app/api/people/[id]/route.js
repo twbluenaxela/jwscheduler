@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
+import { canEdit } from '../../../lib/roles.mjs';
 
 function personPayload(body) {
   const data = {};
@@ -34,6 +35,7 @@ export async function DELETE(request, context) {
     const decoded = await verifyIdToken(request);
     const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
     if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
+    if (!canEdit(user.role)) return NextResponse.json({ error: '訪客無法修改' }, { status: 403 });
 
     const params = await context.params;
     const id = Number(params.id);
@@ -54,6 +56,7 @@ export async function PATCH(request, context) {
     const decoded = await verifyIdToken(request);
     const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
     if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
+    if (!canEdit(user.role)) return NextResponse.json({ error: '訪客無法修改' }, { status: 403 });
 
     const params = await context.params;
     const id = Number(params.id);

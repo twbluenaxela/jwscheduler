@@ -37,10 +37,15 @@ app/
   api/
     auth/sync/         — POST: upsert Firebase user into Postgres (does NOT
                          overwrite displayName on update — only sets it on create)
-    congregations/     — POST: create congregation (caller becomes ADMIN)
-    congregations/join/— POST: join via inviteToken
-    congregations/settings/ — GET/PATCH: congregation settings (admin only)
+    congregations/     — POST: create congregation (caller becomes ADMIN) — SYSADMIN only now
+    congregations/list/— GET: {id,name,code}[] for the onboarding dropdown (logged-in)
+    congregations/join/— POST: { congregationId } (dropdown → VIEWER) or { inviteToken } (legacy → VIEWER)
+    congregations/settings/ — GET/PATCH: congregation settings (canManageCongregation = ADMIN/SYSADMIN)
+    congregations/members/ — PATCH: set a member's role (ADMIN/VIEWER; not self) — ADMIN/SYSADMIN
     congregations/data/— GET: load all congregation data (weeks, people, weekend rows)
+    admin/data/        — GET: all congregations (+counts) + all users (SYSADMIN only)
+    admin/congregations/ — POST create; [id] PATCH rename / DELETE (cascade) (SYSADMIN only)
+    admin/users/[id]/  — PATCH: set a user's role + congregationId (SYSADMIN only)
     midweek-weeks/import/ — POST: save imported weeks + parts to DB
     people/            — GET: list members, POST: create member
     people/[id]/       — PATCH: update member, DELETE: remove member
@@ -217,9 +222,32 @@ Every user belongs to one `Congregation`. The flow:
 
 **`getToken()`** — async helper that returns the current Firebase ID token. Used in every API call: `headers: { Authorization: 'Bearer <token>' }`.
 
-**Roles:** `ADMIN` (full access + settings) or `MEMBER` (assign only). First user to create a congregation is ADMIN.
+**Roles:** `SYSADMIN` (global control) > `ADMIN` (the only per-congregation editor) > `VIEWER`
+(read-only; sees schedule + people). This is an **admin tool**: only ADMIN/SYSADMIN edit; everyone
+else views. One source of truth: `app/lib/roles.mjs` — `canEdit` (ADMIN|SYSADMIN),
+`canManageCongregation` (ADMIN|SYSADMIN — settings/members/changelog), `isAdmin`, `isSysadmin`,
+`ASSIGNABLE_MEMBER_ROLES` (ADMIN|VIEWER — what a congregation admin may grant). `auth/sync` never
+overwrites `role`, so roles persist across logins. (Legacy MEMBER/GUEST rows were migrated to VIEWER
+via `scripts/set-roles.mjs`, which also sets the first SYSADMIN by email.)
 
-**Invite link:** `{origin}/join/{inviteToken}` — clicking joins the congregation after login.
+- **Write routes** (`assignments`, `weekend-rows` + `[id]`, `midweek-weeks/[id]` + `import`,
+  `people` POST + `[id]`) reject non-editors: `if (!canEdit(user.role)) → 403`. `roles.test.mjs`
+  has a regression guard asserting every write route + every `admin/*` route enforces its check.
+- **Viewers** see 聚會 / 週末 / 總覽 / 人員 (read-only) + a profile-only Settings. `people` GET is
+  open to everyone in the congregation; `people` writes, `congregations/settings`, `members`,
+  the changelog, and 匯入 are editor/admin-only. UI hides 匯入 nav + all edit/assign/publish
+  controls, makes the People detail read-only, and `openSheet` is a no-op for viewers.
+- **Per-congregation role mgmt:** `PATCH /api/congregations/members { userId, role }`
+  (ADMIN/SYSADMIN; ADMIN/VIEWER only, not self) — per-member `<select>` in Settings.
+- **Sysadmin panel** (`/app/admin/page.js`, gated to SYSADMIN; `app/api/admin/*`): create/rename/
+  delete congregations + list all users and set each user's role (incl. ADMIN/SYSADMIN) and
+  congregation. A congregation-less SYSADMIN is redirected from `/` to `/admin`; otherwise a
+  系統管理 nav link appears.
+
+**Joining:** new users pick a congregation from a dropdown on the onboarding screen
+(`GET /api/congregations/list` → `POST /api/congregations/join { congregationId }`) and join as
+read-only VIEWER. Only SYSADMIN creates congregations (the old self-serve `POST /api/congregations`
+is now SYSADMIN-only). Legacy `/join/{token}` links still work but also grant VIEWER.
 
 **All data API routes are congregation-scoped** — every route verifies `user.congregationId` from the Firebase token and constrains all DB queries to that congregation. The LINE webhook is the only unauthenticated route; it scopes name lookups to the congregation chosen during the two-step registration flow.
 
@@ -229,8 +257,8 @@ Every user belongs to one `Congregation`. The flow:
 
 | Model | Key fields |
 |---|---|
-| `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON), `publishedSnapshot` (JSON — future-only assignments per person, for diff) |
-| `User` | `firebaseUid`, `email`, `displayName`, `role` (ADMIN/MEMBER), `congregationId` |
+| `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `guestInviteToken` (read-only join link; DB default `gen_random_uuid()::text` so adding it backfilled existing rows), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON), `publishedSnapshot` (JSON — future-only assignments per person, for diff) |
+| `User` | `firebaseUid`, `email`, `displayName`, `role` (SYSADMIN/ADMIN/VIEWER, default VIEWER), `congregationId` (nullable — sysadmins may have none) |
 | `MidweekWeek` | `congregationId`, `date`, `dateLabel`, `weekStart` (original EPUB Monday date), `weekdayPill`, songs, times |
 | `Part` | `weekId`, `partKey`, `section`, `partNum`, `title`, `dur`, `cat`, `roleLabel`, `cbsRef` |
 | `Assignment` | `slotId` (unique string key), `weekId`, `name` |
@@ -451,6 +479,8 @@ for the webhook, a `reply` spy + injectable `now`. Coverage:
   DB: assignment state + the right ChangeLog row, 400/403 paths.
 - `line-webhook.test.mjs` — `handleMessage`: `我的安排` query (post-revert), suspended-row exclusion,
   help text, and the two-step registration flow.
+- `roles.test.mjs` — `canEdit`/`isAdmin`/`isGuest` policy + a regression guard asserting every
+  schedule-mutating route enforces `canEdit`.
 
 Tests are non-vacuous (verified by mutation: breaking a label produced the expected failures).
 

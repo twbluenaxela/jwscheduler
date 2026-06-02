@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
+import { canManageCongregation } from '../../../lib/roles.mjs';
 
 // PATCH /api/congregations/settings — update congregation settings (admin only)
 export async function PATCH(request) {
@@ -11,7 +12,7 @@ export async function PATCH(request) {
 
     const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
     if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
-    if (user.role !== 'ADMIN') return NextResponse.json({ error: '需要管理員權限' }, { status: 403 });
+    if (!canManageCongregation(user.role)) return NextResponse.json({ error: '需要管理員權限' }, { status: 403 });
 
     const allowed = ['name', 'meetingDayOffset', 'meetingTime', 'exceptions'];
     const data = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
@@ -33,6 +34,8 @@ export async function GET(request) {
     const decoded = await verifyIdToken(request);
     const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
     if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
+    // Settings exposes invite tokens + member emails + role management — admin only.
+    if (!canManageCongregation(user.role)) return NextResponse.json({ error: '需要管理員權限' }, { status: 403 });
 
     const congregation = await db.congregation.findUnique({
       where: { id: user.congregationId },

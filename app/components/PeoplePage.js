@@ -147,7 +147,7 @@ function createBlankPerson(nextId) {
   };
 }
 
-export default function PeoplePage({ people, setPeople, midweekWeeks = [], weekendRows = [], loading = false, congCode = 'jwscheduler' }) {
+export default function PeoplePage({ people, setPeople, midweekWeeks = [], weekendRows = [], loading = false, congCode = 'jwscheduler', canEdit = true }) {
   const RECENT_DEFAULT = 3;
 
   const [query, setQuery] = useState('');
@@ -293,7 +293,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
             {selectedPerson.g === 'M' ? '弟兄' : '姊妹'} · {selectedPerson.appt || '—'}
           </div>
         </div>
-        {!String(selectedPerson.id).startsWith('new-') && (
+        {canEdit && !String(selectedPerson.id).startsWith('new-') && (
           <button
             className="btn btn--danger btn--sm"
             onClick={() => deletePerson(selectedPerson)}
@@ -303,6 +303,18 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
         )}
       </div>
 
+      {!canEdit ? (
+        <div className="people-detail__form">
+          <div className="settings-row">
+            <span className="settings-row__label">性別</span>
+            <span className="settings-row__val">{selectedPerson.g === 'M' ? '弟兄' : '姊妹'}</span>
+          </div>
+          <div className="settings-row">
+            <span className="settings-row__label">職務</span>
+            <span className="settings-row__val">{selectedPerson.appt || '—'}</span>
+          </div>
+        </div>
+      ) : (
       <div className="people-detail__form">
         <label className="field">
           <span className="field__label">姓名</span>
@@ -364,14 +376,15 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
           </select>
         </label>
       </div>
+      )}
 
       <div className="people-detail__section">
         <div className="people-detail__section-head">
           <span>資格</span>
-          <small>點選切換</small>
+          {canEdit && <small>點選切換</small>}
         </div>
         <div className="chips people-quals">
-          {QUAL_OPTIONS.map((qual) => (
+          {canEdit ? QUAL_OPTIONS.map((qual) => (
             <button
               key={qual}
               className="chip"
@@ -380,7 +393,11 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
             >
               {qual}
             </button>
-          ))}
+          )) : (
+            selectedPerson.quals.length
+              ? selectedPerson.quals.map((qual) => <span key={qual} className="qual">{qual}</span>)
+              : <span className="people-empty people-empty--compact">未設定資格</span>
+          )}
         </div>
       </div>
 
@@ -470,7 +487,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <button className="btn btn--primary" onClick={addPerson}>＋ 新增人員</button>
+          {canEdit && <button className="btn btn--primary" onClick={addPerson}>＋ 新增人員</button>}
         </div>
       </div>
 

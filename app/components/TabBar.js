@@ -1,6 +1,7 @@
 'use client';
 
-export default function TabBar({ page, setPage }) {
+export default function TabBar({ page, setPage, role }) {
+  const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const items = [
     {
       id: 'meetings', label: '本週',
@@ -24,9 +25,11 @@ export default function TabBar({ page, setPage }) {
     },
   ];
 
+  const visible = items.filter((i) => canEdit || i.id !== 'import');
+
   return (
-    <nav className="tabbar">
-      {items.map((item) => (
+    <nav className="tabbar" style={{ gridTemplateColumns: `repeat(${visible.length}, 1fr)` }}>
+      {visible.map((item) => (
         <button
           key={item.id}
           className="tabbar__item"
