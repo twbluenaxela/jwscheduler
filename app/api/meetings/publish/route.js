@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 import { parseCnDate, collectAssignments, itemKey } from '../../../lib/assignments.mjs';
+import { canManageCongregation } from '../../../lib/roles.mjs';
+
+
 
 function buildMessage(name, current, previous) {
   const header = `【新屋會眾 · 聚會節目通知】\n${name}，你好！`;
@@ -61,7 +64,9 @@ export async function POST(request) {
     const decoded = await verifyIdToken(request);
     const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
     if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
-    if (user.role !== 'ADMIN') return NextResponse.json({ error: '需要管理員權限' }, { status: 403 });
+    if (!canManageCongregation(user.role)) {
+      return NextResponse.json({ error: '需要管理員權限' }, { status: 403 });
+    }
 
     const congId = user.congregationId;
 

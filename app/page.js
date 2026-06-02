@@ -634,7 +634,7 @@ export default function App() {
               midweekWeeks={midweekWeeks}
               weekendRows={weekendRows}
               loading={workspaceLoading}
-              isAdmin={canEdit}
+              canEdit={canEdit}
             />
           )}
           {page === 'people' && (
