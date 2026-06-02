@@ -34,3 +34,14 @@ export async function verifyIdToken(request) {
   if (!token) throw new Error('Missing auth token');
   return getAdminAuth().verifyIdToken(token);
 }
+
+// Delete a Firebase auth account so a removed user can't sign back in.
+// No-op if the account is already gone.
+export async function deleteAuthUser(firebaseUid) {
+  if (!firebaseUid) return;
+  try {
+    await getAdminAuth().deleteUser(firebaseUid);
+  } catch (err) {
+    if (err?.code !== 'auth/user-not-found') throw err;
+  }
+}

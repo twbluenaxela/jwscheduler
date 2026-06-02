@@ -72,7 +72,7 @@ export default function Sidebar({ page, setPage, congName, scheduleStats, role, 
         {congName && <span className="brand__cong">{congName}</span>}
       </div>
       <nav className="navlist">
-        {items.filter((i) => canEdit || i.id !== 'import').map((item) => (
+        {items.filter((i) => canEdit || (i.id !== 'import' && i.id !== 'people')).map((item) => (
           <button
             key={item.id}
             className="navitem"

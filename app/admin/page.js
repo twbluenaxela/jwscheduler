@@ -88,6 +88,14 @@ export default function AdminPage() {
     } catch (err) { window.alert(err.message); }
   }
 
+  async function deleteUser(id, label) {
+    if (!window.confirm(`確定刪除帳號「${label}」？此操作會移除其登入權限，無法復原。`)) return;
+    try {
+      await api(`/api/admin/users/${id}`, 'DELETE');
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+    } catch (err) { window.alert(err.message); }
+  }
+
   if (dbUser?.role && dbUser.role !== 'SYSADMIN') return null;
 
   const congName = (id) => congregations.find((c) => c.id === id)?.name ?? '—';
@@ -107,19 +115,19 @@ export default function AdminPage() {
         <>
           {/* ── Congregations ── */}
           <h3 className="settings-h" style={{ marginTop: 8 }}>會眾（{congregations.length}）</h3>
-          <form onSubmit={createCong} className="settings-card" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
-            <label className="field" style={{ flex: 1, minWidth: 160 }}>
+          <form onSubmit={createCong} className="admin-new-cong">
+            <label className="field admin-new-cong__name">
               <span className="field__label">名稱</span>
               <input className="field__input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="例：新屋會眾" required />
             </label>
-            <label className="field" style={{ flex: 1, minWidth: 140 }}>
+            <label className="field admin-new-cong__code">
               <span className="field__label">代碼</span>
               <input className="field__input field__input--mono" value={newCode} onChange={(e) => setNewCode(e.target.value)} placeholder="xinwu" required />
             </label>
-            <button className="btn btn--primary" disabled={creating}>{creating ? '建立中…' : '＋ 新增會眾'}</button>
+            <button className="btn btn--primary admin-new-cong__btn" disabled={creating}>{creating ? '建立中…' : '＋ 新增會眾'}</button>
           </form>
 
-          <div className="settings-members" style={{ maxWidth: 'none' }}>
+          <div className="settings-members settings-members--single">
             {congregations.map((c) => (
               <div key={c.id} className="settings-member">
                 <div className="settings-member__info">
@@ -136,7 +144,7 @@ export default function AdminPage() {
 
           {/* ── Accounts ── */}
           <h3 className="settings-h" style={{ marginTop: 28 }}>帳號（{users.length}）</h3>
-          <div className="settings-members" style={{ maxWidth: 'none' }}>
+          <div className="settings-members settings-members--single">
             {users.map((u) => (
               <div key={u.id} className="settings-member">
                 <div className="settings-member__avatar">{(u.displayName || u.email)?.[0]?.toUpperCase()}</div>
@@ -161,6 +169,9 @@ export default function AdminPage() {
                   <option value="">（無會眾）</option>
                   {congregations.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                {u.id !== dbUser?.id && (
+                  <button className="btn btn--danger btn--sm" onClick={() => deleteUser(u.id, u.displayName || u.email)}>刪除</button>
+                )}
               </div>
             ))}
           </div>

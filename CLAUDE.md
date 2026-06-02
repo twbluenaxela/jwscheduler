@@ -33,11 +33,15 @@ app/
     page.js            — Firebase login UI (email/password + Google popup);
                          redirects to / once useAuth().firebaseUser is set
   join/[token]/
-    page.js            — Invite link handler (joins congregation via token)
+    page.js            — Legacy invite-link handler (joins congregation via token → VIEWER).
+                         Primary join is now the onboarding code-entry in page.js
+  admin/
+    page.js            — SYSADMIN-only control panel (separate route): create/rename/delete
+                         congregations + list all users (set role + congregation, delete user).
+                         Client-gated on dbUser.role==='SYSADMIN'; all writes hit app/api/admin/*
   api/
     auth/sync/         — POST: upsert Firebase user into Postgres (does NOT
                          overwrite displayName on update — only sets it on create)
-    congregations/     — POST: create congregation (caller becomes ADMIN) — SYSADMIN only now
     congregations/list/— GET: {id,name,code}[] for the onboarding dropdown (logged-in)
     congregations/join/— POST: { code } (enter congregation code → VIEWER) or { congregationId }
                          (dropdown) or { inviteToken } (legacy). 409 if already in a congregation
@@ -47,7 +51,8 @@ app/
     congregations/data/— GET: load all congregation data (weeks, people, weekend rows)
     admin/data/        — GET: all congregations (+counts) + all users (SYSADMIN only)
     admin/congregations/ — POST create; [id] PATCH rename / DELETE (cascade) (SYSADMIN only)
-    admin/users/[id]/  — PATCH: set a user's role + congregationId (SYSADMIN only)
+    admin/users/[id]/  — PATCH: set role + congregationId / DELETE: remove user (DB + Firebase
+                         auth via deleteAuthUser); SYSADMIN only, not self
     midweek-weeks/import/ — POST: save imported weeks + parts to DB
     people/            — GET: list members, POST: create member
     people/[id]/       — PATCH: update member, DELETE: remove member
@@ -172,7 +177,10 @@ app/
                          selected weeks as REAL MidweekWeek cards in an off-screen container
                          (cardRefs) and screenshot them via the `exportNodes*` helpers, so
                          output matches the live card (Excel still uses the data path)
-    SettingsPage.js    — ⚙ congregation info, invite link, members, schedule
+    SettingsPage.js    — ⚙ settings. Admins: 我的資訊 + 會眾資訊 + 邀請檢視者 (share the
+                         congregation CODE, not an invite link) in the left grid column, 聚會排程
+                         settings top-right, 成員列表 (2-col card grid, role <select> per member)
+                         below. Viewers: profile + role badge only. isAdmin includes SYSADMIN
     AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed
                          data); "✕ 留空此項" button clears a slot (leaves it unassigned)
     PWARegister.js     — 'use client' component; registers /sw.js on window load
@@ -232,19 +240,22 @@ else views. One source of truth: `app/lib/roles.mjs` — `canEdit` (ADMIN|SYSADM
 overwrites `role`, so roles persist across logins. (Legacy MEMBER/GUEST rows were migrated to VIEWER
 via `scripts/set-roles.mjs`, which also sets the first SYSADMIN by email.)
 
-- **Write routes** (`assignments`, `weekend-rows` + `[id]`, `midweek-weeks/[id]` + `import`,
-  `people` POST + `[id]`) reject non-editors: `if (!canEdit(user.role)) → 403`. `roles.test.mjs`
-  has a regression guard asserting every write route + every `admin/*` route enforces its check.
-- **Viewers** see 聚會 / 週末 / 總覽 / 人員 (read-only) + a profile-only Settings. `people` GET is
-  open to everyone in the congregation; `people` writes, `congregations/settings`, `members`,
-  the changelog, and 匯入 are editor/admin-only. UI hides 匯入 nav + all edit/assign/publish
-  controls, makes the People detail read-only, and `openSheet` is a no-op for viewers.
+- **Write/admin guards take the role helpers, never a literal `'ADMIN'`** — write routes use
+  `canEdit` (ADMIN|SYSADMIN); settings/members/changelog/publish use `canManageCongregation`
+  (ADMIN|SYSADMIN); `admin/*` use `isSysadmin`. `roles.test.mjs` asserts every write route and
+  every `admin/*` route enforces its check. (There must be NO `user.role === 'ADMIN'` left in any
+  route — sysadmins would be wrongly blocked.)
+- **Viewers** see 聚會 / 週末 / 總覽 (read-only) + a profile-only Settings. They do NOT get the
+  人員 page: nav hides 匯入 + 人員, `congregations/data` returns `people: []` and `people` GET 403s
+  for non-editors. All edit/assign/publish controls are hidden and `openSheet` is a no-op.
 - **Per-congregation role mgmt:** `PATCH /api/congregations/members { userId, role }`
-  (ADMIN/SYSADMIN; ADMIN/VIEWER only, not self) — per-member `<select>` in Settings.
+  (canManageCongregation; ADMIN/VIEWER only, not self, and cannot change a SYSADMIN) — per-member
+  `<select>` in Settings.
 - **Sysadmin panel** (`/app/admin/page.js`, gated to SYSADMIN; `app/api/admin/*`): create/rename/
-  delete congregations + list all users and set each user's role (incl. ADMIN/SYSADMIN) and
-  congregation. A congregation-less SYSADMIN is redirected from `/` to `/admin`; otherwise a
-  系統管理 nav link appears.
+  delete congregations + list all users and set each user's role (incl. ADMIN/SYSADMIN), move them
+  between congregations, and **delete a user** (`DELETE /api/admin/users/[id]` → removes the DB row
+  + the Firebase auth account via `deleteAuthUser`, not self). A congregation-less SYSADMIN is
+  redirected from `/` to `/admin`; otherwise a 系統管理 nav link appears.
 
 **Joining:** a logged-in user with no congregation (e.g. after Google sign-in — no separate
 register step) lands on onboarding and **enters the congregation code** (or picks from the

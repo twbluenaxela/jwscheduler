@@ -149,7 +149,44 @@ Full detail is in `CLAUDE.md`; the short version:
 - **Google sign-in must stay `signInWithPopup`** — redirect breaks cross-domain (fly.dev + firebaseapp.com)
 - **`login/page.js` must redirect after auth** via an effect on `useAuth().firebaseUser` → `router.replace('/')`
 - **No fly.io `release_command`** — `prisma db push` times out on Neon cold start
-- **`auth/sync` must not overwrite `displayName` on update** — only set it on create; the settings page is authoritative
+- **`auth/sync` must not overwrite `displayName` or `role` on update** — only set them on create; the settings page / admin panel are authoritative (this keeps a VIEWER from being reset to default on every login, and a SYSADMIN from being downgraded)
+- **Auth-driven navigation goes in a `useEffect`, never during render.** Calling `router.replace(...)` while rendering `App` throws "Cannot update a component while rendering a different component". The gating branches `return null` while a single effect watching `firebaseUser`/`dbUser`/`isSysadmin` does the redirect
+
+### Roles & authorization (SYSADMIN > ADMIN > VIEWER)
+
+This is an **admin tool**: only ADMIN/SYSADMIN edit; VIEWER is read-only. **Never write a literal
+`user.role === 'ADMIN'` check** — always use the helpers in `app/lib/roles.mjs` so sysadmins aren't
+wrongly blocked:
+- `canEdit(role)` (ADMIN|SYSADMIN) — guard every schedule-write route + UI edit affordance
+- `canManageCongregation(role)` (ADMIN|SYSADMIN) — settings / members / changelog / publish
+- `isSysadmin(role)` — `app/api/admin/*` only
+- `ASSIGNABLE_MEMBER_ROLES` (ADMIN|VIEWER) — what a congregation admin may grant; admins can't touch a SYSADMIN
+
+`roles.test.mjs` has a regression guard asserting every write route + every `admin/*` route enforces
+its check. Congregation is **set once** at join (the join route 409s if already joined) — only a
+sysadmin moves a user between congregations. Onboarding is **code-entry** (`POST .../join { code }`),
+join always grants VIEWER, and only SYSADMIN creates congregations.
+
+### Testing
+
+`npm test` runs `node --test` (Node's built-in runner — no Jest/Vitest, no new deps). Pattern:
+- **Pure logic lives in framework-free `.mjs` libs** so Node can import them directly:
+  `assignments.mjs` (date + collect), `changelog.mjs` (label resolvers + `logChange`),
+  `mutations.mjs` (`applyMidweekAssignment`/`applyWeekendPatch`), `line-webhook.mjs`
+  (`handleMessage`), `roles.mjs`. These take the Prisma client (`db`) and side-effects (`reply`,
+  `now`) **as arguments** — never import the singleton / `next/server` — so routes stay thin wrappers.
+- **Integration tests use an in-memory fake DB** (`app/lib/test-support/fake-db.mjs`), a "fake" not a
+  mock — never the real Neon DB. When you add a new route with real logic, extract a DI'd core into a
+  lib and test it there; don't try to import the route file (it pulls in `next/server` + the Prisma
+  singleton). Prove tests aren't vacuous with a quick mutation check.
+
+### LINE login (if/when added): bridge through Firebase, don't fork the session
+
+The whole backend trusts **Firebase ID tokens** (`verifyIdToken` in every route) and the client keys
+off `onAuthStateChanged`. A standalone LINE session (LINE token in a cookie) would conflict — `getToken()`
+would return nothing and every API call would 401. The correct pattern is **Firebase Custom
+Authentication**: server verifies LINE → `admin.auth().createCustomToken('line:'+lineUserId)` →
+client `signInWithCustomToken(...)`. Then LINE just feeds the existing Firebase session, unchanged.
 
 ### Privacy: no real names in code
 
@@ -180,7 +217,7 @@ saveMidweekWeek(weekObj)            ← called on edit-mode exit (✓ 完成)
   → PATCH /api/midweek-weeks/{id}   (week fields + all parts in one transaction)
   → NOTE: sends p.dbId (numeric), NOT p.id (partKey string) for parts
 
-deleteMidweekWeek(weekId)           ← admin only
+deleteMidweekWeek(weekId)           ← editors only (canEdit = ADMIN/SYSADMIN)
   → DELETE /api/midweek-weeks/{id}
 
 addWeekendRow(type)
@@ -303,11 +340,12 @@ their own" when toggled quickly. If you need server-canonical data, reload via
   flow for PDF — browsers block it.
 - **Text export.** `buildWeekText(week, getAssign)` returns a plain-text schedule
   for pasting into LINE manually (meetings 複製文字 menu item).
-- **Multi-week / range.** `exportWeeks{Jpeg,Pdf,Xlsx}` and `openWeeksPrintWindow`
-  build off `renderWeekToCanvas` (canvas, no DOM node) so ImportPage can export a
-  range of weeks without a rendered card on screen. ImportPage filters
-  `existingWeeks` by the 範圍 selector (全部/本月/自訂) and needs the `getAssign`
-  prop so exports reflect current assignments.
+- **Multi-week / range.** ImportPage screenshots REAL off-screen `MidweekWeek`
+  cards via `exportNodes{Jpeg,Pdf}` / `openNodesPrintWindow` (html-to-image) so the
+  output matches the live card. The old hand-drawn `renderWeekToCanvas` exporters
+  were **removed** — do not bring them back (they drifted from the card, inventing
+  blue `週次資訊`/`會眾項目` bands). Excel still uses `exportWeeksXlsx` (data path).
+  ImportPage filters `existingWeeks` by the 範圍 selector and needs `getAssign`.
 
 ### PWA / service worker
 

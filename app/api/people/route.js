@@ -34,7 +34,7 @@ export async function GET(request) {
     const decoded = await verifyIdToken(request);
     const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
     if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
-    // Read is allowed for everyone in the congregation (viewers see people too).
+    if (!canEdit(user.role)) return NextResponse.json({ error: '訪客無法存取' }, { status: 403 });
 
     const people = await db.person.findMany({
       where: { congregationId: user.congregationId },

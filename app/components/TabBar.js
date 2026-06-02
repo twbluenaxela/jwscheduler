@@ -25,7 +25,7 @@ export default function TabBar({ page, setPage, role }) {
     },
   ];
 
-  const visible = items.filter((i) => canEdit || i.id !== 'import');
+  const visible = items.filter((i) => canEdit || (i.id !== 'import' && i.id !== 'people'));
 
   return (
     <nav className="tabbar" style={{ gridTemplateColumns: `repeat(${visible.length}, 1fr)` }}>

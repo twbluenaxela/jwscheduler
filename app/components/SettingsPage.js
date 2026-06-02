@@ -125,16 +125,10 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
 
   const roleLabel = (r) => (r === 'SYSADMIN' ? '系統管理員' : r === 'ADMIN' ? '管理員' : '檢視者');
 
-  return (
-    <section>
-      <div className="toolbar">
-        <span className="toolbar__title">設定</span>
-        <button className="btn" onClick={() => signOut(auth)}>登出</button>
-      </div>
-
-      {/* ── My profile ── */}
+  const profileCard = (
+    <>
       <h3 className="settings-h" style={{ marginBottom: 10 }}>我的資訊</h3>
-      <div className="settings-card" style={{ marginBottom: 24, maxWidth: 480 }}>
+      <div className="settings-card">
         <div className="settings-row">
           <span className="settings-row__label">顯示名稱</span>
           <input
@@ -157,22 +151,36 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
           {nameStatus === 'err' && <span className="settings-save-err">儲存失敗，請重試</span>}
         </div>
       </div>
+    </>
+  );
 
+  return (
+    <section>
+      <div className="toolbar">
+        <span className="toolbar__title">設定</span>
+        <button className="btn" onClick={() => signOut(auth)}>登出</button>
+      </div>
+
+      {/* Viewers: just profile + their role */}
       {!isAdmin && (
-        <div className="settings-card" style={{ maxWidth: 480 }}>
-          <div className="settings-row">
-            <span className="settings-row__label">你的身份</span>
-            <span className="settings-badge">{roleLabel(dbUser?.role)}</span>
+        <div style={{ maxWidth: 480 }}>
+          {profileCard}
+          <div className="settings-card" style={{ marginTop: 16 }}>
+            <div className="settings-row">
+              <span className="settings-row__label">你的身份</span>
+              <span className="settings-badge">{roleLabel(dbUser?.role)}</span>
+            </div>
+            <p className="settings-hint" style={{ marginTop: 8 }}>你是唯讀檢視者，編排權限由管理員授予。</p>
           </div>
-          <p className="settings-hint" style={{ marginTop: 8 }}>你是唯讀檢視者，編排權限由管理員授予。</p>
         </div>
       )}
 
-      {/* ── Congregation info + members (admin only) ── */}
+      {/* ── Admin: profile + congregation (left) · schedule (top-right) · members ── */}
       {isAdmin && (<>
       <div className="settings-grid">
         <div className="settings-section">
-          <h3 className="settings-h">會眾資訊</h3>
+          {profileCard}
+          <h3 className="settings-h" style={{ marginTop: 20 }}>會眾資訊</h3>
           <div className="settings-card">
             <div className="settings-row">
               <span className="settings-row__label">會眾名稱</span>
@@ -186,7 +194,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
             </div>
             <div className="settings-row">
               <span className="settings-row__label">你的身份</span>
-              <span className={`settings-badge ${dbUser?.role === 'ADMIN' ? 'settings-badge--admin' : ''}`}>
+              <span className={`settings-badge ${(dbUser?.role === 'ADMIN' || dbUser?.role === 'SYSADMIN') ? 'settings-badge--admin' : ''}`}>
                 {roleLabel(dbUser?.role)}
               </span>
             </div>
@@ -291,7 +299,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
               <div className="settings-member__name">{m.displayName || m.email}</div>
               <div className="settings-member__email">{m.displayName ? m.email : ''}</div>
             </div>
-            {isAdmin && m.id !== dbUser?.id ? (
+            {isAdmin && m.id !== dbUser?.id && m.role !== 'SYSADMIN' ? (
               <select
                 className="settings-role-select"
                 value={m.role === 'ADMIN' ? 'ADMIN' : 'VIEWER'}
@@ -302,7 +310,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
                 <option value="VIEWER">檢視者</option>
               </select>
             ) : (
-              <span className={`settings-badge ${m.role === 'ADMIN' ? 'settings-badge--admin' : ''}`}>
+              <span className={`settings-badge ${(m.role === 'ADMIN' || m.role === 'SYSADMIN') ? 'settings-badge--admin' : ''}`}>
                 {roleLabel(m.role)}
               </span>
             )}

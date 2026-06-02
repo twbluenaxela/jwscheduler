@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
+import { canEdit } from '../../../lib/roles.mjs';
 
 function mapPart(part, weekId, assignmentMap) {
   const slotBase = `mw${weekId}_${part.partKey}`;
@@ -122,7 +123,8 @@ export async function GET(request) {
         meetingTime: congregation.meetingTime,
         exceptions: congregation.exceptions,
       },
-      people: congregation.people.map(mapPerson),
+      // Viewers don't get the 人員 page, so they don't get the roster either.
+      people: canEdit(user.role) ? congregation.people.map(mapPerson) : [],
       midweekWeeks: congregation.weeks.map(mapWeek),
       weekendRows: congregation.weekendRows.map(mapWeekendRow),
     });

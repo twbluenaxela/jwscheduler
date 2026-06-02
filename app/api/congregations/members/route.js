@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
-import { ASSIGNABLE_MEMBER_ROLES, canManageCongregation } from '../../../lib/roles.mjs';
+import { ASSIGNABLE_MEMBER_ROLES, canManageCongregation, isSysadmin } from '../../../lib/roles.mjs';
 
 // PATCH /api/congregations/members  { userId, role } — admin sets a member's role
 // (e.g. demote to GUEST / promote to MEMBER or ADMIN).
@@ -22,6 +22,8 @@ export async function PATCH(request) {
     if (!target) return NextResponse.json({ error: '找不到成員' }, { status: 404 });
     // Guard against an admin locking themselves out of admin.
     if (target.id === actor.id) return NextResponse.json({ error: '無法變更自己的角色' }, { status: 400 });
+    // A congregation admin cannot change a sysadmin's role.
+    if (isSysadmin(target.role)) return NextResponse.json({ error: '無法變更系統管理員的角色' }, { status: 403 });
 
     const updated = await db.user.update({
       where: { id: target.id },

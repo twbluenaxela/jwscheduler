@@ -13,6 +13,7 @@ import SettingsPage from './components/SettingsPage';
 import AssignSheet from './components/AssignSheet';
 import Toast from './components/Toast';
 import { midweekWeeks as seedWeeks, weekendData as seedWeekendData } from './data/index';
+import { buildPastHistory } from './lib/pastHistory.mjs';
 
 const DAY_NAMES = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
 
@@ -176,9 +177,9 @@ export default function App() {
     if (saved) try { setCongSettings(JSON.parse(saved)); } catch {}
   }, []);
 
-  // Viewers are read-only: they can't open the import/export (editing) page.
+  // Viewers are read-only: they can't open the import/export or 人員 pages.
   useEffect(() => {
-    if (!canEdit && page === 'import') setPage('meetings');
+    if (!canEdit && (page === 'import' || page === 'people')) setPage('meetings');
   }, [canEdit, page]);
 
   // Auth-driven navigation — must run in an effect, never during render.
@@ -718,6 +719,7 @@ export default function App() {
           onPick={onPick}
           onClose={() => setSheet(null)}
           people={people}
+          pastHistory={buildPastHistory(midweekWeeks, assignments, weekendRows)}
         />
       )}
 
