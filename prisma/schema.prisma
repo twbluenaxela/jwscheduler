@@ -26,6 +26,7 @@ model Congregation {
   weeks           MidweekWeek[]
   weekendRows     WeekendRow[]
   people          Person[]
+  changeLogs      ChangeLog[]
 }
 
 model User {
@@ -121,6 +122,26 @@ model LinePendingLink {
   lineUserId     String   @id
   congregationId Int
   createdAt      DateTime @default(now())
+}
+
+// ── Recent-changes log (總覽 ▸ 最近變更) ──────────────────────────────────────
+// Append-only record of assignment edits (midweek + weekend), independent of
+// LINE/publish. Written best-effort by /api/assignments and /api/weekend-rows/[id].
+
+model ChangeLog {
+  id             Int          @id @default(autoincrement())
+  congregationId Int
+  congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  slotId         String
+  date           String       // meeting date string, e.g. "6月 3日" or "8/9"
+  label          String       // role, e.g. "主席", "初次交談（學生）", "公眾演講"
+  name           String?      // new assignee (null when cleared)
+  prevName       String?      // previous assignee
+  action         String       // "assign" | "clear" | "reassign"
+  actorName      String?      // who made the change
+  createdAt      DateTime     @default(now())
+
+  @@index([congregationId, createdAt])
 }
 
 // ── Weekend meetings ──────────────────────────────────────────────────────────

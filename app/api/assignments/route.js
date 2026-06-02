@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../lib/firebase-admin';
 import db from '../../lib/db';
+import { describeMidweekSlot, logChange } from '../../lib/changelog.mjs';
 
 export async function POST(request) {
   try {
@@ -18,8 +19,12 @@ export async function POST(request) {
 
     const week = await db.midweekWeek.findFirst({
       where: { id: weekId, congregationId: user.congregationId },
+      include: { parts: true },
     });
     if (!week) return NextResponse.json({ error: '找不到週次或無權限' }, { status: 403 });
+
+    const before = await db.assignment.findUnique({ where: { slotId } });
+    const prevName = before?.name ?? '';
 
     if (!name) {
       await db.assignment.deleteMany({ where: { slotId } });
@@ -30,6 +35,17 @@ export async function POST(request) {
         update: { name },
       });
     }
+
+    const slot = describeMidweekSlot(week, slotId);
+    await logChange(db, {
+      congregationId: user.congregationId,
+      slotId,
+      date: slot?.date ?? week.date,
+      label: slot?.label ?? slotId,
+      prevName,
+      name: name ?? '',
+      actorName: user.displayName,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

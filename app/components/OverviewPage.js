@@ -1,5 +1,83 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { getToken } from '../lib/auth-context';
+
+function formatChangeTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function ChangesPanel() {
+  const [entries, setEntries] = useState(null); // null = not loaded yet
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/changelog', { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '無法載入變更記錄');
+      setEntries(data.entries);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <div className="cl-wrap">
+      <div className="cl-head">
+        <span className="cl-head__title">最近的指派變更</span>
+        <button className="ov-reset-btn" onClick={load} disabled={loading}>
+          {loading ? '載入中…' : '↻ 重新整理'}
+        </button>
+      </div>
+
+      {error && <div className="imp-error">{error}</div>}
+
+      {!error && entries && entries.length === 0 && (
+        <div className="people-empty">目前還沒有任何指派變更記錄。</div>
+      )}
+
+      {entries && entries.length > 0 && (
+        <div className="cl-list">
+          {entries.map((e) => (
+            <div key={e.id} className={`cl-row cl-row--${e.action}`}>
+              <span className="cl-time">{formatChangeTime(e.createdAt)}</span>
+              <span className="cl-body">
+                {e.action === 'clear' ? (
+                  <>
+                    <b className="cl-tag cl-tag--clear">清除</b>
+                    <span className="cl-where">{e.date}　{e.label}</span>
+                    {e.prevName && <small className="cl-prev">（原：{e.prevName}）</small>}
+                  </>
+                ) : (
+                  <>
+                    <b className="cl-name">{e.name}</b>
+                    <span className="cl-arrow">→</span>
+                    <span className="cl-where">{e.date}　{e.label}</span>
+                    {e.action === 'reassign' && e.prevName && (
+                      <small className="cl-prev">（原：{e.prevName}）</small>
+                    )}
+                  </>
+                )}
+              </span>
+              {e.actorName && <span className="cl-actor">{e.actorName}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const TYPE_BADGE = {
   mw: <span className="ov-type ov-type--mw">聚會</span>,
@@ -207,6 +285,7 @@ function OvToast({ toast, onHide }) {
 }
 
 export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false }) {
+  const [tab, setTab] = useState('schedule'); // 'schedule' | 'changes'
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('upcoming');
   const [showPast, setShowPast] = useState(false);
@@ -264,22 +343,35 @@ export default function OverviewPage({ midweekWeeks = [], weekendRows = [], load
   return (
     <section className="ov-section">
       <div className="toolbar">
-        <span className="toolbar__title">總覽 · 會眾資料</span>
-        <div className="toolbar__spacer" />
-        <div className="chips" role="group">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              className={`chip${f === 'gap' ? ' chip--alert' : ''}`}
-              aria-pressed={filter === f ? 'true' : 'false'}
-              onClick={() => setFilter(f)}
-            >
-              {FILTER_LABELS[f]}
-            </button>
-          ))}
+        <div className="tabs" role="tablist">
+          <button className="tab" role="tab"
+            aria-selected={tab === 'schedule' ? 'true' : 'false'}
+            onClick={() => setTab('schedule')}>安排</button>
+          <button className="tab" role="tab"
+            aria-selected={tab === 'changes' ? 'true' : 'false'}
+            onClick={() => setTab('changes')}>最近變更</button>
         </div>
+        <div className="toolbar__spacer" />
+        {tab === 'schedule' && (
+          <div className="chips" role="group">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                className={`chip${f === 'gap' ? ' chip--alert' : ''}`}
+                aria-pressed={filter === f ? 'true' : 'false'}
+                onClick={() => setFilter(f)}
+              >
+                {FILTER_LABELS[f]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
+      {tab === 'changes' && <ChangesPanel />}
+
+      {tab === 'schedule' && (
+      <>
       <div className="ov-controls">
         <div className="ov-sort-group">
           {SORTS.map((s) => (
@@ -379,6 +471,8 @@ export default function OverviewPage({ midweekWeeks = [], weekendRows = [], load
           </SwipeRow>
         ))}
       </div>
+      </>
+      )}
 
       <OvToast toast={toast} onHide={() => setToast(null)} />
     </section>
