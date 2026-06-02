@@ -1,7 +1,8 @@
 'use client';
 
-export default function TabBar({ page, setPage, role }) {
+export default function TabBar({ page, setPage, role, onAdmin }) {
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
+  const isSysadmin = role === 'SYSADMIN';
   const items = [
     {
       id: 'meetings', label: '本週',
@@ -26,6 +27,12 @@ export default function TabBar({ page, setPage, role }) {
   ];
 
   const visible = items.filter((i) => canEdit || (i.id !== 'import' && i.id !== 'people'));
+  if (isSysadmin && onAdmin) {
+    visible.push({
+      id: 'admin', label: '管理', isAdmin: true,
+      icon: <svg viewBox="0 0 24 24" className="navicon"><path d="M12 3l7 3v6c0 4-3 6.5-7 9-4-2.5-7-5-7-9V6z"/></svg>,
+    });
+  }
 
   return (
     <nav className="tabbar" style={{ gridTemplateColumns: `repeat(${visible.length}, 1fr)` }}>
@@ -34,7 +41,7 @@ export default function TabBar({ page, setPage, role }) {
           key={item.id}
           className="tabbar__item"
           aria-current={page === item.id ? 'true' : 'false'}
-          onClick={() => setPage(item.id)}
+          onClick={() => (item.isAdmin ? onAdmin() : setPage(item.id))}
         >
           {item.icon}
           <span>{item.label}</span>

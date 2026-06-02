@@ -20,7 +20,7 @@ function sanitizeFilename(value) {
 }
 
 function getWeekLabel(week) {
-  return week?.dateLabel || week?.date || '本週聚會';
+  return week?.dateLabel || week?.date || '週中聚會';
 }
 
 function getAssignName(week, getAssign, slotId, fallback = '') {
@@ -108,7 +108,7 @@ function getRowDefinitions(week, getAssign) {
 
 function formatRowsForExcel(week, getAssign) {
   const rows = [];
-  rows.push(['本週聚會', getWeekLabel(week), '', '', '', '']);
+  rows.push(['週中聚會', getWeekLabel(week), '', '', '', '']);
   rows.push(['時間', '區段', '項目', '指派', '時長', '備註']);
 
   getRowDefinitions(week, getAssign).forEach((row) => {
@@ -199,7 +199,13 @@ function buildXlsxBuffer(rows) {
   <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
 </styleSheet>`);
   zip.file('xl/worksheets/sheet1.xml', buildSheetXml(rows));
-  return zip.generateAsync({ type: 'blob' });
+  // Tag the blob with the real spreadsheet MIME type. Without it the download
+  // carries no content-type and mobile file handlers open it as a raw zip of
+  // XML parts instead of in a spreadsheet app.
+  return zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
 }
 
 export function getMidweekExportFilename(week, ext) {

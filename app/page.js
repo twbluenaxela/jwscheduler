@@ -722,7 +722,7 @@ export default function App() {
           )}
         </div>
       </div>
-      <TabBar page={page} setPage={setPage} role={role} />
+      <TabBar page={page} setPage={setPage} role={role} onAdmin={() => router.push('/admin')} />
 
       {sheet && (
         <AssignSheet

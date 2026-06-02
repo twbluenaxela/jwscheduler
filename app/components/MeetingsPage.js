@@ -227,7 +227,7 @@ export default function MeetingsPage({
     <div className="tabs" role="tablist">
       <button className="tab" role="tab"
         aria-selected={view === 'midweek' ? 'true' : 'false'}
-        onClick={() => setView('midweek')}>聚會</button>
+        onClick={() => setView('midweek')}>週中</button>
       <button className="tab" role="tab"
         aria-selected={view === 'weekend' ? 'true' : 'false'}
         onClick={() => setView('weekend')}>週末</button>

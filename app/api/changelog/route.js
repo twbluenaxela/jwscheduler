@@ -23,3 +23,21 @@ export async function GET(request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+// Clear all recent-change entries for the caller's congregation.
+export async function DELETE(request) {
+  try {
+    const decoded = await verifyIdToken(request);
+    const user = await db.user.findUnique({ where: { firebaseUid: decoded.uid } });
+    if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
+    if (!canManageCongregation(user.role)) return NextResponse.json({ error: '需要管理員權限' }, { status: 403 });
+
+    const { count } = await db.changeLog.deleteMany({
+      where: { congregationId: user.congregationId },
+    });
+
+    return NextResponse.json({ deleted: count });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

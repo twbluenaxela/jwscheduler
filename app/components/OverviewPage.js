@@ -21,7 +21,6 @@ function ChangesPanel() {
       const token = await getToken();
       const res = await fetch('/api/changelog', { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      console.log("Changelog data from")
       if (!res.ok) throw new Error(data.error || '無法載入變更記錄');
       setEntries(data.entries);
     } catch (err) {
@@ -54,12 +53,25 @@ function ChangesPanel() {
     alert('複製失敗，請手動複製。');
   }
 };
-// --- 新增的清除功能 (Clear Logs) ---
+// --- 清除功能 (Clear Logs) — removes them from the DB too ---
 const handleClearLogs = async () => {
-  if (!confirm('確定要清除所有變更紀錄嗎？')) return;
-  // 1. Clears them from the screen immediately
-  setEntries([]);
-
+  if (!confirm('確定要清除所有變更紀錄嗎？此操作無法復原。')) return;
+  const snapshot = entries;
+  setEntries([]); // optimistic
+  try {
+    const token = await getToken();
+    const res = await fetch('/api/changelog', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || '清除失敗');
+    }
+  } catch (err) {
+    setEntries(snapshot); // rollback
+    alert(err.message || '清除失敗，請稍後再試。');
+  }
 };
 
   return (
