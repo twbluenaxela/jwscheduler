@@ -112,9 +112,10 @@ These apply when Claude Code works on this repo.
 
 ### State ownership
 
-All interactive state stays flat in `app/page.js`. Do not introduce React Context, Zustand, or any other state manager. Two local-state exceptions are fine:
+All interactive state stays flat in `app/page.js`. Do not introduce React Context, Zustand, or any other state manager. Local-state exceptions are fine for ephemeral UI state:
 - `ImportPage` owns `stage` / `parsedWeeks` / `error` — transient import state
 - `WeekPicker` (inside `MeetingsPage.js`) owns its `open` boolean — ephemeral UI state
+- `MidweekWeek` owns `hiddenHelpers` (Set of partIds) — which pair-role parts are showing single slot; resets on week change
 
 ### CSS convention
 
@@ -206,6 +207,11 @@ acceptSuggestion(slotId, name)      ← ghost pill ✓ button
 acceptAllSuggestions(prefix)        ← toolbar 接受全部
   → batch: setAssignments + persist all + single undo toast
 
+clearSlot(slotId)                   ← pair-toggle-btn − in edit mode
+  → deletes slotId from assignments state
+  → POST /api/assignments { slotId, name: '' }  (clears helper assignment in DB)
+  → no toast (silent; called from the ＋/− toggle button in PartRow)
+
 GET /api/congregations/data (on mount)
   → returns { midweekWeeks, weekendRows, people, congregation }
   → all set into React state; week auto-set via findCurrentWeekIndex
@@ -213,6 +219,20 @@ GET /api/congregations/data (on mount)
 ```
 
 **All data is now persisted to DB.** No remaining "state only" items.
+
+### Ministry/CBS pair-role slots
+
+Parts with a `/` in their `roleLabel` (ministry `學生/助手`, CBS `主持/朗讀`) always
+expose two assignment slots — `_0` for the first role, `_1` for the second. This is
+enforced in `mapPart` in both `api/congregations/data/route.js` and
+`api/midweek-weeks/import/route.js`: instead of `.filter(Boolean)`, they return
+`[s0, s1]` (with `''` for unassigned slots). **Do not revert to filter(Boolean)** for
+these parts — it collapses both empty slots to `[]`, which makes `PartRow` render only
+one slot and hides the helper field entirely.
+
+`PairSlot` receives a `roleLabels` array (split from `roleLabel`) to label each slot
+correctly in the AssignSheet context label. In edit mode, `PartRow` shows a `pair-toggle-btn`
+(＋/−) to show or hide the helper slot; hiding also calls `clearSlot` to remove the DB record.
 
 ### WeekendRow `type` values
 

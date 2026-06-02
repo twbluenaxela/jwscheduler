@@ -16,7 +16,6 @@ const EXPORT_ITEMS = [
   { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組', action: 'jpg' },
   { ic: '▭', label: '複製圖片到剪貼簿', action: 'copy' },
   { ic: '✎', label: '複製文字', sub: '手動貼到 LINE 群組', action: 'text' },
-  { ic: '↻', label: '複製更新文字', sub: '只複製自上次發布後的變更', action: 'changes' },
   null,
   { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
   { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
@@ -90,7 +89,7 @@ function WeekPicker({ weeks, currentWeek, onSelect }) {
 
 function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, menuRef }) {
   const handleExport = async (type) => {
-    if (type !== 'changes' && !week) return;
+    if (!week) return;
     setExportOpen(false);
     try {
       const captureOpts = { pixelRatio: 2, skipFonts: false };
@@ -117,18 +116,6 @@ function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, me
         if (!navigator.clipboard?.writeText) throw new Error('目前瀏覽器不支援複製文字。');
         await navigator.clipboard.writeText(text);
         window.alert('已複製本週節目文字，可貼到 LINE 群組。');
-      } else if (type === 'changes') {
-        if (!navigator.clipboard?.writeText) throw new Error('目前瀏覽器不支援複製文字。');
-        const token = await getToken();
-        const res = await fetch('/api/meetings/changes', { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || '無法取得更新內容');
-        if (!data.text) {
-          window.alert(data.hasBaseline ? '自上次發布後沒有任何變更。' : '尚未發布過任何通知，沒有可比較的基準。');
-          return;
-        }
-        await navigator.clipboard.writeText(data.text);
-        window.alert(`已複製更新內容（新增 ${data.addedCount}、取消 ${data.removedCount}），可貼到 LINE 群組。`);
       } else if (type === 'pdf') {
         // Generate the PDF entirely client-side and download it directly —
         // no print dialog / popup (which browsers block).
@@ -182,7 +169,7 @@ export default function MeetingsPage({
   weekendFilter, setWeekendFilter, weekendRows,
   weekendEditMode, setWeekendEditMode,
   addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField,
-  getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, setPage,
+  getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, clearSlot, setPage,
   getSuggestion, onAccept, onClear,
   suggestions = {}, fetchMidweekSuggestions, acceptAllSuggestions, clearSuggestions,
   fetchWeekendSuggestions,
@@ -357,6 +344,7 @@ export default function MeetingsPage({
                 getSuggestion={getSuggestion}
                 onAccept={onAccept}
                 onClear={onClear}
+                clearSlot={clearSlot}
               />
             </>
           )}

@@ -454,6 +454,12 @@ body { padding-bottom: 64px; }
   border-radius: 999px; padding: 2px 6px 2px 8px;
   color: var(--accent); font-style: italic; font-size: 13px; font-weight: 700;
 }
+.pair-toggle-btn {
+  appearance: none; border: 1px dashed var(--line-2); background: transparent; cursor: pointer;
+  font-size: 13px; font-weight: 800; color: var(--ink-3); padding: 0 5px; border-radius: 5px;
+  margin-left: 4px; line-height: 1.6; transition: all .12s ease; flex-shrink: 0;
+}
+.pair-toggle-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .we-add-tr td { padding: 10px 16px !important; background: var(--surface-2) !important; border-top: 1px dashed var(--line-2) !important; }
 .we-add-btn {
   appearance: none; border: 1px dashed var(--line-2); background: transparent; cursor: pointer;
@@ -579,8 +585,22 @@ body { padding-bottom: 64px; }
 .people-kpi__label { font-size: 12px; font-weight: 700; color: var(--ink-3); }
 .people-kpi__value { font-size: 24px; line-height: 1; font-weight: 900; }
 .people-subtitle { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 14px; }
-.people-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 14px; align-items: start; }
+.people-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+  gap: 14px;
+  align-items: start;
+  transition: grid-template-columns .4s cubic-bezier(.4, 0, .2, 1);
+}
+/* No card selected: collapse the detail column and recenter the list */
+.people-layout--solo { grid-template-columns: minmax(0, 1fr) minmax(0, 0fr); }
+.people-layout--solo .people-list { margin-inline: auto; }
 .people-detail--inline { grid-column: 1 / -1; margin: 2px 0 4px; border-color: var(--accent); box-shadow: 0 0 0 1px rgba(47,111,143,.14), var(--shadow); }
+.people-detail { animation: people-detail-in .28s cubic-bezier(.4, 0, .2, 1); }
+@keyframes people-detail-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: none; }
+}
 .people-detail {
   background: var(--surface);
   border: 1px solid var(--line);

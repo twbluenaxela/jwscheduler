@@ -58,7 +58,13 @@ app/
                              body: { weekId, assignments: {[slotId]:name} }
     meetings/publish/  — POST: diff current vs publishedSnapshot (future weeks only),
                          push LINE messages for changed assignments (midweek + weekend),
-                         save new snapshot
+                         save new snapshot. Snapshot covers ALL assigned names (not just
+                         LINE-linked people) so meetings/changes has a complete baseline.
+    meetings/changes/  — GET: read-only group-wide change summary (admin only). Diffs the
+                         current schedule against publishedSnapshot (future-only) for every
+                         assigned-or-previously-snapshotted name; returns
+                         { text, addedCount, removedCount, hasBaseline }. Sends nothing,
+                         saves nothing. Powers the 複製更新文字 export-menu item.
     line/webhook/      — POST: LINE Messaging API webhook; two-step registration flow
                          (congregation name → person name) + user commands (see below)
   data/
@@ -76,47 +82,78 @@ app/
     epubParser.js      — client-side EPUB parser; exports parseEpub(file) → week[]
     midweekExport.js   — JPG/Excel/PDF/text export. `jpegImagesToPdfBlob()` builds
                          a multi-page PDF entirely in-browser (baseline-JPEG embed via
-                         DCTDecode, A4 fit) — no print dialog / popup; `buildWeekText()`
-                         = plain-text week schedule for pasting into LINE; `triggerDownload()`
-                         = blob → download anchor; `exportWeeks{Jpeg,Pdf,Xlsx}` +
-                         `openWeeksPrintWindow` = multi-week (range) exports for ImportPage
+                         DCTDecode) — each page is sized to its image's aspect ratio so the
+                         card fills the page edge-to-edge (no A4 letterbox), no print dialog;
+                         `buildWeekText()` = plain-text week schedule for pasting into LINE;
+                         `triggerDownload()` = blob → download anchor; `downloadWeekXlsx` /
+                         `exportWeeksXlsx` = Excel (single / multi-week). Multi-week visual
+                         exports are DOM-screenshot based: `exportNodes{Jpeg,Pdf}` +
+                         `openNodesPrintWindow` take rendered MidweekWeek card nodes and
+                         capture them via html-to-image, so the output matches the live card
+                         exactly. (The old hand-drawn `renderWeekToCanvas` exporters were
+                         removed — they had drifted from the real card; see "What NOT to do".)
     suggest.js         — pure recency-scoring suggestion engine (no DB, no fetch);
                          exports suggestWeekendRow(people, pastRows, existing) and
                          suggestMidweekWeek(people, week, existingAssignments, pastHistory)
     icalExport.js      — pure iCal (.ics) generator; exports generateIcal(assignments,
                          personName, congCode) → RFC-5545 string and downloadIcal(str, filename)
+    assignments.mjs    — pure, DB-free date + assignment helpers shared by line/webhook,
+                         meetings/publish, meetings/changes (parseCnDate, collectAssignments,
+                         collectAssignedNames, itemKey, diffChanges, buildChangesText).
+                         `.mjs` so Node can unit-test it (assignments.test.mjs / `npm test`)
   components/
     Sidebar.js         — desktop left nav (shows congregation name + scheduleStats vacancy card)
     TopBar.js          — mobile top bar
     TabBar.js          — mobile bottom tab bar (5 items: grid-template-columns: repeat(5, 1fr))
     MeetingsPage.js    — midweek/weekend tab switcher; both tabs share same toolbar
                          pattern (edit toggle, add row, 發布通知); export menu on midweek only
-                         (匯出 JPG / 複製圖片 / 複製文字 / 匯出 Excel / 下載 PDF — PDF
-                         downloads silently, no print popup); ✦ suggest button in midweek
-                         navstrip + weekend per-row; batch 接受全部/清除建議 toolbar
-                         buttons when ghost suggestions exist
+                         (匯出 JPG / 複製圖片 / 複製文字 / 複製更新文字 / 匯出 Excel / 下載 PDF
+                         — PDF downloads silently, no print popup; 複製更新文字 fetches
+                         GET /api/meetings/changes and copies the group-wide diff since last
+                         發布); ✦ suggest button in midweek navstrip + weekend per-row; batch
+                         接受全部/清除建議 toolbar buttons when ghost suggestions exist
     MidweekWeek.js     — single midweek week card (WhoSlot / PairSlot); WhoSlot renders
-                         ghost pill when getSuggestion(slotId) returns a name
+                         ghost pill when getSuggestion(slotId) returns a name;
+                         `isPair` driven by `roleLabel?.includes('/')` (NOT assign.length)
+                         so ministry (學生/助手) and CBS (主持/朗讀) always show two slots
+                         even when both are empty; PairSlot accepts `roleLabels` prop to
+                         label each slot correctly; edit mode shows a `pair-toggle-btn`
+                         (＋/−) per pair-capable part to add/remove the helper slot —
+                         removing calls `clearSlot` (from page.js via MeetingsPage) to
+                         clear the _1 assignment; `hiddenHelpers` Set in local state
+                         tracks which parts show single slot (resets on week change)
     WeekendView.js     — weekend schedule table/cards; filter chips (未來/本月/半年/全部)
                          + year selector (auto-shown when multiple years present);
                          slot IDs use r._id (DB row id) not array index;
                          editMode prop enables inline editing of all text fields + row
                          type toggle (schedule/special/event/suspended) + ✦ suggest + delete;
-                         NamePill renders ghost pill for unconfirmed suggestions
+                         NamePill renders ghost pill for unconfirmed suggestions;
+                         ＋ 新增安排 / ＋ 新增事項 live at the BOTTOM as a `<tfoot>` row
+                         (desktop) and dashed card (mobile) — NOT in the toolbar; new
+                         rows auto-scroll into view via `bottomRef` + useEffect on
+                         `weekendRows.length`
     OverviewPage.js    — overview list with sort (最近/最緊迫/最早), past-items toggle
                          (hidden by default), swipe/button dismiss with undo toast + reset
     PeoplePage.js      — congregation member list; 近期指派 shows 3 most-recent by default
                          with expand button for full history; detail panel is sticky +
                          scrollable on desktop. On mobile (useIsMobile via matchMedia) the
                          detail renders INLINE directly under the selected person's card,
-                         not at the page bottom. Writes are serialized through a promise
-                         chain and the optimistic local state is authoritative (server PATCH
-                         response is NOT applied — see "What NOT to do"); delete button;
-                         "↓ iCal (N)" export button in 未來安排 section
+                         not at the page bottom. Selection toggles: click a card to open,
+                         click the same card again to deselect (selectedPerson has NO
+                         auto-fallback — "nothing selected" is a real state that hides the
+                         detail). When nothing is selected the list recenters via the
+                         `.people-layout--solo` modifier (animated grid-template-columns).
+                         Writes are serialized through a promise chain and the optimistic
+                         local state is authoritative (server PATCH response is NOT applied —
+                         see "What NOT to do"); delete button; "↓ iCal (N)" export button in
+                         未來安排 section
     ImportPage.js      — EPUB import + congregation schedule settings; the 匯出與分享 cards
                          are wired (JPG/Excel/PDF/列印) and scoped by a 範圍 selector
                          (全部 / 本月 / 自訂 month-day range); needs `getAssign` prop so
-                         exports reflect current assignments
+                         exports reflect current assignments. JPG/PDF/列印 render the
+                         selected weeks as REAL MidweekWeek cards in an off-screen container
+                         (cardRefs) and screenshot them via the `exportNodes*` helpers, so
+                         output matches the live card (Excel still uses the data path)
     SettingsPage.js    — ⚙ congregation info, invite link, members, schedule
     AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed
                          data); "✕ 留空此項" button clears a slot (leaves it unassigned)
@@ -333,17 +370,21 @@ exactly what's on screen:
 - **複製圖片** — `toPng` → `ClipboardItem`
 - **複製文字** — `buildWeekText(week, getAssign)` → `navigator.clipboard.writeText` (plain-text
   schedule for manually pasting into a LINE group)
+- **複製更新文字** — GET `/api/meetings/changes` → copies the group-wide change summary since
+  the last 發布 (新增/取消 per name). Read-only; sends nothing, changes no snapshot.
 - **下載 PDF** — `toJpeg` → `jpegDataUrlToImage` → `jpegImagesToPdfBlob([img])` → `triggerDownload`.
   Built entirely client-side and downloaded directly — **no print dialog/popup** (browsers block
-  those). Do not reintroduce the `window.open(...).print()` flow.
+  those). Each PDF page is sized to the image's aspect ratio (no A4 letterbox). Do not reintroduce
+  the `window.open(...).print()` flow.
 - **Excel** — custom `buildXlsxBuffer()` in `midweekExport.js` (JSZip)
 
-**Import/匯出 page (multi-week, range-scoped)** — the 匯出與分享 cards call `exportWeeksJpeg`
-(single → JPG, many → zip), `exportWeeksXlsx` (one workbook, weeks concatenated),
-`exportWeeksPdf` (one PDF page per week via `renderWeekToCanvas` → `jpegImagesToPdfBlob`), and
-`openWeeksPrintWindow`. These use `renderWeekToCanvas` (canvas, no DOM node needed) so they work
-off raw week data + `getAssign`. The 範圍 selector (全部/本月/自訂) filters `existingWeeks` by
-parsed Chinese date before exporting.
+**Import/匯出 page (multi-week, range-scoped)** — the 匯出與分享 cards call `exportNodesJpeg`
+(single → JPG, many → zip), `exportWeeksXlsx` (one workbook, weeks concatenated), `exportNodesPdf`
+(one PDF page per week), and `openNodesPrintWindow`. The visual exporters screenshot REAL
+MidweekWeek cards rendered off-screen (cardRefs) via `html-to-image`, so they match the live card
+exactly — they do NOT hand-redraw on canvas (the old `renderWeekToCanvas` path was removed). Excel
+still uses the `formatRowsForExcel` data path. The 範圍 selector (全部/本月/自訂) filters
+`existingWeeks` by parsed Chinese date before exporting.
 
 ---
 
@@ -369,13 +410,28 @@ Name lookup is always scoped to the selected congregation — no cross-congregat
 
 Unlinked users who send `說明`/`help` etc. receive registration instructions instead of the linked help text.
 
-### Date parsing in webhook and publish
+### Shared assignment/date logic (`app/lib/assignments.mjs`)
 
-Both `line/webhook` and `meetings/publish` use the same `parseCnDate()` that handles:
-- Chinese format: `"6月 3日"` 
+`line/webhook`, `meetings/publish`, and `meetings/changes` all import their date + assignment
+helpers from one pure, DB-free module — `parseCnDate`, `collectAssignments`, `collectAssignedNames`,
+`itemKey`, `diffChanges`, `buildChangesText`. (These were previously copy-pasted into each route,
+which let the role-label format drift; the changes route had the old format and would have flagged
+unchanged assignments as changed.) The module is `.mjs` so it's importable by both Next and Node.
+`now`/`today` are injectable for deterministic tests.
+
+`parseCnDate()` handles:
+- Chinese format: `"6月 3日"`
 - Slash format: `"8/9"` (used by weekend rows)
 
 Year is inferred relative to today with a ±6-month window to handle year boundaries.
+`collectAssignments` skips both `event` and `suspended` weekend rows and tags roles with their
+role label (學生/助手/主持/朗讀) + CBS textbook reference.
+
+### Tests
+
+`npm test` runs `node --test` (Node's built-in runner, no extra deps). `app/lib/assignments.test.mjs`
+covers the individual LINE query (`collectAssignments`), the group-wide diff (`diffChanges` /
+`buildChangesText`), date parsing, and wiring checks (複製更新文字 menu option + webhook query).
 
 ### Publish diff logic
 
@@ -384,7 +440,33 @@ Year is inferred relative to today with a ±6-month window to handle year bounda
 - Compares `current` vs `prevSnapshot[name]` filtered to future dates only (prevents "false cancellation" notifications when a past meeting date rolls over between two publishes)
 - First publish (`snapshot = null`): sends full upcoming list
 - Subsequent: sends only ✚ added / ✖ removed items; skips if no change
-- Saves new snapshot after sending
+- Saves new snapshot after sending. LINE messages go ONLY to linked active people, but the saved
+  snapshot covers EVERY assigned name (`collectAssignedNames` fills the rest) so the read-only
+  `GET /api/meetings/changes` group-wide diff has a complete baseline for non-LINE members too
+
+### Group-wide change summary (複製更新文字)
+
+`GET /api/meetings/changes` (admin only) — read-only sibling of publish. Reuses the same
+`parseCnDate` / `collectAssignments` / `itemKey` logic to diff the current schedule against
+`publishedSnapshot` (future-only) for every name in the current schedule OR the snapshot, then
+returns `{ text, addedCount, removedCount, hasBaseline }`. Sends no LINE messages and does NOT
+write a new snapshot, so it can be run any time without affecting publish state. The
+複製更新文字 export-menu item copies `text` for pasting into a LINE group.
+
+### Role labelling in notifications
+
+Both `line/webhook` and `meetings/publish` use `part.roleLabel` when formatting assignment role strings:
+
+```js
+const rls = part.roleLabel?.split('/') ?? [];  // e.g. ['學生','助手'] or ['主持','朗讀']
+const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
+// _0 slot: append (學生) / (主持) / nothing if no roleLabel
+// _1 slot: append (助手) / (朗讀) / (助手) fallback
+```
+
+- CBS assignments include the textbook reference: `會眾研經班（利未記 第1-7章）（主持）`
+- Reading/student parts show `（學生）`; helper slots show `（助手）` or the second roleLabel token
+- This matches the `PairSlot` labels shown in the UI
 
 ---
 
@@ -408,6 +490,11 @@ Year is inferred relative to today with a ±6-month window to handle year bounda
 - Do not overwrite `displayName` in `/api/auth/sync` update block — only set it on `create`. The settings page (`PATCH /api/users/me`) is the authoritative way to change display names
 - Do not apply the `PATCH /api/people/[id]` response back into local `people` state in `PeoplePage`. Rapid edits (e.g. toggling several quals quickly) fire overlapping PATCHes; an out-of-order/stale response would clobber newer optimistic state, making quals appear to "deselect on their own". Writes are serialized through a promise chain (`writeChainRef`) and the optimistic state is authoritative
 - Do not bring back the `window.open(...).print()` popup for PDF export — browsers block it. PDF is generated client-side with `jpegImagesToPdfBlob` and downloaded directly
+- Do not re-add a hand-drawn canvas renderer (`renderWeekToCanvas`) for the 匯出 page exports — it drifted from the real card (invented `週次資訊`/`會眾項目` bands, wrong section colours/blue accents). JPG/PDF/列印 must screenshot REAL off-screen `MidweekWeek` cards via `exportNodes{Jpeg,Pdf}` / `openNodesPrintWindow` so the output always matches the live card
+- Do not re-add an auto-fallback to `selectedPerson` in `PeoplePage` (e.g. `?? filteredPeople[0]`) — "nothing selected" must stay a real state so clicking a selected card can deselect/hide the detail and the list recenters (`.people-layout--solo`)
+- Do not move ＋ 新增安排 / ＋ 新增事項 back into the weekend toolbar — they belong at the bottom of the table (`<tfoot>`) and mobile card list so users can add rows without scrolling to the top
+- Do not use `assign.length === 2` to determine `isPair` in `PartRow` — use `roleLabel?.includes('/')`. The assign array collapses to `[]` when no assignments exist (filter strips empty strings), which would incorrectly show only one slot for ministry/CBS parts
+- Do not filter out empty strings in `mapPart` for parts where `roleLabel?.includes('/')` — those parts must always return `[s0, s1]` (with `''` for unassigned) so the helper slot is always visible
 
 ---
 
@@ -420,7 +507,7 @@ Year is inferred relative to today with a ±6-month window to handle year bounda
 | **Phase 2B — Data persistence** | Done — midweek assignments persist via `POST /api/assignments`; week/part edits persist via `PATCH /api/midweek-weeks/[id]` (saves week fields + all parts in one transaction when edit mode is toggled off); delete week via `DELETE /api/midweek-weeks/[id]` (admin only); weekend rows: create via `POST /api/weekend-rows`, field edits via `PATCH /api/weekend-rows/[id]`, delete via `DELETE /api/weekend-rows/[id]`; all load on mount |
 | **Phase 2C — Deployment** | Done — live at https://jwscheduler.fly.dev/ on fly.io (Amsterdam). Dockerfile + fly.toml committed. No release command (Neon cold-start timed it out); `prisma db push` run manually. Admin SDK creds via `FIREBASE_SERVICE_ACCOUNT` secret. |
 | **Phase 3 — Notifications** | Done — LINE Messaging API integrated. Two-step registration (congregation name → person name) with multi-congregation safety. `LinePendingLink` table tracks mid-flow state. Webhook at `/api/line/webhook`; publish at `/api/meetings/publish` with future-only diff logic covering both midweek and weekend rows. User commands: `我的安排` (query), `說明` (help). Env vars: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_CHANNEL_SECRET`. |
-| **Phase 3B — Weekend edit mode** | Done — weekend view has a full matching toolbar (edit toggle, ＋ 新增安排, ＋ 新增事項, 發布通知). Edit mode: inline inputs for all text fields, type toggle chips (正常/特別/暫停) for row colour coding (special=red schedule row, suspended=red event row), delete buttons. All changes persist to DB. |
+| **Phase 3B — Weekend edit mode** | Done — weekend view has a full matching toolbar (edit toggle, 發布通知). Add-row buttons (＋ 新增安排 / ＋ 新增事項) are in the table footer and mobile card list, not the toolbar. Edit mode: inline inputs for all text fields, type toggle chips (正常/特別/暫停) for row colour coding (special=red schedule row, suspended=red event row), delete buttons. All changes persist to DB. |
 | **Phase 4 — Suggestions** | Done — recency-scoring algorithm in `app/lib/suggest.js` (no AI). Ghost pills (dashed blue border, italic) for unconfirmed suggestions. ✦ button in midweek navstrip fills all empty slots; ✦ button per weekend row fills speaker/chair/wt/read. 接受全部/清除建議 toolbar batch actions. Ghosts clear on edit-mode exit and week navigation. Part-ID bug fix (p.dbId not p.id). Weekend row default date = last row + 7 days. |
 | **Phase 5 — iCal Export** | Done — `app/lib/icalExport.js` generates RFC-5545 `.ics` (Taiwan UTC+8, stable UIDs, 1h45m events). "↓ iCal (N)" button in PeoplePage 未來安排 section downloads `{name}-schedule.ics` for import into Outlook/Google Calendar/Apple Calendar. |
-| **Phase 6 — PWA + UX polish** | Done — installable PWA (`app/manifest.js` + `public/sw.js` network-first worker + `PWARegister`, themeColor/apple-web-app meta in `layout.js`). Plus: clear/留空 button in AssignSheet; serialized people writes (quals no longer self-deselect); mobile people detail renders inline under the tapped card; mobile row dot+partnum no longer squished; silent client-side PDF + 複製文字 in meetings export menu; wired ImportPage 匯出 cards with 全部/本月/自訂 range. |
+| **Phase 6 — PWA + UX polish** | Done — installable PWA (`app/manifest.js` + `public/sw.js` network-first worker + `PWARegister`, themeColor/apple-web-app meta in `layout.js`). Plus: clear/留空 button in AssignSheet; serialized people writes (quals no longer self-deselect); mobile people detail renders inline under the tapped card; mobile row dot+partnum no longer squished; silent client-side PDF + 複製文字 in meetings export menu; wired ImportPage 匯出 cards with 全部/本月/自訂 range. Ministry/CBS parts always show two assignment slots (student + helper) with correct role labels; edit-mode ＋/− toggle to add/remove helper slot per part; LINE notifications include role labels (學生/助手/主持/朗讀) and CBS textbook references. 匯出 page JPG/PDF/列印 now screenshot real off-screen MidweekWeek cards (`exportNodes*`) instead of the removed hand-drawn canvas; PDF pages sized to the card; 複製更新文字 export item (`GET /api/meetings/changes`) copies the group-wide diff since last 發布; PeoplePage cards toggle-to-deselect with an animated recenter when nothing is selected. |

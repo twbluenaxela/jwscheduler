@@ -164,7 +164,9 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     return people.filter((person) => !query || person.name.includes(query));
   }, [people, query]);
 
-  const selectedPerson = people.find((person) => person.id === selectedId) ?? filteredPeople[0] ?? people[0];
+  // No auto-fallback: when nothing is selected, selectedPerson is undefined and
+  // the detail card is hidden (the list recenters). Selection is explicit.
+  const selectedPerson = people.find((person) => person.id === selectedId);
 
   // Sync localName and reset history expansion when the selected person changes
   useEffect(() => {
@@ -482,17 +484,17 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
         ) : people.length === 0 ? (
           <span>目前這個會眾還沒有建立人員資料。</span>
         ) : (
-          <span>以名單為核心的卡片檢視，適合快速查看資格與個人安排。</span>
+          <span>以名單為核心的卡片檢視，適合快速查看資格與個人安排。{selectedPerson ? '　·　再次點選名片可關閉檢視。' : ''}</span>
         )}
       </div>
 
-      <div className="people-layout">
+      <div className={`people-layout${selectedPerson ? '' : ' people-layout--solo'}`}>
         <div className="people-list">
           {filteredPeople.length > 0 ? filteredPeople.map((person) => (
             <Fragment key={person.id}>
             <button
               className={`person${selectedPerson?.id === person.id ? ' is-selected' : ''}`}
-              onClick={() => setSelectedId(person.id)}
+              onClick={() => setSelectedId((id) => (id === person.id ? '' : person.id))}
             >
               <span className={`avatar ${person.g === 'M' ? 'g-m' : 'g-f'}`}>
                 {person.name.slice(0, 1) || '＋'}
@@ -524,7 +526,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
           )}
         </div>
 
-        {!isMobile && (
+        {!isMobile && selectedPerson && (
           <aside className="people-detail">{detailBody}</aside>
         )}
       </div>

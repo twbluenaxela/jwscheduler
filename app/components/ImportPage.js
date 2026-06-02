@@ -17,8 +17,8 @@ const SECTION_LABELS = {
 };
 
 const CAT_LABELS = {
-  treasures: '寶藏演講', gems: '屬靈寶石', reading: '經文朗讀',
-  ministry: '傳道示範', living: '生活演講', cbs: '研經班',
+  treasures: '寶藏演講', gems: '經文寶石', reading: '經文朗讀',
+  ministry: '傳道示範', assistant:'助手', living: '生活演講', cbs: '研經班',
 };
 
 const EXPORT_CARDS = [

@@ -124,7 +124,8 @@ function buildWeekFromItems(items) {
           const c = catFromTitle(title) ?? 'treasures';
           treasures.push({ ...base, cat: c, roleLabel: c === 'reading' ? '學生' : undefined });
         } else if (pendingPart.section === 'ministry') {
-          ministry.push({ ...base, cat: 'ministry', roleLabel: '學生/助手' });
+          const rLabel = title.includes('演講') ? '學生' : '學生/助手';
+          ministry.push({ ...base, cat: 'ministry', roleLabel: rLabel });
         } else {
           const c = catFromTitle(title) ?? 'living';
           // For CBS, extract the book/chapter reference after the duration
@@ -161,7 +162,7 @@ function assignTimes(parsed) {
       id: `t${i}`, time, partNum: p.partNum, title: p.title,
       dur: `${p.dur} 分鐘`, cat: p.cat,
       ...(p.roleLabel ? { roleLabel: p.roleLabel } : {}),
-      assign: [],
+      assign: Array(p.roleLabel ? p.roleLabel.split('/').length : 1).fill(''),
     };
   });
 
@@ -171,7 +172,7 @@ function assignTimes(parsed) {
     return {
       id: `m${i}`, time, partNum: p.partNum, title: p.title,
       dur: `${p.dur} 分鐘`, cat: 'ministry', roleLabel: '學生/助手',
-      assign: [],
+      assign: Array(p.roleLabel ? p.roleLabel.split('/').length : 1).fill(''),
     };
   });
 
@@ -187,7 +188,7 @@ function assignTimes(parsed) {
       id: isCbs ? 'cbs' : `l${i}`, time, partNum: p.partNum, title: p.title,
       dur: `${p.dur} 分鐘`, cat: p.cat,
       ...(p.roleLabel ? { roleLabel: p.roleLabel } : {}),
-      assign: [],
+      assign: Array(p.roleLabel ? p.roleLabel.split('/').length : 1).fill(''),
     };
   });
 

@@ -451,6 +451,11 @@ export default function App() {
     });
   }, []);
 
+  const clearSlot = useCallback((slotId) => {
+    setAssignments(prev => { const next = { ...prev }; delete next[slotId]; return next; });
+    persistAssignment(slotId, '');
+  }, []);
+
   const getSuggestion = useCallback((slotId) => {
     if (assignments[slotId]) return null;
     return suggestions[slotId] ?? null;
@@ -539,7 +544,7 @@ export default function App() {
     onClear: useCallback((slotId) => setSuggestions(prev => { const n = { ...prev }; delete n[slotId]; return n; }), []),
   };
 
-  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, ...ghostProps };
+  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, clearSlot, ...ghostProps };
   const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField, fetchWeekendSuggestions };
 
   const scheduleStats = (() => {

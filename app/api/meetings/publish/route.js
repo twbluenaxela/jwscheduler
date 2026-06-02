@@ -2,79 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
-
-function parseCnDate(dateStr) {
-  const text = String(dateStr ?? '');
-  const cn = text.match(/(\d+)月\s*(\d+)日/);
-  if (cn) {
-    const now = new Date();
-    let year = now.getFullYear();
-    const mo = parseInt(cn[1]);
-    if (mo < now.getMonth() + 1 - 6) year++;
-    else if (mo > now.getMonth() + 1 + 6) year--;
-    return new Date(year, mo - 1, parseInt(cn[2]));
-  }
-  const slash = text.match(/^(\d+)\/(\d+)$/);
-  if (slash) {
-    const now = new Date();
-    let year = now.getFullYear();
-    const mo = parseInt(slash[1]);
-    if (mo < now.getMonth() + 1 - 6) year++;
-    else if (mo > now.getMonth() + 1 + 6) year--;
-    return new Date(year, mo - 1, parseInt(slash[2]));
-  }
-  return null;
-}
-
-function collectAssignments(name, weeks, weekendRows) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const items = [];
-
-  for (const week of weeks) {
-    const d = parseCnDate(week.date);
-    if (!d || d < today) continue;
-    const aMap = new Map(week.assignments.map((a) => [a.slotId, a.name]));
-    if (aMap.get(`mw${week.id}_chairman`) === name) items.push({ date: week.date, role: '主席' });
-    if (aMap.get(`mw${week.id}_openPrayer`) === name) items.push({ date: week.date, role: '開始禱告' });
-    if (aMap.get(`mw${week.id}_closePrayer`) === name) items.push({ date: week.date, role: '結束禱告' });
-    for (const part of week.parts) {
-      if (aMap.get(`mw${week.id}_${part.partKey}_0`) === name) items.push({ date: week.date, role: part.title });
-      if (aMap.get(`mw${week.id}_${part.partKey}_1`) === name) items.push({ date: week.date, role: `${part.title}（助手）` });
-    }
-  }
-
-  for (const row of weekendRows) {
-    if (row.type === 'event') continue;
-    const d = parseCnDate(row.date);
-    if (!d || d < today) continue;
-    if (row.speaker === name) items.push({ date: row.date, role: '公眾演講' });
-    if (row.chair === name) items.push({ date: row.date, role: '主席' });
-    if (row.wt === name) items.push({ date: row.date, role: '守望台主持' });
-    if (row.read === name) items.push({ date: row.date, role: '朗讀' });
-    if (row.host === name) items.push({ date: row.date, role: '招待' });
-  }
-
-  items.sort((a, b) => (parseCnDate(a.date) ?? 0) - (parseCnDate(b.date) ?? 0));
-  return items;
-}
-
-function itemKey(item) { return `${item.date}|${item.role}`; }
-
-// Every name holding a future assignment — used so the saved snapshot covers
-// everyone (not just LINE-linked people), keeping the changes-diff accurate.
-function collectAssignedNames(weeks, weekendRows) {
-  const names = new Set();
-  for (const week of weeks) {
-    for (const a of week.assignments) if (a.name) names.add(a.name);
-  }
-  for (const row of weekendRows) {
-    if (row.type === 'event') continue;
-    for (const f of ['speaker', 'chair', 'wt', 'read', 'host']) {
-      if (row[f]) names.add(row[f]);
-    }
-  }
-  return names;
-}
+import { parseCnDate, collectAssignments, itemKey } from '../../../lib/assignments.mjs';
 
 function buildMessage(name, current, previous) {
   const header = `【新屋會眾 · 聚會節目通知】\n${name}，你好！`;
@@ -170,14 +98,6 @@ export async function POST(request) {
       } catch (err) {
         failed++;
         errors.push(`${person.name}: ${err.message}`);
-      }
-    }
-
-    // Fill the snapshot for everyone else who holds an assignment (no LINE link),
-    // so the group-wide changes diff (meetings/changes) has a complete baseline.
-    for (const name of collectAssignedNames(weeks, weekendRows)) {
-      if (newSnapshot[name] === undefined) {
-        newSnapshot[name] = collectAssignments(name, weeks, weekendRows);
       }
     }
 

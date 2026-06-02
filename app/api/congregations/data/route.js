@@ -5,10 +5,11 @@ import db from '../../../lib/db';
 
 function mapPart(part, weekId, assignmentMap) {
   const slotBase = `mw${weekId}_${part.partKey}`;
-  const assign = [
-    assignmentMap.get(`${slotBase}_0`),
-    assignmentMap.get(`${slotBase}_1`),
-  ].filter(Boolean);
+  const s0 = assignmentMap.get(`${slotBase}_0`) ?? '';
+  const s1 = assignmentMap.get(`${slotBase}_1`) ?? '';
+  // Parts with a '/' roleLabel (e.g. 學生/助手, 主持/朗讀) always show two slots,
+  // even when both are empty — so the helper slot is visible and editable.
+  const assign = part.roleLabel?.includes('/') ? [s0, s1] : (s0 ? [s0] : []);
 
   return {
     id: part.partKey,

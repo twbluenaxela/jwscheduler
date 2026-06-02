@@ -42,14 +42,15 @@ function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet, 
   );
 }
 
-function PairSlot({ baseId, catKey, ctxLabel, defaultNames, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
+function PairSlot({ baseId, catKey, ctxLabel, defaultNames, roleLabels, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
+  const [label0, label1] = roleLabels ?? ['', '助手'];
   const ghostProps = { getSuggestion, onAccept, onClear };
   return (
     <span className="who--pair">
       <WhoSlot
         slotId={`${baseId}_0`}
         catKey={catKey}
-        ctxLabel={ctxLabel}
+        ctxLabel={label0 ? `${ctxLabel} (${label0})` : ctxLabel}
         defaultName={defaultNames[0] ?? ''}
         getAssign={getAssign}
         openSheet={openSheet}
@@ -59,7 +60,7 @@ function PairSlot({ baseId, catKey, ctxLabel, defaultNames, getAssign, openSheet
       <WhoSlot
         slotId={`${baseId}_1`}
         catKey={catKey}
-        ctxLabel={`${ctxLabel} (助手)`}
+        ctxLabel={`${ctxLabel} (${label1})`}
         defaultName={defaultNames[1] ?? ''}
         getAssign={getAssign}
         openSheet={openSheet}
@@ -92,10 +93,15 @@ function PartRow({
   getSuggestion,
   onAccept,
   onClear,
+  helperHidden,
+  onToggleHelper,
+  clearSlot,
 }) {
-  const isPair = part.assign.length === 2;
-  const updatePart = (patch) => updateWeekSection(weekId, sectionName, part.id, updateMidweekWeek, patch);
   const shownPart = draftPart ?? part;
+  const isPairRole = shownPart.roleLabel?.includes('/');
+  const roleLabels = shownPart.roleLabel?.split('/');
+  const isPair = isPairRole && !helperHidden;
+  const updatePart = (patch) => updateWeekSection(weekId, sectionName, part.id, updateMidweekWeek, patch);
 
   return (
     <div className="row">
@@ -159,6 +165,7 @@ function PartRow({
             catKey={shownPart.cat}
             ctxLabel={`${ctx} · ${shownPart.title}`}
             defaultNames={shownPart.assign}
+            roleLabels={roleLabels}
             getAssign={getAssign}
             openSheet={openSheet}
             getSuggestion={getSuggestion}
@@ -178,15 +185,32 @@ function PartRow({
             onClear={onClear}
           />
         )}
+        {editMode && isPairRole && (
+          <button
+            className="pair-toggle-btn"
+            title={helperHidden ? `加入${roleLabels?.[1] ?? '助手'}欄位` : `移除${roleLabels?.[1] ?? '助手'}欄位`}
+            onClick={() => {
+              if (!helperHidden) clearSlot?.(`${weekId}_${part.id}_1`);
+              onToggleHelper?.(!helperHidden);
+            }}
+          >{helperHidden ? '＋' : '−'}</button>
+        )}
       </span>
     </div>
   );
 }
 
-export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, cardRef, getSuggestion, onAccept, onClear }) {
+export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, cardRef, getSuggestion, onAccept, onClear, clearSlot }) {
   const wId = `mw${week.id}`;
   const ctx = week.date;
   const [draftWeek, setDraftWeek] = useState(week);
+  const [hiddenHelpers, setHiddenHelpers] = useState(new Set());
+
+  const toggleHelper = (partId, hide) => setHiddenHelpers(prev => {
+    const next = new Set(prev);
+    if (hide) next.add(partId); else next.delete(partId);
+    return next;
+  });
 
   useEffect(() => {
     setDraftWeek(week);
@@ -313,6 +337,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
             getSuggestion={getSuggestion}
             onAccept={onAccept}
             onClear={onClear}
+            helperHidden={hiddenHelpers.has(part.id)}
+            onToggleHelper={(hide) => toggleHelper(part.id, hide)}
+            clearSlot={clearSlot}
           />
         ))}
       </div>
@@ -337,6 +364,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
             getSuggestion={getSuggestion}
             onAccept={onAccept}
             onClear={onClear}
+            helperHidden={hiddenHelpers.has(part.id)}
+            onToggleHelper={(hide) => toggleHelper(part.id, hide)}
+            clearSlot={clearSlot}
           />
         ))}
       </div>
@@ -390,6 +420,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
             getSuggestion={getSuggestion}
             onAccept={onAccept}
             onClear={onClear}
+            helperHidden={hiddenHelpers.has(part.id)}
+            onToggleHelper={(hide) => toggleHelper(part.id, hide)}
+            clearSlot={clearSlot}
           />
         ))}
 
