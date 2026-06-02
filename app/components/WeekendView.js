@@ -59,7 +59,7 @@ function EditCell({ value, onCommit, placeholder = '—', mono = false }) {
   );
 }
 
-export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow, addRow, getSuggestion, onAccept, onClear, fetchWeekendSuggestions }) {
+export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow, addRow, getSuggestion, onAccept, onClear, fetchWeekendSuggestions, captureRef, visibleRowsRef }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const thisYear = today.getFullYear();
@@ -121,6 +121,9 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
 
   const rows = weekendRows.filter(inRange);
   const scheduleCount = rows.filter(r => !r.type || r.type === 'schedule' || r.type === 'special').length;
+  // Expose the currently-visible (filtered) rows so the export menu can export
+  // exactly what's on screen.
+  if (visibleRowsRef) visibleRowsRef.current = rows;
 
   // Cycle: schedule → special → schedule (for schedule rows)
   //        event → suspended → event (for event-like rows)
@@ -138,7 +141,7 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
   }
 
   return (
-    <div className="wk-wrap">
+    <div className="wk-wrap" ref={captureRef}>
       <div className="wk-title">
         <h2>公眾演講安排表</h2>
         <span className="wk-title__meta">共 {scheduleCount} 場</span>

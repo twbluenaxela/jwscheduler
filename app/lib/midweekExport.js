@@ -20,7 +20,7 @@ function sanitizeFilename(value) {
 }
 
 function getWeekLabel(week) {
-  return week?.dateLabel || week?.date || '週中聚會';
+  return week?.dateLabel || week?.date || '週中';
 }
 
 function getAssignName(week, getAssign, slotId, fallback = '') {
@@ -108,7 +108,7 @@ function getRowDefinitions(week, getAssign) {
 
 function formatRowsForExcel(week, getAssign) {
   const rows = [];
-  rows.push(['週中聚會', getWeekLabel(week), '', '', '', '']);
+  rows.push(['週中', getWeekLabel(week), '', '', '', '']);
   rows.push(['時間', '區段', '項目', '指派', '時長', '備註']);
 
   getRowDefinitions(week, getAssign).forEach((row) => {
@@ -136,8 +136,7 @@ function cellRef(colIndex, rowIndex) {
   return `${letters}${rowIndex}`;
 }
 
-function buildSheetXml(rows) {
-  const cols = [18, 18, 48, 36, 22, 18];
+function buildSheetXml(rows, cols = [18, 18, 48, 36, 22, 18]) {
   let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
   xml += '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ';
   xml += 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
@@ -165,7 +164,7 @@ function buildSheetXml(rows) {
   return xml;
 }
 
-function buildXlsxBuffer(rows) {
+export function buildXlsxBuffer(rows, { sheetName = '週中', cols } = {}) {
   const zip = new JSZip();
   zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -182,7 +181,7 @@ function buildXlsxBuffer(rows) {
   zip.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="本週聚會" sheetId="1" r:id="rId1"/>
+    <sheet name="週中" sheetId="1" r:id="rId1"/>
   </sheets>
 </workbook>`);
   zip.file('xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -226,7 +225,7 @@ export async function exportWeeksXlsx(weeks, getAssign) {
     formatRowsForExcel(w, getAssign).forEach((r) => rows.push(r));
   });
   const blob = await buildXlsxBuffer(rows);
-  triggerDownload(blob, weeks.length === 1 ? getMidweekExportFilename(weeks[0], 'xlsx') : `本週聚會_${weeks.length}週.xlsx`);
+  triggerDownload(blob, weeks.length === 1 ? getMidweekExportFilename(weeks[0], 'xlsx') : `週中_${weeks.length}週.xlsx`);
 }
 
 /* ===================== Shared download / PDF helpers ===================== */
@@ -339,7 +338,7 @@ export function buildWeekText(week, getAssign) {
   const wId = `mw${week.id}`;
   const get = (slot, fb) => (typeof getAssign === 'function' ? getAssign(slot, fb) : fb) || '';
   const lines = [];
-  lines.push(`📋 本週聚會 — ${getWeekLabel(week)}`);
+  lines.push(`📋 週中 — ${getWeekLabel(week)}`);
   if (week.weekdayPill) lines.push(week.weekdayPill);
   if (week.reading) lines.push(`每週閱讀經文：${week.reading}`);
   lines.push('');
@@ -398,7 +397,7 @@ export async function exportNodesJpeg(nodes, weeks) {
     zip.file(`${sanitizeFilename(getWeekLabel(weeks[i]))}.jpg`, blob);
   }
   const out = await zip.generateAsync({ type: 'blob' });
-  triggerDownload(out, `本週聚會_${nodes.length}週.zip`);
+  triggerDownload(out, `週中_${nodes.length}週.zip`);
 }
 
 export async function exportNodesPdf(nodes, weeks) {
@@ -409,7 +408,7 @@ export async function exportNodesPdf(nodes, weeks) {
     images.push(await jpegDataUrlToImage(await nodeToJpegDataUrl(node)));
   }
   const blob = jpegImagesToPdfBlob(images);
-  triggerDownload(blob, nodes.length === 1 ? getMidweekExportFilename(weeks[0], 'pdf') : `本週聚會_${nodes.length}週.pdf`);
+  triggerDownload(blob, nodes.length === 1 ? getMidweekExportFilename(weeks[0], 'pdf') : `週中_${nodes.length}週.pdf`);
 }
 
 export async function openNodesPrintWindow(nodes) {
@@ -422,7 +421,7 @@ export async function openNodesPrintWindow(nodes) {
   const imgs = urls.map((u) => `<img src="${u}" />`).join('');
   const popup = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
   if (!popup) throw new Error('瀏覽器阻擋了列印視窗。');
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>本週聚會</title>
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>週中</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body { background: #ecebe7; }

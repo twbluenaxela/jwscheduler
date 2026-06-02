@@ -551,6 +551,9 @@ body { padding-bottom: 64px; }
 .admin-new-cong__btn { flex: 0 0 auto; height: 40px; white-space: nowrap; }
 @media (max-width: 560px) {
   .admin-new-cong { flex-direction: column; align-items: stretch; }
+  /* In column layout flex-basis becomes the HEIGHT — reset so fields size to
+     their content instead of stretching to 200px/140px tall. */
+  .admin-new-cong__name, .admin-new-cong__code { flex: 0 0 auto; }
   .admin-new-cong__btn { width: 100%; justify-content: center; }
 }
 .ov-row-wrap {

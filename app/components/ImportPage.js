@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { parseEpub } from '../lib/epubParser';
 import MidweekWeek from './MidweekWeek';
 import {
@@ -109,6 +109,19 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
   const cardRefs = useRef([]); // rendered (off-screen) MidweekWeek cards, one per selected week
+
+  // CSS media queries key off the viewport, not the element, so on a phone the
+  // card always renders in its mobile (stacked) layout. Rendering it inside a
+  // fixed 960px box then leaves the content hugging the left with a big empty
+  // right margin in the screenshot. Match the off-screen width to the viewport
+  // on mobile so the captured card fills the frame; keep 960 on desktop.
+  const [exportWidth, setExportWidth] = useState(960);
+  useEffect(() => {
+    const update = () => setExportWidth(window.innerWidth <= 720 ? window.innerWidth : 960);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const selectedWeeks = useMemo(() => {
     if (range === 'month') {
@@ -442,7 +455,7 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
 
       {/* Off-screen real cards used as the source for JPG/PDF/列印 exports, so the
           output matches the live card exactly (no hand-redrawn canvas drift). */}
-      <div aria-hidden="true" style={{ position: 'fixed', left: '-99999px', top: 0, width: 960, pointerEvents: 'none' }}>
+      <div aria-hidden="true" style={{ position: 'fixed', left: '-99999px', top: 0, width: exportWidth, pointerEvents: 'none' }}>
         {selectedWeeks.map((w, i) => (
           <MidweekWeek
             key={w.id ?? i}

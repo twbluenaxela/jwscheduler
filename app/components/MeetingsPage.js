@@ -10,6 +10,7 @@ import {
   triggerDownload,
   buildWeekText,
 } from '../lib/midweekExport';
+import { buildWeekendText, downloadWeekendXlsx } from '../lib/weekendExport';
 import { getToken } from '../lib/auth-context';
 
 const EXPORT_ITEMS = [
@@ -20,6 +21,13 @@ const EXPORT_ITEMS = [
   { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
   { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
 ];
+
+// Pin html-to-image to the element's real rendered box so the capture has no
+// extra whitespace on the right (mobile screenshots were padded out otherwise).
+function captureBox(node) {
+  const rect = node.getBoundingClientRect();
+  return { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
+}
 
 function getDateLabel(week) {
   if (!week) return '';
@@ -92,7 +100,7 @@ function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, me
     if (!week) return;
     setExportOpen(false);
     try {
-      const captureOpts = { pixelRatio: 2, skipFonts: false };
+      const captureOpts = { pixelRatio: 2, skipFonts: false, ...captureBox(captureRef.current) };
       if (type === 'jpg') {
         const { toJpeg } = await import('html-to-image');
         const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
@@ -162,12 +170,97 @@ function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, me
   );
 }
 
+const WEEKEND_EXPORT_ITEMS = [
+  { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組', action: 'jpg' },
+  { ic: '▭', label: '複製圖片到剪貼簿', action: 'copy' },
+  { ic: '✎', label: '複製文字', sub: '手動貼到 LINE 群組', action: 'text' },
+  null,
+  { ic: '▤', label: '匯出 Excel', action: 'xlsx' },
+  { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
+];
+
+function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, exportOpen, setExportOpen, menuRef }) {
+  const handleExport = async (type) => {
+    setExportOpen(false);
+    const rows = visibleRowsRef.current ?? [];
+    try {
+      if (type === 'text') {
+        const text = buildWeekendText(rows, getAssign);
+        if (!navigator.clipboard?.writeText) throw new Error('目前瀏覽器不支援複製文字。');
+        await navigator.clipboard.writeText(text);
+        window.alert('已複製週末安排文字，可貼到 LINE 群組。');
+        return;
+      }
+      if (type === 'xlsx') {
+        await downloadWeekendXlsx(rows, getAssign);
+        return;
+      }
+      if (!captureRef.current) throw new Error('沒有可匯出的內容。');
+      const captureOpts = { pixelRatio: 2, skipFonts: false, ...captureBox(captureRef.current) };
+      if (type === 'jpg') {
+        const { toJpeg } = await import('html-to-image');
+        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = '週末聚會.jpg';
+        a.click();
+      } else if (type === 'copy') {
+        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+          throw new Error('目前瀏覽器不支援圖片剪貼簿。');
+        }
+        const { toPng } = await import('html-to-image');
+        const dataUrl = await toPng(captureRef.current, captureOpts);
+        const blob = await (await fetch(dataUrl)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      } else if (type === 'pdf') {
+        const { toJpeg } = await import('html-to-image');
+        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
+        const image = await jpegDataUrlToImage(dataUrl);
+        triggerDownload(jpegImagesToPdfBlob([image]), '週末聚會.pdf');
+      }
+    } catch (error) {
+      window.alert(error?.message || '匯出失敗');
+    }
+  };
+
+  return (
+    <div className="menuwrap" ref={menuRef}>
+      <button
+        className="btn btn--primary"
+        onClick={(e) => { e.stopPropagation(); setExportOpen(o => !o); }}
+      >
+        匯出 <span className="caret">▾</span>
+      </button>
+      {exportOpen && (
+        <div className="menu" onClick={(e) => e.stopPropagation()}>
+          {WEEKEND_EXPORT_ITEMS.map((item, i) =>
+            item === null ? (
+              <div key={i} className="menu__div" />
+            ) : (
+              <button
+                key={i}
+                type="button"
+                className="menu__item"
+                onClick={() => handleExport(item.action)}
+              >
+                <span className="menu__ic">{item.ic}</span>
+                {item.label}
+                {item.sub && <small>{item.sub}</small>}
+              </button>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MeetingsPage({
   midweekWeeks,
   view, setView, week, setWeek,
   editMode, setEditMode, exportOpen, setExportOpen,
   weekendFilter, setWeekendFilter, weekendRows,
-  weekendEditMode, setWeekendEditMode,
+  weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen,
   addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField,
   getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, clearSlot, setPage,
   getSuggestion, onAccept, onClear,
@@ -176,6 +269,9 @@ export default function MeetingsPage({
 }) {
   const menuRef = useRef(null);
   const captureRef = useRef(null);
+  const weekendMenuRef = useRef(null);
+  const weekendCaptureRef = useRef(null);
+  const weekendVisibleRowsRef = useRef([]);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null); // { sent, failed, total } | { error }
   const [suggestingMw, setSuggestingMw] = useState(false);
@@ -207,6 +303,13 @@ export default function MeetingsPage({
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, [exportOpen, setExportOpen]);
+
+  useEffect(() => {
+    if (!weekendExportOpen) return;
+    const handler = () => setWeekendExportOpen?.(false);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [weekendExportOpen, setWeekendExportOpen]);
 
   const totalWeeks = midweekWeeks.length;
   const currentWeekId = midweekWeeks[week]?.id;
@@ -370,6 +473,14 @@ export default function MeetingsPage({
                 <span>{weekendEditMode ? '完成' : '編輯'}</span>
               </button>
             )}
+            <WeekendExportMenu
+              getAssign={getAssign}
+              captureRef={weekendCaptureRef}
+              visibleRowsRef={weekendVisibleRowsRef}
+              exportOpen={weekendExportOpen}
+              setExportOpen={setWeekendExportOpen}
+              menuRef={weekendMenuRef}
+            />
             {canEdit && hasWeSuggestions && (
               <>
                 <button className="btn btn--primary btn--sm" onClick={() => acceptAllSuggestions?.('we')}>接受全部</button>
@@ -412,6 +523,8 @@ export default function MeetingsPage({
             onAccept={onAccept}
             onClear={onClear}
             fetchWeekendSuggestions={fetchWeekendSuggestions}
+            captureRef={weekendCaptureRef}
+            visibleRowsRef={weekendVisibleRowsRef}
           />
         </div>
       )}
