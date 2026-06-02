@@ -61,7 +61,8 @@ export async function POST(request) {
       name: p.name, g: p.gender, quals: p.tags ?? [], status: p.status,
     }));
 
-    const suggestions = suggestMidweekWeek(normalPeople, week, existingAssignments, pastHistory);
+    // refDate = the target week's meeting date, so recency/past-only matches the picker.
+    const suggestions = suggestMidweekWeek(normalPeople, week, existingAssignments, pastHistory, targetWeek.date);
     return NextResponse.json({ suggestions });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

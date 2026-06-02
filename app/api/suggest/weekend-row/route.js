@@ -12,6 +12,7 @@ export async function POST(request) {
 
     const body = await request.json().catch(() => ({}));
     const existing = body.existing ?? {};
+    const refDate = body.date || new Date(); // row's meeting date → past-only measured from it
 
     const [people, pastRows] = await Promise.all([
       db.person.findMany({ where: { congregationId: user.congregationId, status: 'active' } }),
@@ -26,7 +27,7 @@ export async function POST(request) {
     }));
     const scheduleRows = pastRows.filter(r => r.type !== 'event' && r.type !== 'suspended');
 
-    const suggestion = suggestWeekendRow(normalPeople, scheduleRows, existing);
+    const suggestion = suggestWeekendRow(normalPeople, scheduleRows, existing, refDate);
     return NextResponse.json({ suggestion });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

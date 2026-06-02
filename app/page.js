@@ -219,7 +219,14 @@ export default function App() {
         if (cancelled) return;
 
         setPeople(data.people ?? []);
-        const loadedWeeks = data.midweekWeeks ?? [];
+        const loadedWeeks = (data.midweekWeeks ?? []).slice().sort((a, b) => {
+          const da = parseChineseDate(a.weekStart || a.date);
+          const db = parseChineseDate(b.weekStart || b.date);
+          if (!da && !db) return 0;
+          if (!da) return 1;
+          if (!db) return -1;
+          return da - db;
+        });
         setMidweekWeeks(loadedWeeks);
         setWeek(findCurrentWeekIndex(loadedWeeks));
         setWeekendRows(data.weekendRows ?? []);
@@ -510,10 +517,12 @@ export default function App() {
   const fetchWeekendSuggestions = useCallback(async (rowId, existing = {}) => {
     try {
       const token = await getToken();
+      // Pass the row's own date so recency/past-only is measured from that meeting.
+      const rowDate = weekendRows.find(r => r._id === rowId)?.date;
       const res = await fetch('/api/suggest/weekend-row', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ existing }),
+        body: JSON.stringify({ existing, date: rowDate }),
       });
       if (!res.ok) return;
       const { suggestion } = await res.json();
@@ -526,7 +535,7 @@ export default function App() {
         ...(suggestion.read    ? { [`${key}_read`]:     suggestion.read    } : {}),
       }));
     } catch { /* silent */ }
-  }, []);
+  }, [weekendRows]);
 
   const fetchMidweekSuggestions = useCallback(async (weekId) => {
     try {
@@ -692,8 +701,12 @@ export default function App() {
                   else merged.push(w);
                 }
                 merged.sort((a, b) => {
-                  const parse = (d) => { const m = String(d ?? '').match(/(\d+)月\s*(\d+)日/); return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0; };
-                  return parse(a.date) - parse(b.date);
+                  const da = parseChineseDate(a.weekStart || a.date);
+                  const db = parseChineseDate(b.weekStart || b.date);
+                  if (!da && !db) return 0;
+                  if (!da) return 1;
+                  if (!db) return -1;
+                  return da - db;
                 });
                 setMidweekWeeks(merged);
                 setWeek(findCurrentWeekIndex(merged));

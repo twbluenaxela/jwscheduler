@@ -1,60 +1,48 @@
 // Pure suggestion engine — no DB, no fetch, no React.
 // People input shape: { name, g, quals: string[], status }
 // History input shape: { name, date }[]
+//
+// Tag + gender requirements come from CATS (data/index.js) — the SAME source of
+// truth the people picker (AssignSheet) uses — so the ✦ suggest button and the
+// candidate sheet always agree on who is eligible. (Do NOT re-introduce a private
+// CAT_REQS table with the legacy 主席 tag — it was split into 傳道與生活主席 /
+// 週末聚會主席 / 守望台主持人 and no member carries 主席 anymore.)
+import { CATS } from '../data/index.js';
 
-const CAT_REQS = {
-  chairman:    { tag: '主席',        g: 'M'   },
-  prayer:      { tag: '禱告',        g: 'M'   },
-  treasures:   { tag: '寶藏演講',    g: 'M'   },
-  gems:        { tag: '經文寶石',    g: 'M'   },
-  reading:     { tag: '經文朗讀',    g: 'M'   },
-  ministry:    { tag: '傳道示範',    g: 'any' },
-  living:      { tag: '生活演講',    g: 'M'   },
-  cbs:         { tag: '研經班主持',  g: 'M'   },
-  cbsread:     { tag: '研經班朗讀',  g: 'M'   },
-  publictalk:  { tag: '公眾演講',    g: 'M'   },
-  wt:          { tag: '主席',        g: 'M'   },
-  wtread:      { tag: '守望台朗讀',  g: 'any' },
-};
+const CAT_REQS = Object.fromEntries(
+  Object.entries(CATS).map(([k, v]) => [k, { tag: v.tag, g: v.g }])
+);
 
-function parseDate(str) {
+// Year is inferred relative to `ref` (the slot being assigned) with a ±6-month
+// window — matches pastHistory.mjs so the picker and suggest engine parse alike.
+function parseDate(str, ref = new Date()) {
   const s = String(str ?? '');
-  const cn = s.match(/(\d+)月\s*(\d+)日/);
-  if (cn) {
-    const now = new Date();
-    let yr = now.getFullYear();
-    const mo = +cn[1];
-    if (mo < now.getMonth() + 1 - 6) yr++;
-    else if (mo > now.getMonth() + 1 + 6) yr--;
-    return new Date(yr, mo - 1, +cn[2]);
-  }
-  const sl = s.match(/^(\d+)\/(\d+)$/);
-  if (sl) {
-    const now = new Date();
-    let yr = now.getFullYear();
-    const mo = +sl[1];
-    if (mo < now.getMonth() + 1 - 6) yr++;
-    else if (mo > now.getMonth() + 1 + 6) yr--;
-    return new Date(yr, mo - 1, +sl[2]);
-  }
-  return null;
+  const m = s.match(/(\d+)月\s*(\d+)日/) ?? s.match(/^(\d+)\/(\d+)$/);
+  if (!m) return null;
+  let yr = ref.getFullYear();
+  const mo = +m[1];
+  if (mo > ref.getMonth() + 7) yr--;
+  else if (mo < ref.getMonth() - 5) yr++;
+  return new Date(yr, mo - 1, +m[2]);
 }
 
 // Returns candidates sorted: longest gap desc, then fewest total asc.
-function rankCandidates(people, tag, gender, history) {
+// daysSince + the past filter are measured from `ref` (the slot's meeting date),
+// so only assignments STRICTLY BEFORE the slot count — matching the picker.
+function rankCandidates(people, tag, gender, history, ref) {
   const eligible = people.filter(p =>
     p.status === 'active' &&
     (p.quals ?? []).includes(tag) &&
     (gender === 'any' || p.g === gender)
   );
 
-  const now = Date.now();
+  const refMs = ref.getTime();
   const lastSeen = new Map();
   const counts = new Map();
   for (const h of history) {
     if (!h.name) continue;
-    const d = parseDate(h.date);
-    if (!d) continue;
+    const d = parseDate(h.date, ref);
+    if (!d || d.getTime() >= refMs) continue; // strictly before the slot date
     const prev = lastSeen.get(h.name);
     if (!prev || d > prev) lastSeen.set(h.name, d);
     counts.set(h.name, (counts.get(h.name) ?? 0) + 1);
@@ -64,11 +52,16 @@ function rankCandidates(people, tag, gender, history) {
     .map(p => ({
       name: p.name,
       daysSince: lastSeen.has(p.name)
-        ? Math.floor((now - lastSeen.get(p.name)) / 86400000)
+        ? Math.floor((refMs - lastSeen.get(p.name)) / 86400000)
         : 9999,
       count: counts.get(p.name) ?? 0,
     }))
     .sort((a, b) => b.daysSince - a.daysSince || a.count - b.count);
+}
+
+function toRef(refDate) {
+  if (refDate instanceof Date) return refDate;
+  return parseDate(refDate) ?? new Date();
 }
 
 function pickOne(ranked, used) {
@@ -83,7 +76,9 @@ function pickOne(ranked, used) {
 
 // Suggest speaker, chair, wt, read for a weekend row.
 // existing: already-filled fields to exclude from suggestions.
-export function suggestWeekendRow(people, pastRows, existing = {}) {
+// refDate: the row's meeting date (Date or date-string); defaults to today.
+export function suggestWeekendRow(people, pastRows, existing = {}, refDate = new Date()) {
+  const ref = toRef(refDate);
   const used = new Set(Object.values(existing).filter(Boolean));
   const hist = {
     speaker: pastRows.filter(r => r.speaker).map(r => ({ name: r.speaker, date: r.date })),
@@ -91,11 +86,15 @@ export function suggestWeekendRow(people, pastRows, existing = {}) {
     wt:      pastRows.filter(r => r.wt).map(r => ({ name: r.wt,         date: r.date })),
     read:    pastRows.filter(r => r.read).map(r => ({ name: r.read,      date: r.date })),
   };
+  const rank = (catKey, history) => {
+    const req = CAT_REQS[catKey];
+    return rankCandidates(people, req.tag, req.g, history, ref);
+  };
   return {
-    speaker: pickOne(rankCandidates(people, '公眾演講',   'M',   hist.speaker), used),
-    chair:   pickOne(rankCandidates(people, '主席',       'M',   hist.chair),   used),
-    wt:      pickOne(rankCandidates(people, '主席',       'M',   hist.wt),      used),
-    read:    pickOne(rankCandidates(people, '守望台朗讀', 'any', hist.read),    used),
+    speaker: pickOne(rank('publictalk',   hist.speaker), used),
+    chair:   pickOne(rank('weekendchair', hist.chair),   used),
+    wt:      pickOne(rank('wt',           hist.wt),      used),
+    read:    pickOne(rank('wtread',       hist.read),    used),
   };
 }
 
@@ -103,7 +102,8 @@ export function suggestWeekendRow(people, pastRows, existing = {}) {
 // week: { id, treasures, ministry, living } frontend shape (parts have .id = partKey, .cat, .roleLabel)
 // existingAssignments: { [slotId]: name } — already confirmed slots
 // pastHistory: [{ name, cat, date }]
-export function suggestMidweekWeek(people, week, existingAssignments, pastHistory) {
+export function suggestMidweekWeek(people, week, existingAssignments, pastHistory, refDate = new Date()) {
+  const ref = toRef(refDate);
   const wId = `mw${week.id}`;
   const used = new Set(Object.values(existingAssignments).filter(Boolean));
   const result = {};
@@ -117,7 +117,7 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
     if (existingAssignments[slotId]) return;
     const req = CAT_REQS[catKey];
     if (!req) return;
-    const name = pickOne(rankCandidates(people, req.tag, req.g, histByCat[catKey] ?? []), used);
+    const name = pickOne(rankCandidates(people, req.tag, req.g, histByCat[catKey] ?? [], ref), used);
     if (name) result[slotId] = name;
   };
 
