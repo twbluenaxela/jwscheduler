@@ -381,9 +381,21 @@ function AlertPanel({ rows, onGoToRow }) {
   const shown = gaps.slice(0, OV_ALERT_CAP);
   const moreGaps = gaps.length - shown.length;
 
-  // Compute gap role chips for a row
   function gapChips(r) {
-    return r.keys.filter((k) => !k.who).map((k) => k.role);
+    const items = r.detail ?? r.keys;
+    return items.filter((k) => !k.header && !k.who).map((k) => k.role);
+  }
+
+  function renderChips(r) {
+    const all = gapChips(r);
+    const shown = all.slice(0, 3);
+    const extra = all.length - shown.length;
+    return (
+      <>
+        {shown.map((chip, i) => <span key={i} className="ag-need__chip">{chip}</span>)}
+        {extra > 0 && <span className="ag-need__chip ag-need__chip--more">+{extra}</span>}
+      </>
+    );
   }
 
   return (
@@ -407,11 +419,7 @@ function AlertPanel({ rows, onGoToRow }) {
                   <TypeBadge type={r.type} />
                   {r.title}
                 </span>
-                <div className="ag-need__chips">
-                  {gapChips(r).map((chip, i) => (
-                    <span key={i} className="ag-need__chip">{chip}</span>
-                  ))}
-                </div>
+                <div className="ag-need__chips">{renderChips(r)}</div>
               </span>
               <span className="ag-alert__cta">指派 ›</span>
             </button>
@@ -447,7 +455,20 @@ function AgItem({ row, open, onToggle, onGoToRow }) {
   const { status } = row;
 
   function gapChips() {
-    return row.keys.filter((k) => !k.who).map((k) => k.role);
+    const items = row.detail ?? row.keys;
+    return items.filter((k) => !k.header && !k.who).map((k) => k.role);
+  }
+
+  function renderChips() {
+    const all = gapChips();
+    const shown = all.slice(0, 3);
+    const extra = all.length - shown.length;
+    return (
+      <>
+        {shown.map((chip, i) => <span key={i} className="ag-need__chip">{chip}</span>)}
+        {extra > 0 && <span className="ag-need__chip ag-need__chip--more">+{extra}</span>}
+      </>
+    );
   }
 
   if (status === 'ok') {
@@ -543,11 +564,7 @@ function AgItem({ row, open, onToggle, onGoToRow }) {
         </div>
         <div className="ag-need">
           <span className="ag-need__lbl">待補</span>
-          <div className="ag-need__chips">
-            {gapChips().map((chip, i) => (
-              <span key={i} className="ag-need__chip">{chip}</span>
-            ))}
-          </div>
+          <div className="ag-need__chips">{renderChips()}</div>
         </div>
         <button className="btn btn--primary ag-go" onClick={() => onGoToRow(row)}>
           前往編排 ›

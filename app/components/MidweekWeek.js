@@ -211,13 +211,14 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
   const [draftWeek, setDraftWeek] = useState(week);
   const [hiddenHelpers, setHiddenHelpers] = useState(() => initHiddenHelpers(week));
 
+  // Removing/adding a helper slot writes hideHelper into the shared week state.
+  // It persists when edit mode is exited (saveMidweekWeek sends every part's hideHelper).
   const toggleHelper = (partId, hide) => {
     setHiddenHelpers(prev => {
       const next = new Set(prev);
       if (hide) next.add(partId); else next.delete(partId);
       return next;
     });
-    // persist hideHelper into the week state so saveMidweekWeek picks it up
     const section = ['treasures', 'ministry', 'living'].find((s) =>
       week[s]?.some((p) => p.id === partId)
     );
@@ -249,8 +250,10 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     updateWeekSection(week.id, sectionName, partId, updateMidweekWeek, patch);
   };
 
-  const weekType = shownWeek.type ?? 'normal';
-  const weekLabel = shownWeek.label ?? '';
+  // type/label are edited via the navstrip (which writes to the parent week state),
+  // so read them from `week` — draftWeek wouldn't see those edits live.
+  const weekType = week.type ?? 'normal';
+  const weekLabel = week.label ?? '';
   const cardClass = weekType === 'special' ? 'card card--special'
                   : weekType === 'assembly' ? 'card card--assembly'
                   : 'card';

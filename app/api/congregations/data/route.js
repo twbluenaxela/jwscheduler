@@ -22,6 +22,7 @@ function mapPart(part, weekId, assignmentMap) {
     cat: part.cat,
     roleLabel: part.roleLabel ?? undefined,
     cbsRef: part.cbsRef ?? undefined,
+    hideHelper: part.hideHelper ?? false,
     assign,
   };
 }
@@ -55,6 +56,8 @@ function mapWeek(week) {
     closeSongTime: week.closeSongTime ?? '',
     closeSong: week.closeSong,
     closePrayer: assignmentMap.get(`mw${week.id}_closePrayer`) ?? '',
+    type: week.type ?? 'normal',
+    label: week.label ?? '',
   };
 }
 

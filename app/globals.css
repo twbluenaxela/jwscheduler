@@ -678,6 +678,7 @@ body { padding-bottom: 64px; }
 .ag-alert__copy span { font-size: 13px; color: var(--ink-3); }
 .ag-need__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .ag-need__chip { font-size: 12px; font-weight: 700; color: var(--special); background: var(--living-soft); padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
+.ag-need__chip--more { color: var(--ink-3); background: var(--surface-2); }
 .ag-alert__more {
   appearance: none; cursor: pointer; font-family: inherit; width: 100%; text-align: left;
   background: transparent; border: 0; padding: 10px 4px 2px;
