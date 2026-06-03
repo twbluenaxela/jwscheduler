@@ -189,31 +189,84 @@ function partGapCount(part) {
 
 function buildOverviewRows(midweekWeeks, weekendRows) {
   const midweekItems = midweekWeeks.map((week, weekIdx) => {
-    const cbs = week.living?.find((p) => p.cat === 'cbs');
+    const rawDate = parseRowDate(week.date);
+    const weekType = week.type ?? 'normal';
+    const weekLabel = week.label ?? '';
+
+    // Assembly weeks: no gap counting, shown as a suspended event row
+    if (weekType === 'assembly') {
+      return {
+        id: `mw_${week.id ?? week.date}`,
+        rawDate,
+        date: compactDate(week.date),
+        wd: weekdayFor(rawDate),
+        type: 'event',
+        title: weekLabel || '大會週',
+        keys: [],
+        status: 'suspended',
+        gaps: 0,
+        weekIdx,
+      };
+    }
+
     const allParts = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
-    const reading = allParts.find((p) => p.cat === 'reading');
     const roleGaps = [week.chairman, week.openPrayer, week.closePrayer].filter((v) => !String(v ?? '').trim()).length;
     const partGaps = allParts.reduce((sum, p) => sum + partGapCount(p), 0);
     const gaps = roleGaps + partGaps;
 
+    const cbs = week.living?.find((p) => p.cat === 'cbs');
+    const reading = allParts.find((p) => p.cat === 'reading');
     const keys = [
       { role: '主席', who: week.chairman || '' },
       cbs ? { role: '研經班', who: (cbs.assign ?? []).filter(Boolean).join(' / ') } : null,
       reading ? { role: '經文朗讀', who: (reading.assign ?? []).filter(Boolean).join(' / ') } : null,
     ].filter(Boolean);
 
-    const rawDate = parseRowDate(week.date);
+    // Full detail for the expanded card
+    function partDetail(parts) {
+      return parts.map((p) => {
+        const isPair = p.roleLabel?.includes('/') && !p.hideHelper;
+        const rls = p.roleLabel?.split('/') ?? [];
+        const a0 = (p.assign ?? [])[0] || '';
+        const a1 = (p.assign ?? [])[1] || '';
+        if (isPair) {
+          return [
+            { role: `${p.title}${rls[0] ? `（${rls[0]}）` : ''}`, who: a0 },
+            { role: `${p.title}${rls[1] ? `（${rls[1]}）` : '（助手）'}`, who: a1 },
+          ];
+        }
+        const roleSuffix = rls[0] ? `（${rls[0]}）` : '';
+        return [{ role: `${p.title}${roleSuffix}`, who: a0 }];
+      }).flat();
+    }
+
+    const detail = [
+      { role: '主席', who: week.chairman || '' },
+      { role: '開始禱告', who: week.openPrayer || '' },
+      { header: '上帝話語的寶藏' },
+      ...partDetail(week.treasures ?? []),
+      { header: '用心準備傳道工作' },
+      ...partDetail(week.ministry ?? []),
+      { header: '基督徒的生活' },
+      ...partDetail(week.living ?? []),
+      { role: '結束禱告', who: week.closePrayer || '' },
+    ];
+
     return {
       id: `mw_${week.id ?? week.date}`,
       rawDate,
       date: compactDate(week.date),
       wd: weekdayFor(rawDate),
       type: 'mw',
-      title: week.reading || week.dateLabel || '平日聚會',
+      title: weekType === 'special' && weekLabel
+        ? `${weekLabel} — ${week.reading || week.dateLabel || '平日聚會'}`
+        : (week.reading || week.dateLabel || '平日聚會'),
       keys,
+      detail,
       status: gaps > 0 ? 'gap' : 'ok',
       gaps,
       weekIdx,
+      weekType,
     };
   });
 
@@ -248,6 +301,14 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
     }
     const gaps = [row.speaker, row.chair, row.wt, row.read].filter((v) => !String(v ?? '').trim()).length;
     const rawDate = parseRowDate(row.date);
+    const detail = [
+      { role: '講者', who: row.speaker ? `${row.speaker}${row.cong ? ` · ${row.cong}` : ''}` : '' },
+      { role: '主席', who: row.chair || '' },
+      { role: '守望台主持', who: row.wt || '' },
+      { role: '守望台朗讀', who: row.read || '' },
+      ...(row.host ? [{ role: '招待', who: row.host }] : []),
+      ...(row.away ? [{ role: '外地安排', who: row.away }] : []),
+    ];
     return {
       id: `we_${row._id ?? row.id}`,
       rawDate,
@@ -260,6 +321,7 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
         { role: '主席', who: row.chair || '' },
         { role: '守望台', who: row.wt || '' },
       ],
+      detail,
       status: gaps > 0 ? 'gap' : 'ok',
       gaps,
     };
@@ -389,6 +451,7 @@ function AgItem({ row, open, onToggle, onGoToRow }) {
   }
 
   if (status === 'ok') {
+    const items = row.detail ?? row.keys;
     return (
       <div className={`ag-item ag-item--ok${open ? ' open' : ''}`}>
         <div className="ag-date">
@@ -406,12 +469,16 @@ function AgItem({ row, open, onToggle, onGoToRow }) {
           </button>
           <div className="ag-detail">
             <div className="ag-roles">
-              {row.keys.map((k, i) => (
-                <div key={i} className={`ag-role${!k.who ? ' is-miss' : ''}`}>
-                  <span className="ag-role__lbl">{k.role}</span>
-                  <span className="ag-role__who">{k.who || '未指派'}</span>
-                </div>
-              ))}
+              {items.map((k, i) =>
+                k.header ? (
+                  <div key={i} className="ag-role-section">{k.header}</div>
+                ) : (
+                  <div key={i} className={`ag-role${!k.who ? ' is-miss' : ''}`}>
+                    <span className="ag-role__lbl">{k.role}</span>
+                    <span className="ag-role__who">{k.who || '未指派'}</span>
+                  </div>
+                )
+              )}
             </div>
           </div>
         </div>
