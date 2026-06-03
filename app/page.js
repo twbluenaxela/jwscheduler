@@ -305,7 +305,9 @@ export default function App() {
           closingTime: weekObj.closingTime,
           closingDur: weekObj.closingDur,
           closeSongTime: weekObj.closeSongTime,
-          parts: allParts.map((p) => ({ id: p.dbId, title: p.title, dur: p.dur, time: p.time })),
+          type: weekObj.type ?? 'normal',
+          label: weekObj.label ?? '',
+          parts: allParts.map((p) => ({ id: p.dbId, title: p.title, dur: p.dur, time: p.time, hideHelper: p.hideHelper ?? false })),
         }),
       });
     } catch (err) {
@@ -646,6 +648,8 @@ export default function App() {
               loading={workspaceLoading}
               canEdit={canEdit}
               onNavigate={setPage}
+              setWeek={setWeek}
+              setView={setView}
             />
           )}
           {page === 'people' && (

@@ -439,6 +439,35 @@ export default function MeetingsPage({
                   >−</button>
                 )}
               </div>
+              {editMode && midweekWeeks[week] && (() => {
+                const w = midweekWeeks[week];
+                const wType = w.type ?? 'normal';
+                const setType = (t) => updateMidweekWeek(w.id, (cur) => ({ ...cur, type: t, label: t === 'normal' ? '' : (cur.label ?? '') }));
+                const setLabel = (v) => updateMidweekWeek(w.id, (cur) => ({ ...cur, label: v }));
+                return (
+                  <div className="mw-type-bar">
+                    <div className="mw-type-chips">
+                      {[['normal','一般'],['special','特別'],['assembly','大會']].map(([val, lbl]) => (
+                        <button
+                          key={val}
+                          className={`mw-type-chip${wType === val ? ' mw-type-chip--active' : ''}`}
+                          onClick={() => setType(val)}
+                        >{lbl}</button>
+                      ))}
+                    </div>
+                    {wType !== 'normal' && (
+                      <input
+                        className="week-edit__input mw-type-label-input"
+                        type="text"
+                        placeholder={wType === 'assembly' ? '區域大會、分區大會…' : '分區監督探訪、總部代表…'}
+                        value={w.label ?? ''}
+                        onChange={(e) => setLabel(e.target.value)}
+                        aria-label="週次標籤"
+                      />
+                    )}
+                  </div>
+                );
+              })()}
               <MidweekWeek
                 week={midweekWeeks[week]}
                 editMode={editMode}

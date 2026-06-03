@@ -181,12 +181,14 @@ function weekdayFor(rawDate) {
 
 function partGapCount(part) {
   const assigned = (part.assign ?? []).filter(Boolean).length;
-  const expected = String(part.roleLabel ?? '').includes('/') ? 2 : 1;
+  // If the helper slot was intentionally removed, only the primary slot counts
+  const isPair = String(part.roleLabel ?? '').includes('/') && !part.hideHelper;
+  const expected = isPair ? 2 : 1;
   return Math.max(expected - assigned, 0);
 }
 
 function buildOverviewRows(midweekWeeks, weekendRows) {
-  const midweekItems = midweekWeeks.map((week) => {
+  const midweekItems = midweekWeeks.map((week, weekIdx) => {
     const cbs = week.living?.find((p) => p.cat === 'cbs');
     const allParts = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
     const reading = allParts.find((p) => p.cat === 'reading');
@@ -211,6 +213,7 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
       keys,
       status: gaps > 0 ? 'gap' : 'ok',
       gaps,
+      weekIdx,
     };
   });
 
@@ -296,7 +299,7 @@ function TypeBadge({ type }) {
 
 const OV_ALERT_CAP = 3;
 
-function AlertPanel({ rows, onNavigate }) {
+function AlertPanel({ rows, onGoToRow }) {
   const gaps = rows.filter((r) => r.status === 'gap');
   const empties = rows.filter((r) => r.status === 'empty');
   const total = gaps.length + empties.length;
@@ -332,7 +335,7 @@ function AlertPanel({ rows, onNavigate }) {
       {shown.length > 0 && (
         <div className="ag-alert__list">
           {shown.map((r) => (
-            <button key={r.id} className="ag-alert__row" onClick={() => onNavigate?.('meetings')}>
+            <button key={r.id} className="ag-alert__row" onClick={() => onGoToRow(r)}>
               <span className="ag-alert__date">
                 <b>{r.date}</b>
                 <small>週{r.wd}</small>
@@ -361,7 +364,7 @@ function AlertPanel({ rows, onNavigate }) {
       )}
 
       {empties.length > 0 && (
-        <button className="ag-backlog" onClick={() => onNavigate?.('meetings')}>
+        <button className="ag-backlog" onClick={() => onGoToRow(empties[0])}>
           <span className="ag-backlog__txt">
             <b>{empties.length} 場聚會尚未開始排定</b>
             <small>
@@ -378,7 +381,7 @@ function AlertPanel({ rows, onNavigate }) {
 
 // ─── Single agenda item ───────────────────────────────────────────────────────
 
-function AgItem({ row, open, onToggle, onNavigate }) {
+function AgItem({ row, open, onToggle, onGoToRow }) {
   const { status } = row;
 
   function gapChips() {
@@ -424,7 +427,7 @@ function AgItem({ row, open, onToggle, onNavigate }) {
           <small>週{row.wd}</small>
         </div>
         <div className="ag-card">
-          <button className="ag-row" onClick={() => onNavigate?.('meetings')}>
+          <button className="ag-row" onClick={() => onGoToRow(row)}>
             <span className="ag-top">
               <TypeBadge type={row.type} />
               <span className="ag-title">{row.title}</span>
@@ -479,7 +482,7 @@ function AgItem({ row, open, onToggle, onNavigate }) {
             ))}
           </div>
         </div>
-        <button className="btn btn--primary ag-go" onClick={() => onNavigate?.('meetings')}>
+        <button className="btn btn--primary ag-go" onClick={() => onGoToRow(row)}>
           前往編排 ›
         </button>
       </div>
@@ -489,7 +492,7 @@ function AgItem({ row, open, onToggle, onNavigate }) {
 
 // ─── Month section ────────────────────────────────────────────────────────────
 
-function MonthSection({ year, month, rows, openItems, onToggle, onNavigate }) {
+function MonthSection({ year, month, rows, openItems, onToggle, onGoToRow }) {
   const monthLabel = month ? `${month} 月` : '未知月份';
   const yearLabel = year ? `${year} 年` : '';
   const nonSuspended = rows.filter((r) => r.status !== 'suspended');
@@ -521,7 +524,7 @@ function MonthSection({ year, month, rows, openItems, onToggle, onNavigate }) {
             row={r}
             open={openItems.has(r.id)}
             onToggle={() => onToggle(r.id)}
-            onNavigate={onNavigate}
+            onGoToRow={onGoToRow}
           />
         ))}
       </div>
@@ -565,6 +568,8 @@ export default function OverviewPage({
   loading = false,
   canEdit = false,
   onNavigate,
+  setWeek,
+  setView,
 }) {
   const [tab, setTab] = useState('schedule');
   const activeTab = tab === 'changes' && !canEdit ? 'schedule' : tab;
@@ -600,6 +605,16 @@ export default function OverviewPage({
 
   // For the alert panel, use all future rows regardless of filter
   const alertRows = allRows.filter((r) => !r.rawDate || r.rawDate >= today);
+
+  function onGoToRow(row) {
+    if (row.type === 'mw' && row.weekIdx != null) {
+      setWeek?.(row.weekIdx);
+      setView?.('midweek');
+    } else {
+      setView?.('weekend');
+    }
+    onNavigate('meetings');
+  }
 
   return (
     <section className="ov-section">
@@ -652,7 +667,7 @@ export default function OverviewPage({
 
           {!loading && allRows.length > 0 && (
             <>
-              <AlertPanel rows={alertRows} onNavigate={onNavigate} />
+              <AlertPanel rows={alertRows} onGoToRow={onGoToRow} />
 
               {futureGroups.map((g) => (
                 <MonthSection
@@ -662,7 +677,7 @@ export default function OverviewPage({
                   rows={g.rows}
                   openItems={openItems}
                   onToggle={toggleItem}
-                  onNavigate={onNavigate}
+                  onGoToRow={onGoToRow}
                 />
               ))}
 
@@ -680,7 +695,7 @@ export default function OverviewPage({
                   rows={g.rows}
                   openItems={openItems}
                   onToggle={toggleItem}
-                  onNavigate={onNavigate}
+                  onGoToRow={onGoToRow}
                 />
               ))}
             </>

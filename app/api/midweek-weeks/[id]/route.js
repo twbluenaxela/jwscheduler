@@ -8,6 +8,7 @@ const WEEK_FIELDS = new Set([
   'date', 'dateLabel', 'weekdayPill', 'reading',
   'openSong', 'midSong', 'closeSong',
   'openIntroTime', 'midSongTime', 'closingTime', 'closingDur', 'closeSongTime',
+  'type', 'label',
 ]);
 
 export async function PATCH(request, context) {
@@ -28,7 +29,10 @@ export async function PATCH(request, context) {
 
     const weekData = {};
     for (const [key, val] of Object.entries(body)) {
-      if (WEEK_FIELDS.has(key)) weekData[key] = val ?? '';
+      if (!WEEK_FIELDS.has(key)) continue;
+      if (key === 'label') { weekData.label = val || null; }         // empty string → null
+      else if (key === 'type') { weekData.type = val || 'normal'; }  // always has a value
+      else weekData[key] = val ?? '';
     }
 
     const parts = Array.isArray(body.parts) ? body.parts : [];
@@ -41,9 +45,10 @@ export async function PATCH(request, context) {
         db.part.update({
           where: { id: Number(p.id) },
           data: {
-            ...(p.title !== undefined ? { title: p.title } : {}),
-            ...(p.dur   !== undefined ? { dur:   p.dur   } : {}),
-            ...(p.time  !== undefined ? { time:  p.time  } : {}),
+            ...(p.title      !== undefined ? { title:      p.title      } : {}),
+            ...(p.dur        !== undefined ? { dur:        p.dur        } : {}),
+            ...(p.time       !== undefined ? { time:       p.time       } : {}),
+            ...(p.hideHelper !== undefined ? { hideHelper: !!p.hideHelper } : {}),
           },
         })
       ),

@@ -81,6 +81,8 @@ model MidweekWeek {
   openIntroTime  String?
   closingTime    String?
   closingDur     String?
+  type           String       @default("normal") // "normal" | "special" | "assembly"
+  label          String?      // free text badge, e.g. "區域大會", "分區監督探訪"
   parts          Part[]
   assignments    Assignment[]
   createdAt      DateTime     @default(now())
@@ -99,9 +101,10 @@ model Part {
   title     String
   dur       String
   cat       String
-  roleLabel String?
-  time      String?
-  cbsRef    String?
+  roleLabel   String?
+  time        String?
+  cbsRef      String?
+  hideHelper  Boolean  @default(false)
 
   @@unique([weekId, partKey])
 }

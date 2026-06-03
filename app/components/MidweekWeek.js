@@ -200,21 +200,39 @@ function PartRow({
   );
 }
 
+function initHiddenHelpers(week) {
+  const allParts = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
+  return new Set(allParts.filter((p) => p.hideHelper).map((p) => p.id));
+}
+
 export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, cardRef, getSuggestion, onAccept, onClear, clearSlot }) {
   const wId = `mw${week.id}`;
   const ctx = week.date;
   const [draftWeek, setDraftWeek] = useState(week);
-  const [hiddenHelpers, setHiddenHelpers] = useState(new Set());
+  const [hiddenHelpers, setHiddenHelpers] = useState(() => initHiddenHelpers(week));
 
-  const toggleHelper = (partId, hide) => setHiddenHelpers(prev => {
-    const next = new Set(prev);
-    if (hide) next.add(partId); else next.delete(partId);
-    return next;
-  });
+  const toggleHelper = (partId, hide) => {
+    setHiddenHelpers(prev => {
+      const next = new Set(prev);
+      if (hide) next.add(partId); else next.delete(partId);
+      return next;
+    });
+    // persist hideHelper into the week state so saveMidweekWeek picks it up
+    const section = ['treasures', 'ministry', 'living'].find((s) =>
+      week[s]?.some((p) => p.id === partId)
+    );
+    if (section) {
+      updateMidweekWeek(week.id, (w) => ({
+        ...w,
+        [section]: w[section].map((p) => p.id === partId ? { ...p, hideHelper: hide } : p),
+      }));
+    }
+  };
 
   useEffect(() => {
     setDraftWeek(week);
-  }, [week]);
+    setHiddenHelpers(initHiddenHelpers(week));
+  }, [week.id]);
 
   const shownWeek = editMode ? draftWeek : week;
   const updateDraftWeek = (patch) => {
@@ -231,8 +249,14 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     updateWeekSection(week.id, sectionName, partId, updateMidweekWeek, patch);
   };
 
+  const weekType = shownWeek.type ?? 'normal';
+  const weekLabel = shownWeek.label ?? '';
+  const cardClass = weekType === 'special' ? 'card card--special'
+                  : weekType === 'assembly' ? 'card card--assembly'
+                  : 'card';
+
   return (
-    <article className="card" ref={cardRef}>
+    <article className={cardClass} ref={cardRef}>
       <div className="mw-head">
         <div className="mw-head__date">
           <TextField
@@ -254,6 +278,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
               inputClassName="week-edit__input week-edit__input--pill"
               ariaLabel="星期與時間"
             />
+            {weekLabel && (
+              <span className={`mw-type-badge mw-type-badge--${weekType}`}>{weekLabel}</span>
+            )}
             <span className="mw-head__reading">
               每週閱讀經文　
               {editMode ? (
@@ -278,6 +305,7 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
         </div>
       </div>
 
+      <div className={weekType === 'assembly' ? 'mw-body mw-body--faint' : 'mw-body'}>
       <div className="rows">
         <div className="row row--song">
           <span className="row__time">7:30</span>
@@ -497,6 +525,7 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
           </span>
         </div>
       </div>
+      </div>{/* mw-body */}
     </article>
   );
 }
