@@ -2,6 +2,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { getToken } from '../lib/auth-context';
 
+// ─── ChangesPanel ────────────────────────────────────────────────────────────
+
 function formatChangeTime(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
@@ -10,7 +12,7 @@ function formatChangeTime(iso) {
 }
 
 function ChangesPanel() {
-  const [entries, setEntries] = useState(null); // null = not loaded yet
+  const [entries, setEntries] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,77 +35,66 @@ function ChangesPanel() {
   useEffect(() => { load(); }, []);
 
   const handleCopyText = async () => {
-  if (!entries || entries.length === 0) return;
-
-  // Format the logs into plain text
-  const textToCopy = entries.map((e) => {
-    const time = formatChangeTime(e.createdAt);
-    const actionText = e.action === 'clear' 
-      ? `[清除] ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`
-      : `${e.name} → ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`;
-    
-    return `${time} | ${actionText} | 操作者: ${e.actorName}`;
-  }).join('\n');
-
-  try {
-    await navigator.clipboard.writeText(textToCopy);
-    alert('已複製到剪貼簿！'); // Success alert
-  } catch (err) {
-    console.error('Failed to copy text', err);
-    alert('複製失敗，請手動複製。');
-  }
-};
-// --- 清除功能 (Clear Logs) — removes them from the DB too ---
-const handleClearLogs = async () => {
-  if (!confirm('確定要清除所有變更紀錄嗎？此操作無法復原。')) return;
-  const snapshot = entries;
-  setEntries([]); // optimistic
-  try {
-    const token = await getToken();
-    const res = await fetch('/api/changelog', {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || '清除失敗');
+    if (!entries || entries.length === 0) return;
+    const textToCopy = entries.map((e) => {
+      const time = formatChangeTime(e.createdAt);
+      const actionText = e.action === 'clear'
+        ? `[清除] ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`
+        : `${e.name} → ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`;
+      return `${time} | ${actionText} | 操作者: ${e.actorName}`;
+    }).join('\n');
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      alert('已複製到剪貼簿！');
+    } catch {
+      alert('複製失敗，請手動複製。');
     }
-  } catch (err) {
-    setEntries(snapshot); // rollback
-    alert(err.message || '清除失敗，請稍後再試。');
-  }
-};
+  };
+
+  const handleClearLogs = async () => {
+    if (!confirm('確定要清除所有變更紀錄嗎？此操作無法復原。')) return;
+    const snapshot = entries;
+    setEntries([]);
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/changelog', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '清除失敗');
+      }
+    } catch (err) {
+      setEntries(snapshot);
+      alert(err.message || '清除失敗，請稍後再試。');
+    }
+  };
 
   return (
     <div className="cl-wrap">
       <div className="cl-head">
         <span className="cl-head__title">最近的指派變更</span>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    
-                    {/* Only show Copy & Clear if there are actually entries to copy/clear */}
-                    {entries && entries.length > 0 && (
-                      <>
-                        <button className="ov-reset-btn" onClick={handleCopyText} disabled={loading}>
-                          📋 複製文字
-                        </button>
-                        
-                        <button 
-                          className="ov-reset-btn" 
-                          onClick={handleClearLogs} 
-                          disabled={loading}
-                          style={{ color: '#d32f2f', borderColor: '#ffcdd2', backgroundColor: '#ffebee' }}
-                        >
-                          🗑️ 清除
-                        </button>
-                      </>
-                    )}
-
-                    {/* Your original Refresh button */}
-                    <button className="ov-reset-btn" onClick={load} disabled={loading}>
-                      {loading ? '載入中…' : '↻ 重新整理'}
-                    </button>
-                    
-                  </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {entries && entries.length > 0 && (
+            <>
+              <button className="ov-reset-btn" onClick={handleCopyText} disabled={loading}>
+                複製文字
+              </button>
+              <button
+                className="ov-reset-btn"
+                onClick={handleClearLogs}
+                disabled={loading}
+                style={{ color: '#d32f2f', borderColor: '#ffcdd2', backgroundColor: '#ffebee' }}
+              >
+                清除
+              </button>
+            </>
+          )}
+          <button className="ov-reset-btn" onClick={load} disabled={loading}>
+            {loading ? '載入中…' : '↻ 重新整理'}
+          </button>
+        </div>
       </div>
 
       {error && <div className="imp-error">{error}</div>}
@@ -144,55 +135,48 @@ const handleClearLogs = async () => {
   );
 }
 
-const TYPE_BADGE = {
-  mw: <span className="ov-type ov-type--mw">聚會</span>,
-  we: <span className="ov-type ov-type--we">週末</span>,
-  event: <span className="ov-type ov-type--ev">特別</span>,
-};
+// ─── Data helpers ─────────────────────────────────────────────────────────────
 
-const STAT_BADGE = {
-  ok:        <span className="ov-stat ov-stat--ok">已完成</span>,
-  gap:       (r) => <span className="ov-stat ov-stat--gap">{r.gaps} 空缺</span>,
-  empty:     <span className="ov-stat ov-stat--empty">未排定</span>,
-  suspended: <span className="ov-stat ov-stat--susp">暫停</span>,
-};
-
-const FILTERS = ['all', 'mw', 'we', 'gap'];
-const FILTER_LABELS = { all: '全部', mw: '聚會', we: '週末', gap: '有空缺' };
-const SORTS = ['upcoming', 'urgent', 'oldest'];
-const SORT_LABELS = { upcoming: '最近優先', urgent: '最緊迫', oldest: '最早優先' };
 const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
 
 function parseRowDate(dateStr) {
   const text = String(dateStr ?? '');
-  const m = text.match(/(\d+)月\s*(\d+)日/);
-  if (!m) return null;
-  const month = Number(m[1]);
-  const day = Number(m[2]);
-  const now = new Date();
-  let year = now.getFullYear();
-  if (month === 12 && now.getMonth() <= 1) year--;
-  if (month <= 2 && now.getMonth() >= 10) year++;
-  return new Date(year, month - 1, day);
+  // Chinese: "6月 3日" or slash "8/9"
+  const cn = text.match(/(\d+)月\s*(\d+)日/);
+  if (cn) {
+    const month = Number(cn[1]);
+    const day = Number(cn[2]);
+    const now = new Date();
+    let year = now.getFullYear();
+    if (month === 12 && now.getMonth() <= 1) year--;
+    if (month <= 2 && now.getMonth() >= 10) year++;
+    return new Date(year, month - 1, day);
+  }
+  const slash = text.match(/^(\d+)\/(\d+)$/);
+  if (slash) {
+    const month = Number(slash[1]);
+    const day = Number(slash[2]);
+    const now = new Date();
+    let year = now.getFullYear();
+    if (month === 12 && now.getMonth() <= 1) year--;
+    if (month <= 2 && now.getMonth() >= 10) year++;
+    return new Date(year, month - 1, day);
+  }
+  return null;
 }
 
 function compactDate(date) {
   const text = String(date ?? '');
-  const monthDay = text.match(/(\d+)月\s*(\d+)日/);
-  if (monthDay) return `${monthDay[1]}/${monthDay[2]}`;
+  const cn = text.match(/(\d+)月\s*(\d+)日/);
+  if (cn) return `${cn[1]}/${cn[2]}`;
+  const slash = text.match(/^(\d+)\/(\d+)$/);
+  if (slash) return text;
   return text;
 }
 
-function weekdayFor(date) {
-  const text = String(date ?? '');
-  const monthDay = text.match(/(\d+)月\s*(\d+)日/);
-  if (!monthDay) return '';
-  const parsed = new Date(new Date().getFullYear(), Number(monthDay[1]) - 1, Number(monthDay[2]));
-  return WEEKDAY[parsed.getDay()];
-}
-
-function missingCount(values) {
-  return values.filter((value) => !String(value ?? '').trim()).length;
+function weekdayFor(rawDate) {
+  if (!rawDate) return '';
+  return WEEKDAY[rawDate.getDay()];
 }
 
 function partGapCount(part) {
@@ -202,26 +186,26 @@ function partGapCount(part) {
 }
 
 function buildOverviewRows(midweekWeeks, weekendRows) {
-  const midweekRows = midweekWeeks.map((week) => {
-    const cbs = week.living?.find((part) => part.cat === 'cbs');
-    const reading = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])]
-      .find((part) => part.cat === 'reading');
-    const roleGaps = missingCount([week.chairman, week.openPrayer, week.closePrayer]);
-    const partGaps = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])]
-      .reduce((sum, part) => sum + partGapCount(part), 0);
+  const midweekItems = midweekWeeks.map((week) => {
+    const cbs = week.living?.find((p) => p.cat === 'cbs');
+    const allParts = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
+    const reading = allParts.find((p) => p.cat === 'reading');
+    const roleGaps = [week.chairman, week.openPrayer, week.closePrayer].filter((v) => !String(v ?? '').trim()).length;
+    const partGaps = allParts.reduce((sum, p) => sum + partGapCount(p), 0);
     const gaps = roleGaps + partGaps;
 
     const keys = [
-      `主席 ${week.chairman || '未指派'}`,
-      cbs ? `研經班 ${(cbs.assign ?? []).filter(Boolean).join(' / ') || '未指派'}` : null,
-      reading ? `經文朗讀 ${(reading.assign ?? []).filter(Boolean).join(' / ') || '未指派'}` : null,
+      { role: '主席', who: week.chairman || '' },
+      cbs ? { role: '研經班', who: (cbs.assign ?? []).filter(Boolean).join(' / ') } : null,
+      reading ? { role: '經文朗讀', who: (reading.assign ?? []).filter(Boolean).join(' / ') } : null,
     ].filter(Boolean);
 
+    const rawDate = parseRowDate(week.date);
     return {
       id: `mw_${week.id ?? week.date}`,
-      rawDate: parseRowDate(week.date),
+      rawDate,
       date: compactDate(week.date),
-      wd: weekdayFor(week.date),
+      wd: weekdayFor(rawDate),
       type: 'mw',
       title: week.reading || week.dateLabel || '平日聚會',
       keys,
@@ -230,13 +214,14 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
     };
   });
 
-  const weekendOverviewRows = weekendRows.map((row) => {
+  const weekendItems = weekendRows.map((row) => {
     if (row.type === 'event') {
+      const rawDate = parseRowDate(row.date);
       return {
         id: `we_${row._id ?? row.id}`,
-        rawDate: parseRowDate(row.date),
-        date: row.date,
-        wd: '',
+        rawDate,
+        date: compactDate(row.date),
+        wd: weekdayFor(rawDate),
         type: 'event',
         title: [row.label, row.note].filter(Boolean).join(' — ') || '特別事項',
         keys: [],
@@ -244,87 +229,307 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
         gaps: 0,
       };
     }
-
-    const gaps = missingCount([row.speaker, row.chair, row.wt, row.read]);
+    if (row.type === 'suspended') {
+      const rawDate = parseRowDate(row.date);
+      return {
+        id: `we_${row._id ?? row.id}`,
+        rawDate,
+        date: compactDate(row.date),
+        wd: weekdayFor(rawDate),
+        type: 'event',
+        title: [row.label, row.note].filter(Boolean).join(' — ') || '暫停聚會',
+        keys: [],
+        status: 'suspended',
+        gaps: 0,
+      };
+    }
+    const gaps = [row.speaker, row.chair, row.wt, row.read].filter((v) => !String(v ?? '').trim()).length;
+    const rawDate = parseRowDate(row.date);
     return {
       id: `we_${row._id ?? row.id}`,
-      rawDate: parseRowDate(row.date),
-      date: row.date,
-      wd: '',
+      rawDate,
+      date: compactDate(row.date),
+      wd: weekdayFor(rawDate),
       type: 'we',
       title: row.topic || '公眾演講安排',
       keys: [
-        `講者 ${row.speaker || '未指派'}${row.cong ? ` · ${row.cong}` : ''}`,
-        `主席 ${row.chair || '未指派'}`,
-        `守望台 ${row.wt || '未指派'}`,
+        { role: '講者', who: row.speaker ? `${row.speaker}${row.cong ? ` · ${row.cong}` : ''}` : '' },
+        { role: '主席', who: row.chair || '' },
+        { role: '守望台', who: row.wt || '' },
       ],
       status: gaps > 0 ? 'gap' : 'ok',
       gaps,
     };
   });
 
-  return [...midweekRows, ...weekendOverviewRows];
-}
-
-function sortRows(rows, sort) {
-  return [...rows].sort((a, b) => {
-    if (sort === 'urgent') {
-      const gapDiff = (b.gaps || 0) - (a.gaps || 0);
-      if (gapDiff !== 0) return gapDiff;
-    }
-    const da = a.rawDate?.getTime() ?? 0;
-    const db = b.rawDate?.getTime() ?? 0;
-    return sort === 'oldest' ? db - da : da - db;
+  return [...midweekItems, ...weekendItems].sort((a, b) => {
+    const ta = a.rawDate?.getTime() ?? 0;
+    const tb = b.rawDate?.getTime() ?? 0;
+    return ta - tb;
   });
 }
 
-function SwipeRow({ onDismiss, children }) {
-  const startX = useRef(null);
-  const [offset, setOffset] = useState(0);
-  const isSwiping = useRef(false);
+function groupByMonth(rows) {
+  const groups = {};
+  rows.forEach((r) => {
+    const key = r.rawDate ? `${r.rawDate.getFullYear()}-${r.rawDate.getMonth()}` : 'unknown';
+    if (!groups[key]) groups[key] = { year: r.rawDate?.getFullYear(), month: r.rawDate ? r.rawDate.getMonth() + 1 : null, rows: [] };
+    groups[key].rows.push(r);
+  });
+  return Object.values(groups).sort((a, b) => {
+    if (!a.year) return 1;
+    if (!b.year) return -1;
+    if (a.year !== b.year) return a.year - b.year;
+    return a.month - b.month;
+  });
+}
 
-  function onTouchStart(e) {
-    startX.current = e.touches[0].clientX;
-    isSwiping.current = false;
+// ─── Type badge ───────────────────────────────────────────────────────────────
+
+function TypeBadge({ type }) {
+  if (type === 'mw') return <span className="ov-type ov-type--mw">週中</span>;
+  if (type === 'we') return <span className="ov-type ov-type--we">週末</span>;
+  return <span className="ov-type ov-type--ev">特別</span>;
+}
+
+// ─── Needs-attention panel ────────────────────────────────────────────────────
+
+const OV_ALERT_CAP = 3;
+
+function AlertPanel({ rows, onNavigate }) {
+  const gaps = rows.filter((r) => r.status === 'gap');
+  const empties = rows.filter((r) => r.status === 'empty');
+  const total = gaps.length + empties.length;
+
+  if (!total) {
+    return (
+      <div className="ag-alert ag-alert--clear">
+        <span className="ag-alert__tick">✓</span>
+        <div className="ag-alert__copy">
+          <b>全部就緒</b>
+          <span>已上傳的聚會都排定了，沒有空缺。</span>
+        </div>
+      </div>
+    );
   }
 
-  function onTouchMove(e) {
-    if (startX.current === null) return;
-    const dx = e.touches[0].clientX - startX.current;
-    if (dx < -8) {
-      isSwiping.current = true;
-      setOffset(Math.min(0, dx));
-    }
-  }
+  const shown = gaps.slice(0, OV_ALERT_CAP);
+  const moreGaps = gaps.length - shown.length;
 
-  function onTouchEnd() {
-    if (offset < -80) {
-      onDismiss();
-    } else {
-      setOffset(0);
-    }
-    startX.current = null;
-    isSwiping.current = false;
+  // Compute gap role chips for a row
+  function gapChips(r) {
+    return r.keys.filter((k) => !k.who).map((k) => k.role);
   }
-
-  const opacity = offset < -40 ? Math.max(0.2, 1 - (-offset - 40) / 100) : 1;
 
   return (
-    <div
-      className="ov-swipe-wrap"
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-      style={{
-        transform: `translateX(${offset}px)`,
-        transition: offset === 0 ? 'transform 0.22s ease' : 'none',
-        opacity,
-      }}
-    >
-      {children}
+    <div className="ag-alert">
+      <div className="ag-alert__head">
+        <span className="ag-alert__dot" />
+        <h3 className="ag-alert__h">需要你處理</h3>
+        <span className="ag-alert__count">{total} 場待補</span>
+      </div>
+
+      {shown.length > 0 && (
+        <div className="ag-alert__list">
+          {shown.map((r) => (
+            <button key={r.id} className="ag-alert__row" onClick={() => onNavigate?.('meetings')}>
+              <span className="ag-alert__date">
+                <b>{r.date}</b>
+                <small>週{r.wd}</small>
+              </span>
+              <span className="ag-alert__main">
+                <span className="ag-alert__title">
+                  <TypeBadge type={r.type} />
+                  {r.title}
+                </span>
+                <div className="ag-need__chips">
+                  {gapChips(r).map((chip, i) => (
+                    <span key={i} className="ag-need__chip">{chip}</span>
+                  ))}
+                </div>
+              </span>
+              <span className="ag-alert__cta">指派 ›</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {moreGaps > 0 && (
+        <button className="ag-alert__more">
+          還有 {moreGaps} 場有空缺 — 全部顯示 ›
+        </button>
+      )}
+
+      {empties.length > 0 && (
+        <button className="ag-backlog" onClick={() => onNavigate?.('meetings')}>
+          <span className="ag-backlog__txt">
+            <b>{empties.length} 場聚會尚未開始排定</b>
+            <small>
+              {empties[0].date} – {empties[empties.length - 1].date}
+              　已上傳，依進度逐步安排即可
+            </small>
+          </span>
+          <span className="ag-alert__cta">開始排定 ›</span>
+        </button>
+      )}
     </div>
   );
 }
+
+// ─── Single agenda item ───────────────────────────────────────────────────────
+
+function AgItem({ row, open, onToggle, onNavigate }) {
+  const { status } = row;
+
+  function gapChips() {
+    return row.keys.filter((k) => !k.who).map((k) => k.role);
+  }
+
+  if (status === 'ok') {
+    return (
+      <div className={`ag-item ag-item--ok${open ? ' open' : ''}`}>
+        <div className="ag-date">
+          <b>{row.date}</b>
+          <small>週{row.wd}</small>
+        </div>
+        <div className="ag-card">
+          <button className="ag-row" onClick={onToggle}>
+            <span className="ag-top">
+              <TypeBadge type={row.type} />
+              <span className="ag-title">{row.title}</span>
+            </span>
+            <span className="ag-ready">就緒</span>
+            <span className="ag-caret">›</span>
+          </button>
+          <div className="ag-detail">
+            <div className="ag-roles">
+              {row.keys.map((k, i) => (
+                <div key={i} className={`ag-role${!k.who ? ' is-miss' : ''}`}>
+                  <span className="ag-role__lbl">{k.role}</span>
+                  <span className="ag-role__who">{k.who || '未指派'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'empty') {
+    return (
+      <div className="ag-item ag-item--empty">
+        <div className="ag-date">
+          <b>{row.date}</b>
+          <small>週{row.wd}</small>
+        </div>
+        <div className="ag-card">
+          <button className="ag-row" onClick={() => onNavigate?.('meetings')}>
+            <span className="ag-top">
+              <TypeBadge type={row.type} />
+              <span className="ag-title">{row.title}</span>
+            </span>
+            <span className="ag-todo">尚未排定</span>
+            <span className="ag-caret">›</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'suspended') {
+    return (
+      <div className="ag-item ag-item--susp">
+        <div className="ag-date">
+          <b>{row.date}</b>
+          <small>{row.wd ? `週${row.wd}` : ''}</small>
+        </div>
+        <div className="ag-card">
+          <div className="ag-row ag-row--static">
+            <span className="ag-top">
+              <TypeBadge type={row.type} />
+              <span className="ag-title">{row.title}</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // gap — open and action-forward
+  return (
+    <div className="ag-item ag-item--gap">
+      <div className="ag-date">
+        <b>{row.date}</b>
+        <small>週{row.wd}</small>
+      </div>
+      <div className="ag-card">
+        <div className="ag-row ag-row--static">
+          <span className="ag-top">
+            <TypeBadge type={row.type} />
+            <span className="ag-title">{row.title}</span>
+          </span>
+          <span className="ag-gapcount">{row.gaps} 個空缺</span>
+        </div>
+        <div className="ag-need">
+          <span className="ag-need__lbl">待補</span>
+          <div className="ag-need__chips">
+            {gapChips().map((chip, i) => (
+              <span key={i} className="ag-need__chip">{chip}</span>
+            ))}
+          </div>
+        </div>
+        <button className="btn btn--primary ag-go" onClick={() => onNavigate?.('meetings')}>
+          前往編排 ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Month section ────────────────────────────────────────────────────────────
+
+function MonthSection({ year, month, rows, openItems, onToggle, onNavigate }) {
+  const monthLabel = month ? `${month} 月` : '未知月份';
+  const yearLabel = year ? `${year} 年` : '';
+  const nonSuspended = rows.filter((r) => r.status !== 'suspended');
+  const done = nonSuspended.filter((r) => r.status === 'ok').length;
+  const total = nonSuspended.length;
+  const need = total - done;
+  const pct = total ? Math.round((done / total) * 100) : 100;
+
+  return (
+    <section className="ag-month">
+      <div className="ag-month__head">
+        <h3 className="ag-month__title">
+          <span className="ag-month__year">{yearLabel} </span>
+          {monthLabel}
+        </h3>
+        <div className="ag-month__meta">
+          <span>{total} 場聚會</span>
+          {need > 0
+            ? <span className="ag-month__need">{need} 場待補</span>
+            : <span className="ag-month__ok">全部就緒</span>
+          }
+        </div>
+        <div className="ag-bar"><span style={{ width: `${pct}%` }} /></div>
+      </div>
+      <div className="ag-tl">
+        {rows.map((r) => (
+          <AgItem
+            key={r.id}
+            row={r}
+            open={openItems.has(r.id)}
+            onToggle={() => onToggle(r.id)}
+            onNavigate={onNavigate}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
 
 function OvToast({ toast, onHide }) {
   const timer = useRef(null);
@@ -349,198 +554,138 @@ function OvToast({ toast, onHide }) {
   );
 }
 
-export default function OverviewPage({ midweekWeeks = [], weekendRows = [], loading = false, canEdit = false }) {
-  const [tab, setTab] = useState('schedule'); // 'schedule' | 'changes'
-  // 最近變更 is admin-only (matches /api/changelog gate)
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+const FILTERS = ['all', 'mw', 'we', 'gap'];
+const FILTER_LABELS = { all: '全部', mw: '週中', we: '週末', gap: '待補' };
+
+export default function OverviewPage({
+  midweekWeeks = [],
+  weekendRows = [],
+  loading = false,
+  canEdit = false,
+  onNavigate,
+}) {
+  const [tab, setTab] = useState('schedule');
   const activeTab = tab === 'changes' && !canEdit ? 'schedule' : tab;
   const [filter, setFilter] = useState('all');
-  const [sort, setSort] = useState('upcoming');
   const [showPast, setShowPast] = useState(false);
-  const [dismissed, setDismissed] = useState([]);
+  const [openItems, setOpenItems] = useState(new Set());
   const [toast, setToast] = useState(null);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  function toggleItem(id) {
+    setOpenItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
   const allRows = buildOverviewRows(midweekWeeks, weekendRows);
 
-  function dismiss(id) {
-    setDismissed((prev) => [...prev, id]);
-    setToast({
-      msg: '已隱藏項目',
-      undo: () => setDismissed((prev) => prev.filter((x) => x !== id)),
-    });
-  }
-
-  function resetDismissed() {
-    const count = dismissed.length;
-    const snapshot = [...dismissed];
-    setDismissed([]);
-    setToast({
-      msg: `已還原 ${count} 個隱藏項目`,
-      undo: () => setDismissed(snapshot),
-    });
-  }
-
-  const visibleRows = allRows.filter((r) => {
-    if (dismissed.includes(r.id)) return false;
+  function filterRow(r) {
     if (filter === 'gap') return r.status === 'gap' || r.status === 'empty';
     if (filter !== 'all') return r.type === filter;
     return true;
-  });
+  }
 
-  const futureRows = sortRows(
-    visibleRows.filter((r) => !r.rawDate || r.rawDate >= today),
-    sort,
-  );
-  const pastRows = sortRows(
-    visibleRows.filter((r) => r.rawDate && r.rawDate < today),
-    'oldest',
-  );
+  const futureRows = allRows.filter((r) => (!r.rawDate || r.rawDate >= today) && filterRow(r));
+  const pastRows = allRows.filter((r) => r.rawDate && r.rawDate < today && filterRow(r));
 
-  const hiddenPastCount = allRows.filter(
-    (r) => r.rawDate && r.rawDate < today && !dismissed.includes(r.id) &&
-      (() => {
-        if (filter === 'gap') return r.status === 'gap' || r.status === 'empty';
-        if (filter !== 'all') return r.type === filter;
-        return true;
-      })(),
-  ).length;
+  const futureGroups = groupByMonth(futureRows);
+  const pastGroups = groupByMonth(pastRows);
+
+  // For the alert panel, use all future rows regardless of filter
+  const alertRows = allRows.filter((r) => !r.rawDate || r.rawDate >= today);
 
   return (
     <section className="ov-section">
       <div className="toolbar">
         <div className="tabs" role="tablist">
-          <button className="tab" role="tab"
+          <button
+            className="tab"
+            role="tab"
             aria-selected={activeTab === 'schedule' ? 'true' : 'false'}
-            onClick={() => setTab('schedule')}>安排</button>
+            onClick={() => setTab('schedule')}
+          >
+            安排
+          </button>
           {canEdit && (
-            <button className="tab" role="tab"
+            <button
+              className="tab"
+              role="tab"
               aria-selected={activeTab === 'changes' ? 'true' : 'false'}
-              onClick={() => setTab('changes')}>最近變更</button>
+              onClick={() => setTab('changes')}
+            >
+              最近變更
+            </button>
           )}
         </div>
-        <div className="toolbar__spacer" />
-        {activeTab === 'schedule' && (
-          <div className="chips" role="group">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                className={`chip${f === 'gap' ? ' chip--alert' : ''}`}
-                aria-pressed={filter === f ? 'true' : 'false'}
-                onClick={() => setFilter(f)}
-              >
-                {FILTER_LABELS[f]}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {activeTab === 'changes' && <ChangesPanel />}
 
       {activeTab === 'schedule' && (
-      <>
-      <div className="ov-controls">
-        <div className="ov-sort-group">
-          {SORTS.map((s) => (
-            <button
-              key={s}
-              className={`ov-sort-btn${sort === s ? ' ov-sort-btn--active' : ''}`}
-              onClick={() => setSort(s)}
-            >
-              {SORT_LABELS[s]}
-            </button>
-          ))}
+        <div id="ovBody">
+          {activeTab === 'schedule' && (
+            <div className="chips ov-chips" role="group">
+              {FILTERS.map((f) => (
+                <button
+                  key={f}
+                  className={`chip${f === 'gap' ? ' chip--alert' : ''}`}
+                  aria-pressed={filter === f ? 'true' : 'false'}
+                  onClick={() => setFilter(f)}
+                >
+                  {FILTER_LABELS[f]}
+                </button>
+              ))}
+            </div>
+          )}
+          {loading && <div className="people-empty">正在載入會眾資料…</div>}
+
+          {!loading && allRows.length === 0 && (
+            <div className="people-empty">目前沒有可顯示的聚會或週末安排。</div>
+          )}
+
+          {!loading && allRows.length > 0 && (
+            <>
+              <AlertPanel rows={alertRows} onNavigate={onNavigate} />
+
+              {futureGroups.map((g) => (
+                <MonthSection
+                  key={`${g.year}-${g.month}`}
+                  year={g.year}
+                  month={g.month}
+                  rows={g.rows}
+                  openItems={openItems}
+                  onToggle={toggleItem}
+                  onNavigate={onNavigate}
+                />
+              ))}
+
+              {pastRows.length > 0 && (
+                <button className="ov-past-toggle" onClick={() => setShowPast((v) => !v)}>
+                  {showPast ? '▲ 隱藏過去的安排' : `▼ 查看過去 ${pastRows.length} 項安排`}
+                </button>
+              )}
+
+              {showPast && pastGroups.map((g) => (
+                <MonthSection
+                  key={`past-${g.year}-${g.month}`}
+                  year={g.year}
+                  month={g.month}
+                  rows={g.rows}
+                  openItems={openItems}
+                  onToggle={toggleItem}
+                  onNavigate={onNavigate}
+                />
+              ))}
+            </>
+          )}
         </div>
-        {dismissed.length > 0 && (
-          <button className="ov-reset-btn" onClick={resetDismissed}>
-            還原隱藏 ({dismissed.length})
-          </button>
-        )}
-      </div>
-
-      <div className="ov-list">
-        {loading && <div className="people-empty">正在載入會眾資料…</div>}
-
-        {!loading && futureRows.length === 0 && pastRows.length === 0 && (
-          <div className="people-empty">目前沒有可顯示的聚會或週末安排。</div>
-        )}
-
-        {!loading && futureRows.map((r) => (
-          <SwipeRow key={r.id} onDismiss={() => dismiss(r.id)}>
-            <div className={`ov-row-wrap ov-row--${r.status}`}>
-              <button className="ov-row">
-                <span className="ov-date">
-                  <b>{r.date}</b>
-                  <small>週{r.wd}</small>
-                </span>
-                {TYPE_BADGE[r.type]}
-                <span className="ov-main">
-                  <span className="ov-title">{r.title}</span>
-                  <span className="ov-keys">
-                    {r.keys.map((k, j) => (
-                      <span key={j} className={`ov-key${/未指派|未排定|尚未/.test(k) ? ' ov-key--miss' : ''}`}>
-                        {k}
-                      </span>
-                    ))}
-                  </span>
-                </span>
-                {r.status === 'gap' ? STAT_BADGE.gap(r) : (STAT_BADGE[r.status] ?? null)}
-              </button>
-              <button
-                className="ov-dismiss-btn"
-                aria-label="隱藏"
-                onClick={() => dismiss(r.id)}
-              >
-                ×
-              </button>
-            </div>
-          </SwipeRow>
-        ))}
-
-        {!loading && hiddenPastCount > 0 && (
-          <button
-            className="ov-past-toggle"
-            onClick={() => setShowPast((v) => !v)}
-          >
-            {showPast ? '▲ 隱藏過去的安排' : `▼ 查看過去 ${hiddenPastCount} 項安排`}
-          </button>
-        )}
-
-        {!loading && showPast && pastRows.map((r) => (
-          <SwipeRow key={r.id} onDismiss={() => dismiss(r.id)}>
-            <div className={`ov-row-wrap ov-row--${r.status} ov-row--past`}>
-              <button className="ov-row">
-                <span className="ov-date">
-                  <b>{r.date}</b>
-                  <small>週{r.wd}</small>
-                </span>
-                {TYPE_BADGE[r.type]}
-                <span className="ov-main">
-                  <span className="ov-title">{r.title}</span>
-                  <span className="ov-keys">
-                    {r.keys.map((k, j) => (
-                      <span key={j} className={`ov-key${/未指派|未排定|尚未/.test(k) ? ' ov-key--miss' : ''}`}>
-                        {k}
-                      </span>
-                    ))}
-                  </span>
-                </span>
-                {r.status === 'gap' ? STAT_BADGE.gap(r) : (STAT_BADGE[r.status] ?? null)}
-              </button>
-              <button
-                className="ov-dismiss-btn"
-                aria-label="隱藏"
-                onClick={() => dismiss(r.id)}
-              >
-                ×
-              </button>
-            </div>
-          </SwipeRow>
-        ))}
-      </div>
-      </>
       )}
 
       <OvToast toast={toast} onHide={() => setToast(null)} />

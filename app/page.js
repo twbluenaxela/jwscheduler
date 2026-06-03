@@ -645,6 +645,7 @@ export default function App() {
               weekendRows={weekendRows}
               loading={workspaceLoading}
               canEdit={canEdit}
+              onNavigate={setPage}
             />
           )}
           {page === 'people' && (
