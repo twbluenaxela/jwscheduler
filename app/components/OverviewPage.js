@@ -41,7 +41,7 @@ function ChangesPanel() {
       const actionText = e.action === 'clear'
         ? `[清除] ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`
         : `${e.name} → ${e.date} ${e.label} ${e.prevName ? `(原:${e.prevName})` : ''}`;
-      return `${time} | ${actionText} | 操作者: ${e.actorName}`;
+      return `${time} | ${actionText}`;
     }).join('\n');
     try {
       await navigator.clipboard.writeText(textToCopy);
