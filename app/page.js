@@ -645,6 +645,7 @@ export default function App() {
             <OverviewPage
               midweekWeeks={midweekWeeks}
               weekendRows={weekendRows}
+              getAssign={getAssign}
               loading={workspaceLoading}
               canEdit={canEdit}
               onNavigate={setPage}

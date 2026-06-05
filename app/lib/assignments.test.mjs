@@ -100,6 +100,101 @@ test('parseCnDate 解析中文與斜線格式並處理跨年', () => {
   assert.equal(dec.getFullYear(), 2027);
 });
 
+// ── Cross-year boundary (Dec 2026 → Jan 2027 workbook) ───────────────────────
+
+// Simulate: user imports a workbook covering 2026/12 and 2027/1.
+// "today" is mid-December 2026; weeks span the year boundary.
+
+const DEC_NOW   = new Date(2026, 11, 15);          // 15 Dec 2026
+const DEC_TODAY = new Date(2026, 11, 15, 0, 0, 0); // same, midnight
+
+const crossYearWeeks = [
+  {
+    id: 10,
+    date: '12月 22日',
+    parts: [{ partKey: 't0', title: '寶藏演講', roleLabel: '', cbsRef: '' }],
+    assignments: [
+      { slotId: 'mw10_chairman', name: '王大明' },
+      { slotId: 'mw10_t0_0', name: '王大明' },
+    ],
+  },
+  {
+    id: 11,
+    date: '12月 29日',
+    parts: [],
+    assignments: [{ slotId: 'mw11_chairman', name: '李小華' }],
+  },
+  {
+    id: 12,
+    date: '1月 5日',   // 2027 — must be inferred correctly when now=Dec 2026
+    parts: [],
+    assignments: [{ slotId: 'mw12_chairman', name: '王大明' }],
+  },
+  {
+    id: 13,
+    date: '1月 12日',  // 2027
+    parts: [],
+    assignments: [{ slotId: 'mw13_chairman', name: '王大明' }],
+  },
+];
+
+test('parseCnDate 跨年：12月中旬查看時，1月日期歸屬 2027', () => {
+  const jan5  = parseCnDate('1月 5日',  DEC_NOW);
+  const dec22 = parseCnDate('12月 22日', DEC_NOW);
+
+  assert.equal(jan5.getFullYear(),  2027, '1月 → 2027');
+  assert.equal(dec22.getFullYear(), 2026, '12月 → 2026');
+  assert.ok(jan5 > dec22, '1月 2027 應晚於 12月 2026');
+});
+
+test('parseCnDate 跨年：斜線格式 1/5 在 12月也歸屬 2027', () => {
+  const jan5slash = parseCnDate('1/5', DEC_NOW);
+  assert.equal(jan5slash.getFullYear(), 2027);
+  assert.equal(jan5slash.getMonth(),    0);
+  assert.equal(jan5slash.getDate(),     5);
+});
+
+test('parseCnDate 跨年：1月上旬查看時，12月日期歸屬 2026', () => {
+  const JAN_NOW = new Date(2027, 0, 5); // 5 Jan 2027
+  const dec29 = parseCnDate('12月 29日', JAN_NOW);
+  assert.equal(dec29.getFullYear(), 2026, '12月 → 2026 when now is Jan 2027');
+});
+
+test('collectAssignments 跨年：12月與1月安排均包含且排序正確', () => {
+  const items = collectAssignments('王大明', crossYearWeeks, [], { now: DEC_NOW, today: DEC_TODAY });
+  // Should include Dec 22, Jan 5, Jan 12 — all future relative to Dec 15.
+  const dates = items.map(i => i.date);
+  assert.ok(dates.includes('12月 22日'), '應包含 12月 22日');
+  assert.ok(dates.includes('1月 5日'),   '應包含 1月 5日');
+  assert.ok(dates.includes('1月 12日'),  '應包含 1月 12日');
+
+  // Dec 22 must come before Jan 5.
+  const idx22 = dates.indexOf('12月 22日');
+  const idx5  = dates.indexOf('1月 5日');
+  assert.ok(idx22 < idx5, '12月 22日 應排在 1月 5日 之前');
+});
+
+test('collectAssignments 跨年：過去的12月安排已排除', () => {
+  // Dec 29 is in the future but Dec 22 is 7 days after the 15th and is
+  // in the future (>= today Dec 15).  To test exclusion, use Dec 30 as today.
+  const DEC30 = new Date(2026, 11, 30, 0, 0, 0);
+  const items  = collectAssignments('王大明', crossYearWeeks, [], { now: DEC_NOW, today: DEC30 });
+  const dates  = items.map(i => i.date);
+  assert.ok(!dates.includes('12月 22日'), '12月 22日 應已排除（過去）');
+  assert.ok(dates.includes('1月 5日'),    '1月 5日 應仍包含（未來）');
+});
+
+test('collectAssignments 跨年：元旦後查看時，12月安排已全部排除', () => {
+  const JAN_NOW   = new Date(2027, 0, 5);
+  const JAN_TODAY = new Date(2027, 0, 5, 0, 0, 0);
+  const items = collectAssignments('王大明', crossYearWeeks, [], { now: JAN_NOW, today: JAN_TODAY });
+  const dates = items.map(i => i.date);
+  assert.ok(!dates.includes('12月 22日'), '12月週次應已排除');
+  assert.ok(!dates.includes('12月 29日'), '12月週次應已排除');
+  assert.ok(dates.includes('1月 5日'),    '1月 5日 應仍包含（當天）');
+  assert.ok(dates.includes('1月 12日'),   '1月 12日 應仍包含');
+});
+
 // ── Wiring checks (behaviour is covered in line-webhook.test.mjs) ───────────────
 
 test('LINE webhook 路由委派給共用 handler', () => {

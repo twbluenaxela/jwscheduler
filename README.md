@@ -1,104 +1,255 @@
 # 新屋會眾聚會編排 Scheduler
 
-Touch-friendly web app for managing midweek and weekend meeting assignments for 新屋 (Xinwu) congregation. Replaces the Excel-based scheduling workflow.
+新屋會眾專用的觸控友善聚會排程網頁應用程式，取代原本的 Excel 排程流程。
 
-Live at **https://jwscheduler.fly.dev/**
-
----
-
-## Features
-
-- **Midweek schedule** — import from official EPUB (MWB), assign all parts via a candidate picker, export as JPG/PDF/Excel
-- **Weekend schedule** — public talk table with speaker, chair, WT conductor, reader, host group; filter by date range and year
-- **People management** — member list with qualifications, upcoming and recent assignments auto-derived from schedule data; delete support
-- **LINE notifications** — opt-in push notifications when assignments change; members self-register via the LINE bot
-- **Multi-congregation** — full data isolation per congregation; invite-link based onboarding
+網址：**https://jwscheduler.fly.dev/**
 
 ---
 
-## Tech stack
+## 開始使用
 
-| Layer | Tech |
+### 登入
+
+開啟應用程式後，使用電子郵件／密碼或 Google 帳號登入。首次登入時會進入入會畫面——輸入管理員分享的會眾代碼，或從下拉選單選擇所屬會眾。
+
+- **管理員**：可編輯所有排程、管理成員、發送 LINE 通知。
+- **檢視者**：可瀏覽排程與自己的安排（唯讀）。
+
+---
+
+## 各頁面說明
+
+### 聚會
+
+分為**週中**與**週末**兩個分頁。
+
+#### 週中
+
+頁面頂端的週次選擇器可在各週之間切換，卡片顯示該週的完整節目——詩歌、各項目及指派人員。
+
+**匯入新手冊**
+
+1. 前往**匯入**頁面。
+2. 點選**選擇 EPUB 檔案**，選取從官方來源下載的 MWB EPUB 檔案。
+3. 確認匯入的週次內容後，點選**儲存**寫入資料庫。
+
+**指派人員**
+
+1. 點選工具列的**編輯**開關進入編輯模式。
+2. 點選任一空白（或已填）槽位，底部選人表單會滑出，顯示符合資格的成員，並依上次服務距今最久的順序排列。
+3. 點選姓名完成指派，或點選**✕ 留空此項**保留空白。
+
+**建議（✦）**
+
+點選工具列的 **✦** 按鈕，系統會根據近期服務記錄自動填入當週所有空白槽位。建議以虛線標示——點選**接受全部**一次確認，也可個別點選槽位覆蓋建議，或點選**清除建議**全部捨棄。
+
+**匯出當週節目**
+
+使用工具列的**匯出**選單：
+
+| 選項 | 說明 |
 |---|---|
-| Framework | Next.js 16 (App Router), React 19 |
-| Language | JavaScript (no TypeScript) |
-| Styling | Single `globals.css` — no Tailwind, no CSS modules |
-| Auth | Firebase (email/password + Google OAuth) |
-| Database | Neon Postgres via Prisma 6 |
-| Notifications | LINE Messaging API |
-| Deploy | fly.io (Amsterdam) |
+| 匯出 JPG | 下載週次卡片截圖 |
+| 複製圖片 | 將卡片複製為圖片（可貼入 LINE 等） |
+| 複製文字 | 複製純文字版本（可貼入 LINE 群組） |
+| 匯出 Excel | 下載 Excel 檔案 |
+| 下載 PDF | 靜默下載 PDF（不會彈出列印視窗） |
+
+#### 週末
+
+以表格呈現即將到來的週末聚會，每列包含日期、公眾演講題目、講者、會眾、主席、守望台主持、朗讀及招待組別。
+
+使用篩選標籤（**未來 / 本月 / 半年 / 全部**）與年份選擇器縮小顯示範圍。
+
+**編輯週末列**
+
+開啟**編輯**模式後，點選任一欄位即可直接編輯。每列另有類型切換按鈕（**正常 / 特別 / 暫停**）以顏色區分：
+
+- **正常**：一般排程聚會（白色）
+- **特別**：特別安排（紅色列）
+- **暫停**：取消／暫停（紅色事項列）
+
+點選每列的 **✦** 按鈕，可根據近期記錄為該列建議講者、主席、守望台主持及朗讀。
+
+在表格底部點選**＋ 新增安排**或**＋ 新增事項**新增列。新列日期預設為最後一列加七天。
 
 ---
 
-## Local development
+### 總覽
+
+分為兩個分頁：
+
+**安排**——依月份分組，列出所有即將到來的週中與週末聚會。每個項目顯示空缺數量。點選展開可查看完整指派名單；點選**前往編排 ›** 可直接跳至聚會頁面的對應週次。
+
+頂端的提示卡片會標示最緊急的空缺。
+
+**最近變更**（僅限管理員）——記錄所有指派變更：誰被指派、到哪個槽位、由誰操作、操作時間。點選**↻ 重新整理**更新記錄，點選**複製文字**可複製記錄分享。
+
+---
+
+### 人員（僅限管理員）
+
+會眾成員名單。點選成員卡片開啟詳細資料，包含：
+
+- 資格標籤（供選人表單與建議引擎使用）
+- 從現有排程推算的未來安排
+- 近期服務歷史
+
+**新增成員**——點選**＋ 新增成員**，填入姓名、性別及資格。
+
+**編輯成員**——點選成員卡片，在詳細資料面板中修改各欄位，變更會自動儲存。
+
+**資格標籤**——勾選適用的標籤，決定該成員出現在哪些選人表單中：
+
+| 標籤 | 用途 |
+|---|---|
+| 傳道與生活主席 | 週中聚會主席 |
+| 週末聚會主席 | 週末聚會主席 |
+| 守望台主持人 | 守望台主持 |
+| 禱告 | 開始／結束禱告 |
+| 寶藏演講 | 寶藏演講 |
+| 經文寶石 | 屬靈寶石 |
+| 經文朗讀 | 聖經朗讀（學生） |
+| 傳道示範 | 傳道訓練（學生） |
+| 助手 | 傳道訓練（助手） |
+| 生活演講 | 基督徒生活演講 |
+| 研經班主持 | 會眾研經班主持 |
+| 研經班朗讀 | 會眾研經班朗讀 |
+| 守望台朗讀 | 守望台朗讀 |
+| 公眾演講 | 公眾演講講者 |
+
+**匯出個人行事曆**——在未來安排區塊點選**↓ iCal (N)**，可下載該成員即將到來的安排 `.ics` 檔案，可匯入 Apple 行事曆、Google 日曆或 Outlook。
+
+---
+
+### 匯入
+
+**EPUB 匯入**——選取 MWB EPUB 檔案後，系統會解析所有週次。確認列表後儲存，聚會時間設定會自動套用。
+
+**聚會排程設定**——設定預設聚會日偏移量（0 = 星期一……6 = 星期日）及時間。若聚會日臨時調整，可新增例外日期範圍。點選**重新套用至所有週次**，可根據儲存的星期一日期重新計算所有週次的日期。
+
+**批次匯出**——匯出與分享卡片可依範圍匯出多個週次：
+
+| 匯出格式 | 範圍選擇 |
+|---|---|
+| JPG（多週時打包為 zip） | 全部 / 本月 / 自訂 |
+| Excel | 全部 / 本月 / 自訂 |
+| PDF（每週一頁） | 全部 / 本月 / 自訂 |
+| 列印 | 全部 / 本月 / 自訂 |
+
+所有視覺匯出（JPG／PDF／列印）皆截圖真實的週次卡片，輸出內容與畫面完全一致。
+
+---
+
+### ⚙ 設定
+
+**管理員**可看到：
+
+- **我的資訊**——更新顯示名稱
+- **會眾資訊**——分享給要加入為檢視者的成員使用的會眾代碼
+- **聚會排程**——聚會日與時間設定（匯入頁面也有同樣設定）
+- **成員列表**——設定每位成員的角色（管理員 / 檢視者）
+
+**檢視者**只能看到個人資料與角色標示。
+
+---
+
+## 發布通知（僅限管理員）
+
+排程有變動時，點選週中或週末工具列的**發布通知**。系統會：
+
+1. 將現行排程與上次發布的快照進行比對（僅比對未來日期）。
+2. 只對已連結 LINE 帳號且安排有異動的成員發送 LINE 訊息。
+3. 儲存新的快照。
+
+使用匯出選單中的**複製更新文字**（首次發布後才會出現），可複製所有變更的純文字摘要，方便貼入 LINE 群組通知全體成員。
+
+---
+
+## LINE 機器人——成員自行登錄
+
+成員可透過傳訊給 LINE 官方帳號的方式，自行開啟個人通知：
+
+1. **加入**LINE 官方帳號後，機器人會詢問會眾名稱。
+2. 傳送**會眾名稱**（例如 `新屋`）→ 機器人確認後詢問你的姓名。
+3. 傳送**排程上顯示的你的姓名** → 機器人完成帳號連結。
+4. 隨時傳送 `我的安排` 查詢即將到來的所有服務安排。
+
+其他支援指令：`說明` / `help` 顯示指令清單。
+
+若訊息符合多個會眾，機器人會列出各會眾及其代碼，請傳送正確代碼選擇。
+
+---
+
+## 特別週次類型（週中）
+
+週次可標記為**大會**週。大會週在總覽中顯示為暫停事項列——不計算空缺、不顯示指派槽位。當巡迴大會或區域大會與例行聚會週重疊時使用此設定。
+
+---
+
+## 開發者參考
+
+### 技術架構
+
+| 層級 | 技術 |
+|---|---|
+| 框架 | Next.js 16（App Router）、React 19 |
+| 語言 | JavaScript（無 TypeScript） |
+| 樣式 | 單一 `globals.css`——無 Tailwind、無 CSS Modules |
+| 驗證 | Firebase（電子郵件／密碼 + Google OAuth） |
+| 資料庫 | Neon Postgres via Prisma 6 |
+| 通知 | LINE Messaging API |
+| 部署 | fly.io（Amsterdam） |
+
+### 本地開發
 
 ```bash
-# Install dependencies
 npm install
-
-# Push schema to DB and generate client
 npx prisma db push
 npx prisma generate
-
-# Run dev server
 npm run dev
 ```
 
-### Required environment variables
+### 必要環境變數
 
-| Variable | Purpose |
+| 變數 | 用途 |
 |---|---|
-| `DATABASE_URL` | Neon Postgres connection string |
-| `FIREBASE_SERVICE_ACCOUNT` | Full Firebase Admin SDK JSON blob (not a bare private key) |
-| `NEXT_PUBLIC_FIREBASE_*` | Firebase client SDK config (baked in at build time via `fly.toml [build.args]`) |
-| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel access token |
-| `LINE_CHANNEL_SECRET` | LINE channel secret for webhook signature verification |
+| `DATABASE_URL` | Neon Postgres 連線字串 |
+| `FIREBASE_SERVICE_ACCOUNT` | Firebase Admin SDK 完整 JSON blob（非單獨的私鑰） |
+| `NEXT_PUBLIC_FIREBASE_*` | Firebase 用戶端 SDK 設定（透過 `fly.toml [build.args]` 在建置時寫入） |
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API Channel Access Token |
+| `LINE_CHANNEL_SECRET` | LINE Channel Secret（用於 webhook 簽章驗證） |
 
----
-
-## One-time data import scripts
-
-Run after setting up a new congregation to seed historical data:
+### 一次性資料匯入腳本
 
 ```bash
-node --env-file=.env scripts/import-people.mjs        # congregation members
-node --env-file=.env scripts/import-assignments.mjs   # midweek assignments
-node --env-file=.env scripts/import-weekend.mjs       # weekend schedule
-node --env-file=.env scripts/merge-person.mjs         # rename/merge a person record
+node --env-file=.env scripts/import-people.mjs        # 會眾成員
+node --env-file=.env scripts/import-assignments.mjs   # 週中指派
+node --env-file=.env scripts/import-weekend.mjs       # 週末排程
+node --env-file=.env scripts/merge-person.mjs         # 重新命名／合併成員記錄
 ```
 
----
-
-## Deployment (fly.io)
+### 部署（fly.io）
 
 ```bash
 fly deploy
 
-# Push schema changes manually after deploy
+# 部署後手動推送結構異動（Neon 冷啟動會導致 release command 逾時）
 fly ssh console -C "npx prisma db push"
 
-# Secrets
+# 設定 Secrets
 fly secrets set LINE_CHANNEL_SECRET=... LINE_CHANNEL_ACCESS_TOKEN=...
 fly secrets set FIREBASE_SERVICE_ACCOUNT='{"type":"service_account",...}'
 ```
 
-`NEXT_PUBLIC_*` Firebase variables go in `fly.toml [build.args]` — they are baked in at build time, not injected from secrets at runtime.
+`NEXT_PUBLIC_*` Firebase 變數須放在 `fly.toml [build.args]`——在建置時寫入，不能從 secrets 在執行期注入。
 
----
+### 執行測試
 
-## LINE bot registration flow
+```bash
+npm test
+```
 
-Members self-register by messaging the LINE bot:
+測試使用 Node 內建的 `--test` 執行器（無額外依賴）。所有測試檔案為 `.mjs`，與對應模組放在同一目錄。測試不會連接資料庫——路由邏輯透過依賴注入搭配記憶體內假資料庫進行測試。
 
-1. Follow the account → bot asks for congregation name
-2. Send congregation name (e.g. `新屋`) → bot confirms with congregation code and asks for your name
-3. Send your name as it appears on the schedule → bot links your LINE account
-4. Send `我的安排` anytime to see upcoming assignments
-
-If multiple congregations match a partial name, the bot lists them with their codes so you can type the exact code to select one.
-
----
-
-## Developer reference
-
-See [`CLAUDE.md`](./CLAUDE.md) for full developer documentation: slot ID conventions, Prisma schema, multi-tenancy audit, auth gotchas, CSS conventions, and what not to do.
+完整開發者文件——槽位 ID 規範、Prisma Schema、多租戶審計、驗證注意事項、CSS 設計代號及禁止事項——請參閱 [`CLAUDE.md`](./CLAUDE.md)。

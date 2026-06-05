@@ -187,11 +187,15 @@ function partGapCount(part) {
   return Math.max(expected - assigned, 0);
 }
 
-function buildOverviewRows(midweekWeeks, weekendRows) {
+function buildOverviewRows(midweekWeeks, weekendRows, getAssign = (_, d) => d ?? '') {
   const midweekItems = midweekWeeks.map((week, weekIdx) => {
     const rawDate = parseRowDate(week.date);
     const weekType = week.type ?? 'normal';
     const weekLabel = week.label ?? '';
+
+    // Resolve a slot through the live assignments map, falling back to the
+    // value baked into the week object at load time.
+    const ga = (key, fallback = '') => getAssign(`mw${week.id}_${key}`, fallback);
 
     // Assembly weeks: no gap counting, shown as a suspended event row
     if (weekType === 'assembly') {
@@ -210,16 +214,27 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
     }
 
     const allParts = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
-    const roleGaps = [week.chairman, week.openPrayer, week.closePrayer].filter((v) => !String(v ?? '').trim()).length;
-    const partGaps = allParts.reduce((sum, p) => sum + partGapCount(p), 0);
+
+    const chairman   = ga('chairman',   week.chairman);
+    const openPrayer = ga('openPrayer', week.openPrayer);
+    const closePrayer = ga('closePrayer', week.closePrayer);
+
+    const roleGaps = [chairman, openPrayer, closePrayer].filter((v) => !String(v ?? '').trim()).length;
+    const partGaps = allParts.reduce((sum, p) => {
+      const a0 = ga(`${p.id}_0`, (p.assign ?? [])[0] ?? '');
+      const a1 = ga(`${p.id}_1`, (p.assign ?? [])[1] ?? '');
+      const isPair = String(p.roleLabel ?? '').includes('/') && !p.hideHelper;
+      const assigned = [a0, isPair ? a1 : null].filter(Boolean).length;
+      return sum + Math.max((isPair ? 2 : 1) - assigned, 0);
+    }, 0);
     const gaps = roleGaps + partGaps;
 
     const cbs = week.living?.find((p) => p.cat === 'cbs');
     const reading = allParts.find((p) => p.cat === 'reading');
     const keys = [
-      { role: '主席', who: week.chairman || '' },
-      cbs ? { role: '研經班', who: (cbs.assign ?? []).filter(Boolean).join(' / ') } : null,
-      reading ? { role: '經文朗讀', who: (reading.assign ?? []).filter(Boolean).join(' / ') } : null,
+      { role: '主席', who: chairman },
+      cbs ? { role: '研經班', who: [ga(`${cbs.id}_0`, (cbs.assign ?? [])[0] ?? ''), ga(`${cbs.id}_1`, (cbs.assign ?? [])[1] ?? '')].filter(Boolean).join(' / ') } : null,
+      reading ? { role: '經文朗讀', who: ga(`${reading.id}_0`, (reading.assign ?? [])[0] ?? '') } : null,
     ].filter(Boolean);
 
     // Full detail for the expanded card
@@ -227,8 +242,8 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
       return parts.map((p) => {
         const isPair = p.roleLabel?.includes('/') && !p.hideHelper;
         const rls = p.roleLabel?.split('/') ?? [];
-        const a0 = (p.assign ?? [])[0] || '';
-        const a1 = (p.assign ?? [])[1] || '';
+        const a0 = ga(`${p.id}_0`, (p.assign ?? [])[0] ?? '');
+        const a1 = ga(`${p.id}_1`, (p.assign ?? [])[1] ?? '');
         if (isPair) {
           return [
             { role: `${p.title}${rls[0] ? `（${rls[0]}）` : ''}`, who: a0 },
@@ -241,15 +256,15 @@ function buildOverviewRows(midweekWeeks, weekendRows) {
     }
 
     const detail = [
-      { role: '主席', who: week.chairman || '' },
-      { role: '開始禱告', who: week.openPrayer || '' },
+      { role: '主席', who: chairman },
+      { role: '開始禱告', who: openPrayer },
       { header: '上帝話語的寶藏' },
       ...partDetail(week.treasures ?? []),
       { header: '用心準備傳道工作' },
       ...partDetail(week.ministry ?? []),
       { header: '基督徒的生活' },
       ...partDetail(week.living ?? []),
-      { role: '結束禱告', who: week.closePrayer || '' },
+      { role: '結束禱告', who: closePrayer },
     ];
 
     return {
@@ -649,6 +664,7 @@ const FILTER_LABELS = { all: '全部', mw: '週中', we: '週末', gap: '待補'
 export default function OverviewPage({
   midweekWeeks = [],
   weekendRows = [],
+  getAssign,
   loading = false,
   canEdit = false,
   onNavigate,
@@ -673,7 +689,7 @@ export default function OverviewPage({
     });
   }
 
-  const allRows = buildOverviewRows(midweekWeeks, weekendRows);
+  const allRows = buildOverviewRows(midweekWeeks, weekendRows, getAssign);
 
   function filterRow(r) {
     if (filter === 'gap') return r.status === 'gap' || r.status === 'empty';
