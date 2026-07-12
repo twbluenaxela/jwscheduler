@@ -821,14 +821,26 @@ body { padding-bottom: 64px; }
 .people-detail__section-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 10px; }
 .people-detail__section-head span { font-size: 14px; font-weight: 800; }
 .people-detail__section-head small { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+/* Uniform grid (not flex-wrap) so the qual chips line up in even columns —
+   variable-width pills wrapped at panel-dependent points and looked scattered.
+   124px fits the longest label (傳道與生活主席) at 13px/700. */
 .people-quals {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
   width: 100%;
-  flex-wrap: wrap;
   gap: 6px;
   max-height: none;
   overflow: visible;
 }
+.people-quals .chip,
+.people-quals .qual {
+  width: 100%;
+  padding-left: 8px;
+  padding-right: 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+.people-quals .people-empty--compact { grid-column: 1 / -1; width: auto; }
 .timeline { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
 .timeline::-webkit-scrollbar { width: 6px; }
 .timeline::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
