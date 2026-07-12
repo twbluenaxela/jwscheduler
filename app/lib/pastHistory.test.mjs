@@ -107,7 +107,7 @@ test('midweek part assignment resolves parts from section arrays (DB-mapped shap
     id: 7,
     date: '6月 3日',
     treasures: [{ id: 't0', cat: 'treasures' }, { id: 'g0', cat: 'gems' }],
-    ministry:  [{ id: 'm0', cat: 'ministry' }],
+    ministry:  [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手' }],
     living:    [{ id: 'cbs', cat: 'cbs' }],
   };
   const assignments = {

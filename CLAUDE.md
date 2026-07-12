@@ -104,7 +104,18 @@ app/
                          removed — they had drifted from the real card; see "What NOT to do".)
     suggest.js         — pure recency-scoring suggestion engine (no DB, no fetch);
                          exports suggestWeekendRow(people, pastRows, existing) and
-                         suggestMidweekWeek(people, week, existingAssignments, pastHistory)
+                         suggestMidweekWeek(people, week, existingAssignments, pastHistory).
+                         Fairness-first ranking + part-type rotation: history entries may
+                         carry {type, role}; within the top-5 fairness window the candidate
+                         who has gone longest without that specific (part type, 學生/助手
+                         role) wins, so nobody gets stuck with e.g. 初次交談 or 助手 forever.
+                         Ministry demo helper slots prefer the student's gender (S-38)
+    partTypes.mjs      — pure slot/cat classifiers shared by suggest, the suggest route,
+                         pastHistory and MidweekWeek: partTypeOf(title) (初次交談/再次交談/
+                         教導人成為門徒/解釋自己的信仰/演講), effectiveCat(part)
+                         (single-slot ministry 演講 parts → 'ministrytalk', brothers-only;
+                         roleLabel with '/' overrides the title → mixed demo pool), and
+                         slotCat(part, idx) (CBS _1 → 'cbsread' reader pool)
     icalExport.js      — pure iCal (.ics) generator; exports generateIcal(assignments,
                          personName, congCode) → RFC-5545 string and downloadIcal(str, filename)
     assignments.mjs    — pure, DB-free date + assignment helpers shared by line/webhook
@@ -202,6 +213,15 @@ scripts/
   split-chairman-qual.mjs — one-time (idempotent): migrate legacy 主席 tag to the
                          three split quals (傳道與生活主席 / 週末聚會主席 / 守望台主持人)
                          (node --env-file=.env scripts/split-chairman-qual.mjs)
+  fix-ministry-talks.mjs — one-time (idempotent): ministry 演講 parts → roleLabel 學生,
+                         delete phantom _1 assignments, tag talk-giving brothers 傳道演講
+                         (node --env-file=.env scripts/fix-ministry-talks.mjs)
+  add-ministry-disc-qual.mjs — one-time (idempotent): seed 傳道討論主持 qual (conducts
+                         節目包括討論 ministry parts) to active 生活演講 brothers
+                         (node --env-file=.env scripts/add-ministry-disc-qual.mjs)
+  sim-suggest.mjs      — diagnostic: simulates N weeks of auto-accepted ✦ suggestions
+                         against real DB history and reports part-type/role distribution
+                         per person (used to tune the rotation algorithm; read-only DB)
 Dockerfile             — multi-stage build: deps → builder (prisma generate + next build) → runner
 fly.toml               — fly.io config: primary_region=ams, internal_port=3000,
                          NEXT_PUBLIC_* build args. NO release_command — `prisma
@@ -365,6 +385,8 @@ export const CATS = {
   gems:        { tag: "經文寶石",      g: "M",   name: "經文寶石" },
   reading:     { tag: "經文朗讀",      g: "M",   name: "經文朗讀（學生）" },
   ministry:    { tag: "傳道示範",      g: "any", name: "傳道訓練" },
+  ministrytalk:{ tag: "傳道演講",      g: "M",   name: "傳道訓練（演講）" },
+  ministrydisc:{ tag: "傳道討論主持",  g: "M",   name: "傳道討論主持" },
   living:      { tag: "生活演講",      g: "M",   name: "生活演講" },
   cbs:         { tag: "研經班主持",    g: "M",   name: "會眾研經班主持" },
   cbsread:     { tag: "研經班朗讀",    g: "M",   name: "研經班朗讀" },
@@ -383,7 +405,32 @@ weekend `wt` field). Previously weekend chair and WT conductor both used the
 `scripts/split-chairman-qual.mjs` (one-time, idempotent) — gave every member
 tagged `主席` all three new tags and removed the legacy tag.
 
-QUAL_OPTIONS in PeoplePage.js: `傳道與生活主席`, `週末聚會主席`, `守望台主持人`, `禱告`, `寶藏演講`, `經文寶石`, `經文朗讀`, `傳道示範`, `助手`, `生活演講`, `研經班主持`, `研經班朗讀`, `守望台朗讀`, `公眾演講`.
+QUAL_OPTIONS in PeoplePage.js: `傳道與生活主席`, `週末聚會主席`, `守望台主持人`, `禱告`, `寶藏演講`, `經文寶石`, `經文朗讀`, `傳道示範`, `傳道演講`, `傳道討論主持`, `助手`, `生活演講`, `研經班主持`, `研經班朗讀`, `守望台朗讀`, `公眾演講`.
+
+Ministry-section 演講 parts (e.g. `解釋自己的信仰 — 演講`, `演講 — 《愛心》附錄`) are
+brothers-only student talks with NO assistant (S-38). They are detected via
+`partTypeOf`/`effectiveCat` in `app/lib/partTypes.mjs` and use the `ministrytalk` cat
+(tag `傳道演講`) everywhere — the AssignSheet picker, the ✦ suggest engine, and
+pastHistory stats. `scripts/fix-ministry-talks.mjs` (one-time, idempotent) repaired
+existing parts (roleLabel → `學生`, deleted phantom `_1` assignments) and tagged the
+brothers who had given these talks.
+
+**The admin's roleLabel is authoritative over the title.** The EPUB can't always tell
+pair-vs-single, so `epubParser.ministryRoleLabel(title, durText)` reads the description
+line: `示範`-prefixed → `學生/助手`; `演講`-prefixed or 演講 in title → `學生`;
+`節目包括討論` (你會怎麼說？ discussion parts) → no roleLabel (single slot). In edit
+mode EVERY ministry part shows the ＋/− toggle: for ministry it rewrites `roleLabel`
+itself (`學生` ↔ `學生/助手`, persisted via the week PATCH which now includes
+`roleLabel`) rather than just `hideHelper` — because eligibility follows roleLabel
+(`effectiveCat` in partTypes.mjs): `/` in roleLabel → mixed 傳道示範 pool even if the
+title says 演講; single `學生` + 演講 title → `ministrytalk` (brothers-only); **no
+roleLabel at all → `ministrydisc`** (discussion parts are conducted by an elder or
+qualified MS per S-38 ¶6 — NOT the chairman, whose absorb-rule in ¶24 covers only
+video-without-discussion parts; pool = dedicated `傳道討論主持` qual, seeded from the
+生活演講 brothers by `scripts/add-ministry-disc-qual.mjs`). CBS keeps the `hideHelper`
+mechanism. S-38 also confirms: helpers
+same gender as the student (or family), 解釋自己的信仰 gender depends on 示範 vs 演講
+variant, ministry 演講 brothers-only — all encoded in suggest.js + partTypes.mjs.
 
 職務 (appt) options for brothers (M): `分區監督`, `長老`, `助理僕人`, `傳道員`, `未受浸傳道員`. For sisters (F): `傳道員`, `未受浸傳道員`.
 
@@ -563,6 +610,9 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 - Do not move ＋ 新增安排 / ＋ 新增事項 back into the weekend toolbar — they belong at the bottom of the table (`<tfoot>`) and mobile card list so users can add rows without scrolling to the top
 - Do not use `assign.length === 2` to determine `isPair` in `PartRow` — use `roleLabel?.includes('/')`. The assign array collapses to `[]` when no assignments exist (filter strips empty strings), which would incorrectly show only one slot for ministry/CBS parts
 - Do not filter out empty strings in `mapPart` for parts where `roleLabel?.includes('/')` — those parts must always return `[s0, s1]` (with `''` for unassigned) so the helper slot is always visible
+- Do not hardcode `roleLabel: '學生/助手'` for ministry parts in `epubParser.js` — 演講-type ministry parts are single-slot talks (`學生` only, no assistant) and 你會怎麼說 discussion parts are single-slot with no label; `ministryRoleLabel(title, durText)` decides from the description line and `assignTimes` must pass it through (`p.roleLabel`), not overwrite it
+- Do not pass one `catKey` to both slots of a pair — use `slotCat(part, idx)` from `partTypes.mjs`: the CBS reader (`_1`) draws from `cbsread` (研經班朗讀), and single-slot ministry 演講 parts use `ministrytalk` (brothers-only), not the mixed `ministry` pool
+- Do not derive ministry-talk eligibility from the title alone — a `/` in `roleLabel` (admin added a 助手 via the edit-mode toggle) means it IS a demo and must use the mixed pool; `effectiveCat(part)` already encodes this precedence
 
 ---
 

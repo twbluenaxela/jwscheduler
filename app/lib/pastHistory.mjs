@@ -13,6 +13,7 @@
 // Returns: { [name]: { [tag]: { lastDate: Date, daysSince: number, halfYearCount: number } } }
 
 import { CATS } from '../data/index.js';
+import { slotCat } from './partTypes.mjs';
 
 function parseDate(str, ref) {
   const s = String(str ?? '');
@@ -96,7 +97,10 @@ export function buildPastHistory(midweekWeeks, assignments, weekendRows, refDate
         ? [...(w.treasures ?? []), ...(w.ministry ?? []), ...(w.living ?? []), ...(w.parts ?? [])]
         : [];
       const part = allParts.find(p => p.id === partKey);
-      if (part && CATS[part.cat]) record(name, CATS[part.cat].tag, date);
+      // Slot-level cat: ministry 演講 parts count under 傳道演講, the CBS
+      // reader (_1) under 研經班朗讀 — matching the pool the picker offers.
+      const catKey = part ? slotCat(part, parts[2]) : null;
+      if (catKey && CATS[catKey]) record(name, CATS[catKey].tag, date);
     }
   }
 

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 import { suggestMidweekWeek } from '../../../lib/suggest';
+import { partTypeOf, slotCat } from '../../../lib/partTypes.mjs';
 
 const ROLE_TO_CAT = { chairman: 'chairman', openPrayer: 'prayer', closePrayer: 'prayer' };
 
@@ -35,7 +36,7 @@ export async function POST(request) {
     const sections = { treasures: [], ministry: [], living: [] };
     for (const part of targetWeek.parts) {
       const s = sections[part.section] ? part.section : 'living';
-      sections[s].push({ id: part.partKey, cat: part.cat, roleLabel: part.roleLabel ?? '' });
+      sections[s].push({ id: part.partKey, cat: part.cat, roleLabel: part.roleLabel ?? '', title: part.title });
     }
     const week = { id: targetWeek.id, ...sections };
 
@@ -49,10 +50,16 @@ export async function POST(request) {
           pastHistory.push({ name: a.name, cat: ROLE_TO_CAT[roleMatch[1]], date: w.date });
           continue;
         }
-        const partMatch = a.slotId.match(/^mw\d+_(.+?)_[01]$/);
+        const partMatch = a.slotId.match(/^mw\d+_(.+?)_([01])$/);
         if (partMatch) {
           const part = partMap.get(partMatch[1]);
-          if (part) pastHistory.push({ name: a.name, cat: part.cat, date: w.date });
+          if (part) pastHistory.push({
+            name: a.name,
+            cat: slotCat(part, partMatch[2]),
+            date: w.date,
+            type: part.cat === 'ministry' ? partTypeOf(part.title) : null,
+            role: partMatch[2],
+          });
         }
       }
     }

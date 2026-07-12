@@ -49,6 +49,7 @@ export async function PATCH(request, context) {
             ...(p.dur        !== undefined ? { dur:        p.dur        } : {}),
             ...(p.time       !== undefined ? { time:       p.time       } : {}),
             ...(p.hideHelper !== undefined ? { hideHelper: !!p.hideHelper } : {}),
+            ...(p.roleLabel  !== undefined ? { roleLabel:  p.roleLabel   } : {}),
           },
         })
       ),

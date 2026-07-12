@@ -307,7 +307,7 @@ export default function App() {
           closeSongTime: weekObj.closeSongTime,
           type: weekObj.type ?? 'normal',
           label: weekObj.label ?? '',
-          parts: allParts.map((p) => ({ id: p.dbId, title: p.title, dur: p.dur, time: p.time, hideHelper: p.hideHelper ?? false })),
+          parts: allParts.map((p) => ({ id: p.dbId, title: p.title, dur: p.dur, time: p.time, hideHelper: p.hideHelper ?? false, roleLabel: p.roleLabel ?? null })),
         }),
       });
     } catch (err) {

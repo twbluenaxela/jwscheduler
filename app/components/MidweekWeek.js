@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { slotCat } from '../lib/partTypes.mjs';
 
 function TextField({ editMode, value, onChange, className, inputClassName, ariaLabel, placeholder }) {
   if (editMode) {
@@ -42,14 +43,14 @@ function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet, 
   );
 }
 
-function PairSlot({ baseId, catKey, ctxLabel, defaultNames, roleLabels, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
+function PairSlot({ baseId, catKeys, ctxLabel, defaultNames, roleLabels, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
   const [label0, label1] = roleLabels ?? ['', '助手'];
   const ghostProps = { getSuggestion, onAccept, onClear };
   return (
     <span className="who--pair">
       <WhoSlot
         slotId={`${baseId}_0`}
-        catKey={catKey}
+        catKey={catKeys[0]}
         ctxLabel={label0 ? `${ctxLabel} (${label0})` : ctxLabel}
         defaultName={defaultNames[0] ?? ''}
         getAssign={getAssign}
@@ -59,7 +60,7 @@ function PairSlot({ baseId, catKey, ctxLabel, defaultNames, roleLabels, getAssig
       <span className="who-sep">/</span>
       <WhoSlot
         slotId={`${baseId}_1`}
-        catKey={catKey}
+        catKey={catKeys[1]}
         ctxLabel={`${ctxLabel} (${label1})`}
         defaultName={defaultNames[1] ?? ''}
         getAssign={getAssign}
@@ -162,7 +163,7 @@ function PartRow({
         {isPair ? (
           <PairSlot
             baseId={`${weekId}_${part.id}`}
-            catKey={shownPart.cat}
+            catKeys={[slotCat(shownPart, '0'), slotCat(shownPart, '1')]}
             ctxLabel={`${ctx} · ${shownPart.title}`}
             defaultNames={shownPart.assign}
             roleLabels={roleLabels}
@@ -175,7 +176,7 @@ function PartRow({
         ) : (
           <WhoSlot
             slotId={`${weekId}_${part.id}_0`}
-            catKey={shownPart.cat}
+            catKey={slotCat(shownPart, '0')}
             ctxLabel={`${ctx} · ${shownPart.title}`}
             defaultName={shownPart.assign[0] ?? ''}
             getAssign={getAssign}
@@ -185,15 +186,26 @@ function PartRow({
             onClear={onClear}
           />
         )}
-        {editMode && isPairRole && (
+        {editMode && (isPairRole || sectionName === 'ministry') && (
           <button
             className="pair-toggle-btn"
-            title={helperHidden ? `加入${roleLabels?.[1] ?? '助手'}欄位` : `移除${roleLabels?.[1] ?? '助手'}欄位`}
+            title={isPair ? `移除${roleLabels?.[1] ?? '助手'}欄位` : `加入${roleLabels?.[1] ?? '助手'}欄位`}
             onClick={() => {
-              if (!helperHidden) clearSlot?.(`${weekId}_${part.id}_1`);
-              onToggleHelper?.(!helperHidden);
+              if (sectionName === 'ministry') {
+                // The EPUB can't always tell pair vs single (e.g. mis-labelled talks),
+                // so for ministry parts the toggle rewrites roleLabel itself — which
+                // also flips the candidate pool (single 演講 → brothers-only).
+                if (isPair) clearSlot?.(`${weekId}_${part.id}_1`);
+                const patch = { roleLabel: isPair ? '學生' : '學生/助手' };
+                onDraftPartChange(patch);
+                updatePart(patch);
+                if (helperHidden) onToggleHelper?.(false); // normalize legacy hideHelper
+              } else {
+                if (!helperHidden) clearSlot?.(`${weekId}_${part.id}_1`);
+                onToggleHelper?.(!helperHidden);
+              }
             }}
-          >{helperHidden ? '＋' : '−'}</button>
+          >{isPair ? '−' : '＋'}</button>
         )}
       </span>
     </div>

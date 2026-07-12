@@ -46,6 +46,22 @@ function catFromTitle(title) {
 
 const MINISTRY_SHORT = ['初次交談', '再次交談', '教導人成為門徒', '解釋自己的信仰'];
 
+// Pair-vs-single for a ministry part. The description line (durText) is the
+// most reliable signal — the title alone can't always tell (e.g. 解釋自己的信仰
+// can be either a 示範 or a 演講). Rules, in priority order:
+//   description starts with 示範        → demonstration → 學生/助手
+//   description starts with 演講 or the title mentions 演講 → talk → 學生 (no assistant)
+//   description contains 節目包括討論   → discussion part (你會怎麼說？) → single, no label
+//   otherwise (初次交談/再次交談/教導人成為門徒…) → 學生/助手
+// The admin can still override per part with the edit-mode ＋/− toggle.
+export function ministryRoleLabel(title, durText) {
+  const desc = String(durText ?? '').replace(/^[（(]\d+分鐘[）)]\s*/, '');
+  if (/^示範/.test(desc)) return '學生/助手';
+  if (/^演講/.test(desc) || String(title ?? '').includes('演講')) return '學生';
+  if (desc.includes('節目包括討論')) return undefined;
+  return '學生/助手';
+}
+
 function buildTitle(partTitle, durText, section) {
   if (section !== 'ministry') return partTitle;
   const isShort = MINISTRY_SHORT.some(n => partTitle === n);
@@ -124,8 +140,7 @@ function buildWeekFromItems(items) {
           const c = catFromTitle(title) ?? 'treasures';
           treasures.push({ ...base, cat: c, roleLabel: c === 'reading' ? '學生' : undefined });
         } else if (pendingPart.section === 'ministry') {
-          const rLabel = title.includes('演講') ? '學生' : '學生/助手';
-          ministry.push({ ...base, cat: 'ministry', roleLabel: rLabel });
+          ministry.push({ ...base, cat: 'ministry', roleLabel: ministryRoleLabel(title, text) });
         } else {
           const c = catFromTitle(title) ?? 'living';
           // For CBS, extract the book/chapter reference after the duration
@@ -171,7 +186,7 @@ function assignTimes(parsed) {
     cursor += p.durMins;
     return {
       id: `m${i}`, time, partNum: p.partNum, title: p.title,
-      dur: `${p.dur} 分鐘`, cat: 'ministry', roleLabel: '學生/助手',
+      dur: `${p.dur} 分鐘`, cat: 'ministry', roleLabel: p.roleLabel,
       assign: Array(p.roleLabel ? p.roleLabel.split('/').length : 1).fill(''),
     };
   });
