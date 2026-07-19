@@ -12,7 +12,9 @@ export async function POST(request) {
 
     const body = await request.json().catch(() => ({}));
     const existing = body.existing ?? {};
-    const refDate = body.date || new Date(); // row's meeting date → past-only measured from it
+    // Row's meeting date — the engine measures its bidirectional recency gap
+    // from here (all rows are passed, so future bookings count against people).
+    const refDate = body.date || new Date();
 
     const [people, pastRows] = await Promise.all([
       db.person.findMany({ where: { congregationId: user.congregationId, status: 'active' } }),

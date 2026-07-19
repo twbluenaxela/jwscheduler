@@ -9,15 +9,30 @@ function buildCandidates(people, catKey, jitter, spread, pastHistory) {
     .filter(p => p.status !== 'inactive' && p.quals.includes(c.tag) && (c.g === 'any' || p.g === c.g))
     .map(p => {
       const entry = pastHistory?.[p.name]?.[c.tag];
-      // daysSince is precomputed relative to the slot's date in buildPastHistory.
+      // daysSince/daysUntil are precomputed relative to the slot's date in
+      // buildPastHistory. The weight uses the BIDIRECTIONAL gap: someone
+      // already booked for this part in an upcoming week ranks like someone
+      // who just served — otherwise editing an earlier week double-books them.
       const d = entry?.daysSince ?? null;
+      const u = entry?.daysUntil ?? null;
       const load = entry?.halfYearCount ?? 0;
-      const sortDays = d ?? 9999;
-      let w = Math.pow(sortDays, spread);
+      // Nearest assignment in ANY category — warns when the person is busy
+      // with a different part around this date.
+      let anyGap = null;
+      for (const e of Object.values(pastHistory?.[p.name] ?? {})) {
+        for (const g of [e.daysSince, e.daysUntil]) {
+          if (g != null && (anyGap === null || g < anyGap)) anyGap = g;
+        }
+      }
+      const gap = Math.min(d ?? 9999, u ?? 9999);
+      let w = Math.pow(gap, spread);
       const recent = d !== null && d < 14;
-      if (recent) w *= 0.1;
+      const soon = u !== null && u < 14;
+      const busyNearby = !recent && !soon && anyGap !== null && anyGap < 7;
+      if (recent || soon) w *= 0.1;
+      else if (busyNearby) w *= 0.3;
       if (jitter) w *= 0.55 + Math.random() * 0.9;
-      return { n: p.name, g: p.g, a: p.appt, d, w, recent, load };
+      return { n: p.name, g: p.g, a: p.appt, d, u, w, recent, soon, busyNearby, load };
     })
     .sort((a, b) => b.w - a.w);
 }
@@ -144,7 +159,7 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
             <div className="cand-empty">查無符合的人選</div>
           ) : (
             filtered.map((c, i) => {
-              const rec = i === 0 && !query && !c.recent;
+              const rec = i === 0 && !query && !c.recent && !c.soon;
               const pct = Math.round((c.w / maxW) * 100);
               const isCur = currentName === c.n;
               const isUsed = !isCur && usedThisWeek.has(c.n);
@@ -174,6 +189,24 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
                         <span className="meta-strong">從未擔任此項</span>
                       ) : (
                         <span className="meta-strong">{c.d} 天未擔任此項</span>
+                      )}
+                      {c.soon && (
+                        <>
+                          <span className="meta-dot">·</span>
+                          <span className="meta-warn">● {c.u} 天後已排此項</span>
+                        </>
+                      )}
+                      {!c.soon && c.u !== null && c.u <= 45 && (
+                        <>
+                          <span className="meta-dot">·</span>
+                          <span>{c.u} 天後已排此項</span>
+                        </>
+                      )}
+                      {c.busyNearby && (
+                        <>
+                          <span className="meta-dot">·</span>
+                          <span className="meta-warn">● 前後一週內另有安排</span>
+                        </>
                       )}
                       <span className="meta-dot">·</span>
                       <span>近半年 {c.load} 次</span>

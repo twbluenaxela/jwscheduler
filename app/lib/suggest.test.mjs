@@ -37,14 +37,70 @@ test('prefers the never-served candidate (longest gap) for chairman', () => {
   assert.equal(res['mw1_chairman'], '乙');
 });
 
-test('ignores assignments dated on/after refDate (past-only)', () => {
+test('future assignments count against a candidate (bidirectional gap)', () => {
   const people = [brother('甲', ['傳道與生活主席']), brother('乙', ['傳道與生活主席'])];
   const history = [
-    { name: '甲', cat: 'chairman', date: '8月 1日' }, // after 7/1 → excluded → 甲 never-served
-    { name: '乙', cat: 'chairman', date: '6月 3日' }, // before 7/1 → 乙 daysSince 28
+    { name: '甲', cat: 'chairman', date: '7月 15日' }, // 14 days AFTER 7/1 → gap 14
+    { name: '乙', cat: 'chairman', date: '5月 6日' },  // 56 days before 7/1 → gap 56
   ];
   const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF);
-  assert.equal(res['mw1_chairman'], '甲', 'future assignment must not count against 甲');
+  assert.equal(res['mw1_chairman'], '乙', '甲 is already booked two weeks later — 乙 must win');
+});
+
+test('assignment ON refDate itself is ignored (the meeting being planned)', () => {
+  const people = [brother('甲', ['傳道與生活主席']), brother('乙', ['傳道與生活主席'])];
+  const history = [
+    { name: '甲', cat: 'chairman', date: '7月 1日' }, // same day as ref → not history
+    { name: '乙', cat: 'chairman', date: '6月 3日' }, // 28 days before
+  ];
+  const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF);
+  assert.equal(res['mw1_chairman'], '甲', 'same-day entry must not count against 甲');
+});
+
+test('reassigning an earlier week does not pick someone already booked the next week (鄭雅子 case)', () => {
+  // Editing 9/10's 學生 slot: 雅子 is already the 學生 on 9/17, so the free
+  // sister must be suggested even though 雅子 has the longer PAST gap.
+  const ref = new Date(2026, 8, 10); // 2026-09-10
+  const sister = (name, quals) => ({ name, g: 'F', quals, status: 'active' });
+  const people = [sister('雅子', ['傳道示範']), sister('美玲', ['傳道示範'])];
+  const week = {
+    id: 1, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談' }],
+  };
+  const history = [
+    { name: '雅子', cat: 'ministry', date: '9月 17日', type: '初次交談', role: '0' }, // booked next week
+    { name: '美玲', cat: 'ministry', date: '8月 20日', type: '初次交談', role: '0' }, // 21 days before
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, ref);
+  assert.equal(res['mw1_m0_0'], '美玲', '雅子 is already scheduled on 9/17');
+});
+
+test('crowd demotion: an assignment in ANOTHER category within ±7 days demotes the candidate', () => {
+  const people = [brother('甲', ['傳道與生活主席']), brother('乙', ['傳道與生活主席'])];
+  const history = [
+    { name: '甲', cat: 'prayer', date: '7月 4日' },    // 3 days after ref, different cat
+    { name: '乙', cat: 'chairman', date: '5月 6日' },  // chairman 56 days ago
+  ];
+  // Old engine: 甲 never chaired (gap 9999) → wins. New: 甲 is busy that week → 乙.
+  const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF);
+  assert.equal(res['mw1_chairman'], '乙', '甲 has another part 3 days later — demoted');
+});
+
+test('crowd demotion never leaves a slot empty when everyone is busy', () => {
+  const people = [brother('甲', ['傳道與生活主席'])];
+  const history = [{ name: '甲', cat: 'prayer', date: '7月 4日' }];
+  const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF);
+  assert.equal(res['mw1_chairman'], '甲', 'crowded is a demotion, not an exclusion');
+});
+
+test('weekend: speaker already booked on a future row loses to a free speaker', () => {
+  const people = [brother('王', ['公眾演講']), brother('陳', ['公眾演講'])];
+  const rows = [
+    { date: '7/15', speaker: '王', chair: '', wt: '', read: '' }, // 14 days after ref
+    { date: '4/5',  speaker: '陳', chair: '', wt: '', read: '' }, // long ago
+  ];
+  const res = suggestWeekendRow(people, rows, {}, REF);
+  assert.equal(res.speaker, '陳', '王 is already booked on 7/15');
 });
 
 test('daysSince measured from refDate: earlier server preferred over recent server', () => {

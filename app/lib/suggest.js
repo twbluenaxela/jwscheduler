@@ -33,9 +33,13 @@ function parseDate(str, ref = new Date()) {
   return new Date(yr, mo - 1, +m[2]);
 }
 
-// Returns candidates sorted: longest gap desc, then fewest total asc.
-// daysSince + the past filter are measured from `ref` (the slot's meeting date),
-// so only assignments STRICTLY BEFORE the slot count — matching the picker.
+// Returns candidates sorted: widest gap desc, then fewest total asc.
+// The gap is BIDIRECTIONAL — the distance from `ref` (the slot's meeting date)
+// to the candidate's nearest assignment in EITHER direction. Someone already
+// booked 7 days AFTER the slot is exactly as loaded as someone who served
+// 7 days before it, so editing an earlier week can't double-book a person who
+// is already scheduled in an upcoming week. Assignments dated on `ref` itself
+// are the meeting being planned (its other slots are handled by `used`).
 function rankCandidates(people, tag, gender, history, ref) {
   const eligible = people.filter(p =>
     p.status === 'active' &&
@@ -45,25 +49,58 @@ function rankCandidates(people, tag, gender, history, ref) {
 
   const refMs = ref.getTime();
   const lastSeen = new Map();
+  const nextSeen = new Map();
   const counts = new Map();
   for (const h of history) {
     if (!h.name) continue;
     const d = parseDate(h.date, ref);
-    if (!d || d.getTime() >= refMs) continue; // strictly before the slot date
-    const prev = lastSeen.get(h.name);
-    if (!prev || d > prev) lastSeen.set(h.name, d);
+    if (!d || d.getTime() === refMs) continue;
+    if (d.getTime() < refMs) {
+      const prev = lastSeen.get(h.name);
+      if (!prev || d > prev) lastSeen.set(h.name, d);
+    } else {
+      const next = nextSeen.get(h.name);
+      if (!next || d < next) nextSeen.set(h.name, d);
+    }
     counts.set(h.name, (counts.get(h.name) ?? 0) + 1);
   }
 
   return eligible
-    .map(p => ({
-      name: p.name,
-      daysSince: lastSeen.has(p.name)
-        ? Math.floor((refMs - lastSeen.get(p.name)) / 86400000)
-        : 9999,
-      count: counts.get(p.name) ?? 0,
-    }))
-    .sort((a, b) => b.daysSince - a.daysSince || a.count - b.count);
+    .map(p => {
+      const daysSince = lastSeen.has(p.name)
+        ? Math.floor((refMs - lastSeen.get(p.name).getTime()) / 86400000)
+        : 9999;
+      const daysUntil = nextSeen.has(p.name)
+        ? Math.floor((nextSeen.get(p.name).getTime() - refMs) / 86400000)
+        : 9999;
+      return { name: p.name, gap: Math.min(daysSince, daysUntil), count: counts.get(p.name) ?? 0 };
+    })
+    .sort((a, b) => b.gap - a.gap || a.count - b.count);
+}
+
+// Names with an assignment in ANY category within ±CROWD_WINDOW_DAYS of the
+// slot (other than the meeting itself). They are demoted below everyone who is
+// free around that date — but stay pickable, so slots still fill when the
+// whole pool is busy.
+const CROWD_WINDOW_DAYS = 7;
+
+function crowdedNames(entries, ref) {
+  const refMs = ref.getTime();
+  const win = CROWD_WINDOW_DAYS * 86400000;
+  const out = new Set();
+  for (const h of entries) {
+    if (!h.name) continue;
+    const d = parseDate(h.date, ref);
+    if (!d) continue;
+    const diff = Math.abs(d.getTime() - refMs);
+    if (diff !== 0 && diff <= win) out.add(h.name);
+  }
+  return out;
+}
+
+function demoteCrowded(ranked, crowded) {
+  if (!crowded.size) return ranked;
+  return [...ranked.filter(c => !crowded.has(c.name)), ...ranked.filter(c => crowded.has(c.name))];
 }
 
 function toRef(refDate) {
@@ -86,11 +123,19 @@ function pickOne(ranked, used) {
 //   be of the same sex) but fall back to anyone rather than leave a blank.
 // - type/role: among the top ROTATE_WINDOW by fairness, pick whoever has gone
 //   longest without this specific (type, role) — never-done beats any date.
-function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf } = {}) {
+function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf, crowded } = {}) {
   let avail = ranked.filter(c => !used.has(c.name));
   if (preferG && genderOf) {
     const same = avail.filter(c => genderOf(c.name) === preferG);
     if (same.length) avail = same;
+  }
+  // Crowded names must not re-enter via the rotation window while free
+  // candidates exist — only fall back to them when nobody else is left.
+  // Applied AFTER the gender preference: a same-gender helper who is busy
+  // nearby still beats switching gender (S-38 outranks load-spreading).
+  if (crowded?.size) {
+    const free = avail.filter(c => !crowded.has(c.name));
+    if (free.length) avail = free;
   }
   if (!avail.length) return null;
   let best = avail[0];
@@ -108,6 +153,8 @@ function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf
 
 // Suggest speaker, chair, wt, read for a weekend row.
 // existing: already-filled fields to exclude from suggestions.
+// pastRows: ALL schedule rows — past AND future (future bookings count against
+//   a candidate via the bidirectional gap + crowd demotion).
 // refDate: the row's meeting date (Date or date-string); defaults to today.
 export function suggestWeekendRow(people, pastRows, existing = {}, refDate = new Date()) {
   const ref = toRef(refDate);
@@ -118,9 +165,10 @@ export function suggestWeekendRow(people, pastRows, existing = {}, refDate = new
     wt:      pastRows.filter(r => r.wt).map(r => ({ name: r.wt,         date: r.date })),
     read:    pastRows.filter(r => r.read).map(r => ({ name: r.read,      date: r.date })),
   };
+  const crowded = crowdedNames([...hist.speaker, ...hist.chair, ...hist.wt, ...hist.read], ref);
   const rank = (catKey, history) => {
     const req = CAT_REQS[catKey];
-    return rankCandidates(people, req.tag, req.g, history, ref);
+    return demoteCrowded(rankCandidates(people, req.tag, req.g, history, ref), crowded);
   };
   return {
     speaker: pickOne(rank('publictalk',   hist.speaker), used),
@@ -133,9 +181,11 @@ export function suggestWeekendRow(people, pastRows, existing = {}, refDate = new
 // Suggest assignments for all empty slots in a midweek week.
 // week: { id, treasures, ministry, living } frontend shape (parts have .id = partKey, .cat, .roleLabel, .title)
 // existingAssignments: { [slotId]: name } — already confirmed slots
-// pastHistory: [{ name, cat, date, type?, role? }] — cat is the EFFECTIVE cat
-//   (ministry talks under 'ministrytalk'); type/role enable part-type rotation
-//   and are optional (old-shape entries still count toward overall fairness).
+// pastHistory: [{ name, cat, date, type?, role? }] — ALL other weeks, past AND
+//   future (upcoming bookings count against a candidate via the bidirectional
+//   gap + crowd demotion). cat is the EFFECTIVE cat (ministry talks under
+//   'ministrytalk'); type/role enable part-type rotation and are optional
+//   (old-shape entries still count toward overall fairness).
 export function suggestMidweekWeek(people, week, existingAssignments, pastHistory, refDate = new Date()) {
   const ref = toRef(refDate);
   const refMs = ref.getTime();
@@ -146,24 +196,29 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
   const genderOf = (name) => genderByName.get(name);
 
   const histByCat = {};
-  const typeRoleLast = new Map(); // `${name}|${type}|${role}` -> last ms, strictly before ref
+  // `${name}|${type}|${role}` -> latest ms. FUTURE entries count too: someone
+  // already booked for 初次交談 next week is the MOST recent holder of that
+  // part type, not "never did it" — otherwise the rotation window would
+  // resurrect exactly the person the bidirectional gap just pushed down.
+  const typeRoleLast = new Map();
   for (const h of pastHistory) {
     (histByCat[h.cat] ??= []).push({ name: h.name, date: h.date });
     if (h.type && h.role != null) {
       const d = parseDate(h.date, ref);
-      if (!d || d.getTime() >= refMs) continue;
+      if (!d || d.getTime() === refMs) continue;
       const k = `${h.name}|${h.type}|${h.role}`;
       const prev = typeRoleLast.get(k);
       if (prev == null || d.getTime() > prev) typeRoleLast.set(k, d.getTime());
     }
   }
 
+  const crowded = crowdedNames(pastHistory, ref);
   const suggest = (slotId, catKey, opts = {}) => {
     if (existingAssignments[slotId]) return;
     const req = CAT_REQS[catKey];
     if (!req) return;
-    const ranked = rankCandidates(people, req.tag, req.g, histByCat[catKey] ?? [], ref);
-    const name = pickRotated(ranked, used, { ...opts, typeRoleLast, genderOf });
+    const ranked = demoteCrowded(rankCandidates(people, req.tag, req.g, histByCat[catKey] ?? [], ref), crowded);
+    const name = pickRotated(ranked, used, { ...opts, typeRoleLast, genderOf, crowded });
     if (name) result[slotId] = name;
   };
 

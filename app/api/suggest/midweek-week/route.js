@@ -68,7 +68,9 @@ export async function POST(request) {
       name: p.name, g: p.gender, quals: p.tags ?? [], status: p.status,
     }));
 
-    // refDate = the target week's meeting date, so recency/past-only matches the picker.
+    // refDate = the target week's meeting date. historyWeeks includes FUTURE
+    // weeks too — the engine's bidirectional gap uses them so a person already
+    // booked in an upcoming week is not suggested for this one.
     const suggestions = suggestMidweekWeek(normalPeople, week, existingAssignments, pastHistory, targetWeek.date);
     return NextResponse.json({ suggestions });
   } catch (err) {

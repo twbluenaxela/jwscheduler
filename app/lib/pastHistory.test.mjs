@@ -38,10 +38,25 @@ test('same-date assignment is excluded (the meeting being planned, not history)'
   assert.equal(hist['于樂洋'], undefined, 'assignment on the slot date must not count');
 });
 
-test('assignment after ref date is excluded', () => {
+test('assignment after ref date is tracked as upcoming, not past', () => {
   const assignments = { 'mw3_chairman': '于樂洋' };
   const hist = buildPastHistory([WEEK_JULY8], assignments, [], REF);
-  assert.equal(hist['于樂洋'], undefined);
+  const entry = hist['于樂洋']['傳道與生活主席'];
+  assert.equal(entry.daysSince, null, 'no past history');
+  assert.equal(entry.halfYearCount, 0, 'future must not inflate the past load count');
+  assert.deepEqual(entry.nextDate, new Date(2026, 6, 8));
+  assert.equal(entry.daysUntil, 7, '7/8 is 7 days after the 7/1 slot');
+  assert.equal(entry.upcomingCount, 1);
+});
+
+test('past assignment leaves upcoming fields empty', () => {
+  const assignments = { 'mw1_chairman': '于樂洋' };
+  const hist = buildPastHistory([WEEK_JUNE3], assignments, [], REF);
+  const entry = hist['于樂洋']['傳道與生活主席'];
+  assert.equal(entry.daysSince, 28);
+  assert.equal(entry.nextDate, null);
+  assert.equal(entry.daysUntil, null);
+  assert.equal(entry.upcomingCount, 0);
 });
 
 test('openPrayer and closePrayer both map to 禱告 tag', () => {
@@ -81,10 +96,13 @@ test('past weekend speaker assignment counted', () => {
   assert.deepEqual(hist['王弟兄']['公眾演講'].lastDate, new Date(2026, 4, 10));
 });
 
-test('future weekend row (after refDate) is excluded', () => {
+test('future weekend row (after refDate) counts as upcoming', () => {
   const rows = [{ _id: 2, date: '8/1', speaker: '王弟兄', chair: '', wt: '', read: '' }];
   const hist = buildPastHistory([], {}, rows, REF);
-  assert.equal(hist['王弟兄'], undefined);
+  const entry = hist['王弟兄']['公眾演講'];
+  assert.equal(entry.daysSince, null);
+  assert.equal(entry.daysUntil, 31, '8/1 is 31 days after the 7/1 slot');
+  assert.equal(entry.upcomingCount, 1);
 });
 
 test('empty name fields are skipped', () => {

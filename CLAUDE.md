@@ -28,7 +28,12 @@ app/
                          + <PWARegister/> for service-worker registration
   manifest.js          — PWA web app manifest (name, icons, standalone display,
                          theme/background colour) — Next 16 app-router convention
-  globals.css          — full design system (tokens, all component styles)
+  globals.css          — full design system (tokens, all component styles).
+                         Breakpoints: ≤720px mobile (topbar+tabbar), 721–1080px
+                         tablet (sidenav collapses to a 68px icon rail so iPad
+                         portrait fits), plus height-based density tiers
+                         (max-height 1150px / 820px) that compress the midweek
+                         card so a full week fits an iPad screen with no scroll
   login/
     page.js            — Firebase login UI (email/password + Google popup);
                          redirects to / once useAuth().firebaseUser is set
@@ -96,7 +101,12 @@ app/
                          card fills the page edge-to-edge (no A4 letterbox), no print dialog;
                          `buildWeekText()` = plain-text week schedule for pasting into LINE;
                          `triggerDownload()` = blob → download anchor; `downloadWeekXlsx` /
-                         `exportWeeksXlsx` = Excel (single / multi-week). Multi-week visual
+                         `exportWeeksXlsx` = Excel via `buildMidweekXlsxBlob()` — a styled
+                         workbook mirroring the card (section-colour bands, grey time/role
+                         cols, bold names) with A4 portrait page setup + a manual page break
+                         after every 2nd week, so printing from Excel gives two weeks per
+                         page (for the bulletin board). `buildXlsxBuffer()` remains the
+                         plain builder used by weekendExport.js. Multi-week visual
                          exports are DOM-screenshot based: `exportNodes{Jpeg,Pdf}` +
                          `openNodesPrintWindow` take rendered MidweekWeek card nodes and
                          capture them via html-to-image, so the output matches the live card
@@ -105,11 +115,19 @@ app/
     suggest.js         — pure recency-scoring suggestion engine (no DB, no fetch);
                          exports suggestWeekendRow(people, pastRows, existing) and
                          suggestMidweekWeek(people, week, existingAssignments, pastHistory).
-                         Fairness-first ranking + part-type rotation: history entries may
-                         carry {type, role}; within the top-5 fairness window the candidate
-                         who has gone longest without that specific (part type, 學生/助手
-                         role) wins, so nobody gets stuck with e.g. 初次交談 or 助手 forever.
-                         Ministry demo helper slots prefer the student's gender (S-38)
+                         History input covers ALL other weeks/rows — past AND FUTURE — and
+                         the fairness gap is BIDIRECTIONAL (distance to the nearest
+                         assignment in either direction), so editing an earlier week never
+                         suggests someone already booked in an upcoming week. Crowd
+                         demotion: anyone with an assignment in ANY category within ±7
+                         days of the slot ranks below everyone free (still pickable as a
+                         fallback so slots always fill). Part-type rotation: history
+                         entries may carry {type, role}; within the top-5 fairness window
+                         the candidate who has gone longest without that specific (part
+                         type, 學生/助手 role) wins — a future booking counts as the MOST
+                         recent holder of a type, never as "never did it". Ministry demo
+                         helper slots prefer the student's gender (S-38); that preference
+                         outranks crowd demotion
     partTypes.mjs      — pure slot/cat classifiers shared by suggest, the suggest route,
                          pastHistory and MidweekWeek: partTypeOf(title) (初次交談/再次交談/
                          教導人成為門徒/解釋自己的信仰/演講), effectiveCat(part)
@@ -187,13 +205,18 @@ app/
                          exports reflect current assignments. JPG/PDF/列印 render the
                          selected weeks as REAL MidweekWeek cards in an off-screen container
                          (cardRefs) and screenshot them via the `exportNodes*` helpers, so
-                         output matches the live card (Excel still uses the data path)
+                         output matches the live card (Excel uses the styled data path in
+                         `buildMidweekXlsxBlob` — two weeks per printed A4 page)
     SettingsPage.js    — ⚙ settings. Admins: 我的資訊 + 會眾資訊 + 邀請檢視者 (share the
                          congregation CODE, not an invite link) in the left grid column, 聚會排程
                          settings top-right, 成員列表 (2-col card grid, role <select> per member)
                          below. Viewers: profile + role badge only. isAdmin includes SYSADMIN
     AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed
-                         data); "✕ 留空此項" button clears a slot (leaves it unassigned)
+                         data); "✕ 留空此項" button clears a slot (leaves it unassigned).
+                         Candidate weight uses the bidirectional gap from pastHistory.mjs
+                         (min of daysSince/daysUntil) and warns "N 天後已排此項" /
+                         "前後一週內另有安排", so manual reassignment can't silently
+                         double-book someone already scheduled in an upcoming week
     PWARegister.js     — 'use client' component; registers /sw.js on window load
     Toast.js           — undo toast notification
 prisma/
@@ -478,14 +501,18 @@ exactly what's on screen:
   Built entirely client-side and downloaded directly — **no print dialog/popup** (browsers block
   those). Each PDF page is sized to the image's aspect ratio (no A4 letterbox). Do not reintroduce
   the `window.open(...).print()` flow.
-- **Excel** — custom `buildXlsxBuffer()` in `midweekExport.js` (JSZip)
+- **Excel** — `buildMidweekXlsxBlob()` in `midweekExport.js` (JSZip, hand-built OOXML): styled
+  like the card (section-colour bands, grey time/role columns, bold names), A4 portrait page
+  setup with a manual page break after every 2nd week → printing from Excel yields two weeks
+  per page for the bulletin board
 
 **Import/匯出 page (multi-week, range-scoped)** — the 匯出與分享 cards call `exportNodesJpeg`
-(single → JPG, many → zip), `exportWeeksXlsx` (one workbook, weeks concatenated), `exportNodesPdf`
-(one PDF page per week), and `openNodesPrintWindow`. The visual exporters screenshot REAL
-MidweekWeek cards rendered off-screen (cardRefs) via `html-to-image`, so they match the live card
-exactly — they do NOT hand-redraw on canvas (the old `renderWeekToCanvas` path was removed). Excel
-still uses the `formatRowsForExcel` data path. The 範圍 selector (全部/本月/自訂) filters
+(single → JPG, many → zip), `exportWeeksXlsx` (one styled workbook, two weeks per printed A4
+page), `exportNodesPdf` (one PDF page per week), and `openNodesPrintWindow`. The visual exporters
+screenshot REAL MidweekWeek cards rendered off-screen (cardRefs) via `html-to-image`, so they
+match the live card exactly — they do NOT hand-redraw on canvas (the old `renderWeekToCanvas`
+path was removed). Excel uses the styled `buildMidweekXlsxBlob` data path (`weekRows` mirrors
+the card's row order). The 範圍 selector (全部/本月/自訂) filters
 `existingWeeks` by parsed Chinese date before exporting.
 
 ---
