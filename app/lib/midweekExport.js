@@ -360,6 +360,17 @@ export function getMidweekExportFilename(week, ext) {
   return `${sanitizeFilename(getWeekLabel(week)) || 'midweek'}.${ext}`;
 }
 
+// Multi-week filename carries the actual date range (e.g. "週中_9月7-13日~10月5-11日.xlsx")
+// instead of just the week count, so a downloaded file is identifiable without opening it.
+export function getMultiWeekExportFilename(weeks, ext) {
+  if (!weeks?.length) return `週中.${ext}`;
+  if (weeks.length === 1) return getMidweekExportFilename(weeks[0], ext);
+  const first = sanitizeFilename(getWeekLabel(weeks[0]));
+  const last = sanitizeFilename(getWeekLabel(weeks[weeks.length - 1]));
+  const range = first && last && first !== last ? `${first}~${last}` : (first || last || `${weeks.length}週`);
+  return `週中_${range}.${ext}`;
+}
+
 export async function downloadWeekXlsx(week, getAssign) {
   const blob = await buildMidweekXlsxBlob([week], getAssign);
   triggerDownload(blob, getMidweekExportFilename(week, 'xlsx'));
@@ -368,7 +379,7 @@ export async function downloadWeekXlsx(week, getAssign) {
 export async function exportWeeksXlsx(weeks, getAssign) {
   if (!weeks.length) return;
   const blob = await buildMidweekXlsxBlob(weeks, getAssign);
-  triggerDownload(blob, weeks.length === 1 ? getMidweekExportFilename(weeks[0], 'xlsx') : `週中_${weeks.length}週.xlsx`);
+  triggerDownload(blob, getMultiWeekExportFilename(weeks, 'xlsx'));
 }
 
 /* ===================== Shared download / PDF helpers ===================== */
@@ -540,7 +551,7 @@ export async function exportNodesJpeg(nodes, weeks) {
     zip.file(`${sanitizeFilename(getWeekLabel(weeks[i]))}.jpg`, blob);
   }
   const out = await zip.generateAsync({ type: 'blob' });
-  triggerDownload(out, `週中_${nodes.length}週.zip`);
+  triggerDownload(out, getMultiWeekExportFilename(weeks, 'zip'));
 }
 
 export async function exportNodesPdf(nodes, weeks) {
@@ -551,7 +562,7 @@ export async function exportNodesPdf(nodes, weeks) {
     images.push(await jpegDataUrlToImage(await nodeToJpegDataUrl(node)));
   }
   const blob = jpegImagesToPdfBlob(images);
-  triggerDownload(blob, nodes.length === 1 ? getMidweekExportFilename(weeks[0], 'pdf') : `週中_${nodes.length}週.pdf`);
+  triggerDownload(blob, getMultiWeekExportFilename(weeks, 'pdf'));
 }
 
 export async function openNodesPrintWindow(nodes) {

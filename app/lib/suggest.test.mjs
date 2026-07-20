@@ -93,6 +93,47 @@ test('crowd demotion never leaves a slot empty when everyone is busy', () => {
   assert.equal(res['mw1_chairman'], '甲', 'crowded is a demotion, not an exclusion');
 });
 
+test('monthly repeat demotion: a ministry student practice 12 days ago (outside the 7-day crowd window) still loses to someone free that month', () => {
+  const sister = (name, quals) => ({ name, g: 'F', quals, status: 'active' });
+  const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範'])];
+  const week = {
+    id: 1, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談' }],
+  };
+  const history = [
+    { name: '甲', cat: 'ministry', date: '6月 19日', type: '初次交談', role: '0' }, // 12 days before REF (7/1)
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw1_m0_0'], '乙', '甲 practiced ministry only 12 days ago — still within the month');
+});
+
+test('monthly repeat demotion does not leak into unrelated categories', () => {
+  // Both are tied on chairman history (neither has ever chaired), so with no
+  // leakage the stable sort keeps 甲 first. 甲 also has a ministry-cat entry
+  // 12 days ago — inside the ministry monthly window but outside the 7-day
+  // crowd window — which must NOT bleed into the (unrelated) chairman pick.
+  const people = [brother('甲', ['傳道與生活主席']), brother('乙', ['傳道與生活主席'])];
+  const history = [
+    { name: '甲', cat: 'ministry', date: '6月 19日', type: '初次交談', role: '0' },
+  ];
+  const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF);
+  assert.equal(res['mw1_chairman'], '甲', 'a ministry-only monthly-repeat entry must not demote 甲 for chairman');
+});
+
+test('monthly repeat demotion never leaves a ministry slot empty when the whole pool practiced recently', () => {
+  const sister = (name, quals) => ({ name, g: 'F', quals, status: 'active' });
+  const people = [sister('甲', ['傳道示範'])];
+  const week = {
+    id: 1, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談' }],
+  };
+  const history = [
+    { name: '甲', cat: 'ministry', date: '6月 19日', type: '初次交談', role: '0' },
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw1_m0_0'], '甲', 'monthly repeat is a demotion, not an exclusion — the only candidate still fills it');
+});
+
 test('weekend: speaker already booked on a future row loses to a free speaker', () => {
   const people = [brother('王', ['公眾演講']), brother('陳', ['公眾演講'])];
   const rows = [

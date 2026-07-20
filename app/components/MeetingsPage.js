@@ -10,7 +10,7 @@ import {
   triggerDownload,
   buildWeekText,
 } from '../lib/midweekExport';
-import { buildWeekendText, downloadWeekendXlsx } from '../lib/weekendExport';
+import { buildWeekendText, downloadWeekendXlsx, getWeekendExportFilename } from '../lib/weekendExport';
 import { getToken } from '../lib/auth-context';
 
 const EXPORT_ITEMS = [
@@ -202,7 +202,7 @@ function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, exportOpen, 
         const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
         const a = document.createElement('a');
         a.href = dataUrl;
-        a.download = '週末聚會.jpg';
+        a.download = getWeekendExportFilename(rows, 'jpg', '週末聚會');
         a.click();
       } else if (type === 'copy') {
         if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
@@ -216,7 +216,7 @@ function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, exportOpen, 
         const { toJpeg } = await import('html-to-image');
         const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
         const image = await jpegDataUrlToImage(dataUrl);
-        triggerDownload(jpegImagesToPdfBlob([image]), '週末聚會.pdf');
+        triggerDownload(jpegImagesToPdfBlob([image]), getWeekendExportFilename(rows, 'pdf', '週末聚會'));
       }
     } catch (error) {
       window.alert(error?.message || '匯出失敗');

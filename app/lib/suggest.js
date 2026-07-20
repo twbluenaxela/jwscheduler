@@ -84,9 +84,18 @@ function rankCandidates(people, tag, gender, history, ref) {
 // whole pool is busy.
 const CROWD_WINDOW_DAYS = 7;
 
-function crowdedNames(entries, ref) {
+// Ministry student-practice parts (傳道示範 pairs + single-slot 演講 talks) get
+// their own, much wider demotion window: per member feedback, the same
+// student/helper should not repeat within roughly the same month whenever the
+// pool allows it. This is on top of (not instead of) the 7-day crowd window,
+// and — like crowd demotion generally — it only demotes, never excludes, so a
+// small pool still fills every slot.
+const MONTHLY_REPEAT_WINDOW_DAYS = 28;
+const MONTHLY_REPEAT_CATS = new Set(['ministry', 'ministrytalk']);
+
+function crowdedNames(entries, ref, windowDays = CROWD_WINDOW_DAYS) {
   const refMs = ref.getTime();
-  const win = CROWD_WINDOW_DAYS * 86400000;
+  const win = windowDays * 86400000;
   const out = new Set();
   for (const h of entries) {
     if (!h.name) continue;
@@ -213,12 +222,22 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
   }
 
   const crowded = crowdedNames(pastHistory, ref);
+  const monthlyRepeat = crowdedNames(
+    pastHistory.filter(h => MONTHLY_REPEAT_CATS.has(h.cat)),
+    ref,
+    MONTHLY_REPEAT_WINDOW_DAYS,
+  );
   const suggest = (slotId, catKey, opts = {}) => {
     if (existingAssignments[slotId]) return;
     const req = CAT_REQS[catKey];
     if (!req) return;
-    const ranked = demoteCrowded(rankCandidates(people, req.tag, req.g, histByCat[catKey] ?? [], ref), crowded);
-    const name = pickRotated(ranked, used, { ...opts, typeRoleLast, genderOf, crowded });
+    // Student-practice cats add the monthly-repeat set on top of the regular
+    // 7-day crowd window (see MONTHLY_REPEAT_WINDOW_DAYS above).
+    const effCrowded = MONTHLY_REPEAT_CATS.has(catKey)
+      ? new Set([...crowded, ...monthlyRepeat])
+      : crowded;
+    const ranked = demoteCrowded(rankCandidates(people, req.tag, req.g, histByCat[catKey] ?? [], ref), effCrowded);
+    const name = pickRotated(ranked, used, { ...opts, typeRoleLast, genderOf, crowded: effCrowded });
     if (name) result[slotId] = name;
   };
 

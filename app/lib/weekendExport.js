@@ -13,6 +13,26 @@ function isEventLike(r) {
   return r.type === 'event' || r.type === 'suspended';
 }
 
+function sanitizeFilename(value) {
+  return String(value ?? '')
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\.$/, '');
+}
+
+// Filename carries the actual date range of the exported rows (e.g.
+// "週末_7-12~9-14.xlsx") instead of a generic name, so a downloaded file is
+// identifiable without opening it.
+export function getWeekendExportFilename(rows, ext, label = '週末') {
+  const dated = (rows ?? []).filter((r) => r.date);
+  if (!dated.length) return `${label}.${ext}`;
+  const first = sanitizeFilename(dated[0].date);
+  const last = sanitizeFilename(dated[dated.length - 1].date);
+  const range = first && last && first !== last ? `${first}~${last}` : (first || last);
+  return `${label}${range ? `_${range}` : ''}.${ext}`;
+}
+
 const WEEKEND_HEADERS = ['日期', '編號', '演講主題', '會眾', '講者', '主席', '守望台', '朗讀', '招待', '外地演講安排'];
 const WEEKEND_COLS = [12, 10, 40, 18, 16, 16, 16, 16, 16, 22];
 
@@ -34,10 +54,10 @@ function rowCells(r, getAssign) {
   ];
 }
 
-export async function downloadWeekendXlsx(rows, getAssign, filename = '週末.xlsx') {
+export async function downloadWeekendXlsx(rows, getAssign, filename) {
   const data = [WEEKEND_HEADERS, ...rows.map((r) => rowCells(r, getAssign))];
   const blob = await buildXlsxBuffer(data, { sheetName: '週末', cols: WEEKEND_COLS });
-  triggerDownload(blob, filename);
+  triggerDownload(blob, filename || getWeekendExportFilename(rows, 'xlsx'));
 }
 
 // Plain-text weekend schedule, suitable for pasting into a LINE group.

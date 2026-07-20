@@ -112,6 +112,15 @@ app/
                          capture them via html-to-image, so the output matches the live card
                          exactly. (The old hand-drawn `renderWeekToCanvas` exporters were
                          removed — they had drifted from the real card; see "What NOT to do".)
+                         All download filenames carry the actual date range, not a generic
+                         count: `getMidweekExportFilename(week, ext)` uses the week's label;
+                         `getMultiWeekExportFilename(weeks, ext)` (xlsx/zip/pdf) joins the
+                         first and last week's label with `~`, e.g.
+                         `週中_9月7-13日~10月5-11日.xlsx`
+    weekendExport.js   — `getWeekendExportFilename(rows, ext, label)` mirrors the midweek
+                         helper for weekend downloads: joins the first/last exported row's
+                         `date` with `~` (e.g. `週末_7-12~9-14.xlsx`); `downloadWeekendXlsx`
+                         falls back to it when no explicit filename is passed
     suggest.js         — pure recency-scoring suggestion engine (no DB, no fetch);
                          exports suggestWeekendRow(people, pastRows, existing) and
                          suggestMidweekWeek(people, week, existingAssignments, pastHistory).
@@ -121,13 +130,19 @@ app/
                          suggests someone already booked in an upcoming week. Crowd
                          demotion: anyone with an assignment in ANY category within ±7
                          days of the slot ranks below everyone free (still pickable as a
-                         fallback so slots always fill). Part-type rotation: history
-                         entries may carry {type, role}; within the top-5 fairness window
-                         the candidate who has gone longest without that specific (part
-                         type, 學生/助手 role) wins — a future booking counts as the MOST
-                         recent holder of a type, never as "never did it". Ministry demo
-                         helper slots prefer the student's gender (S-38); that preference
-                         outranks crowd demotion
+                         fallback so slots always fill). Monthly repeat demotion (member
+                         feedback: 學生練習安排整個月份內人員盡量不要重複): ministry
+                         student-practice cats (`ministry`, `ministrytalk`) additionally
+                         demote anyone with a ministry-cat assignment within ±28 days —
+                         wider than the general 7-day crowd window, scoped to those two
+                         cats only (chairman/prayer/etc. are unaffected), still a demotion
+                         not an exclusion so a small pool still fills every slot.
+                         Part-type rotation: history entries may carry {type, role}; within
+                         the top-5 fairness window the candidate who has gone longest
+                         without that specific (part type, 學生/助手 role) wins — a future
+                         booking counts as the MOST recent holder of a type, never as
+                         "never did it". Ministry demo helper slots prefer the student's
+                         gender (S-38); that preference outranks crowd demotion
     partTypes.mjs      — pure slot/cat classifiers shared by suggest, the suggest route,
                          pastHistory and MidweekWeek: partTypeOf(title) (初次交談/再次交談/
                          教導人成為門徒/解釋自己的信仰/演講), effectiveCat(part)
