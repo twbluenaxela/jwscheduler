@@ -14,6 +14,7 @@ import AssignSheet from './components/AssignSheet';
 import Toast from './components/Toast';
 import { midweekWeeks as seedWeeks, weekendData as seedWeekendData } from './data/index';
 import { buildPastHistory, slotRefDate } from './lib/pastHistory.mjs';
+import { buildPairIndex, collectMidweekPairs, counterpartName } from './lib/pairHistory.mjs';
 
 const DAY_NAMES = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
 
@@ -730,17 +731,25 @@ export default function App() {
       </div>
       <TabBar page={page} setPage={setPage} role={role} onAdmin={() => router.push('/admin')} />
 
-      {sheet && (
-        <AssignSheet
-          sheet={sheet}
-          assignments={assignments}
-          getAssign={getAssign}
-          onPick={onPick}
-          onClose={() => setSheet(null)}
-          people={people}
-          pastHistory={buildPastHistory(midweekWeeks, assignments, weekendRows, slotRefDate(sheet.slotId, midweekWeeks, weekendRows))}
-        />
-      )}
+      {sheet && (() => {
+        // Recomputed per open sheet (cheap: one pass over the loaded weeks) so
+        // the picker's 搭檔 warning always reflects the current assignments.
+        const ref = slotRefDate(sheet.slotId, midweekWeeks, weekendRows);
+        return (
+          <AssignSheet
+            sheet={sheet}
+            assignments={assignments}
+            getAssign={getAssign}
+            onPick={onPick}
+            onClose={() => setSheet(null)}
+            people={people}
+            pastHistory={buildPastHistory(midweekWeeks, assignments, weekendRows, ref)}
+            pairIndex={buildPairIndex(collectMidweekPairs(midweekWeeks, assignments))}
+            pairWith={counterpartName(sheet.slotId, midweekWeeks, assignments)}
+            refDate={ref}
+          />
+        );
+      })()}
 
       {toast && (
         <Toast toast={toast} onHide={() => setToast(null)} />

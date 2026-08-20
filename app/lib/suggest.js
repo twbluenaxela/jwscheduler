@@ -9,6 +9,8 @@
 // 週末聚會主席 / 守望台主持人 and no member carries 主席 anymore.)
 import { CATS } from '../data/index.js';
 import { partTypeOf, effectiveCat, slotCat } from './partTypes.mjs';
+import { parseCnDate as parseDate } from './cnDate.mjs';
+import { buildPairIndex, partnersWithin, PAIR_REPEAT_WINDOW_DAYS } from './pairHistory.mjs';
 
 const CAT_REQS = Object.fromEntries(
   Object.entries(CATS).map(([k, v]) => [k, { tag: v.tag, g: v.g }])
@@ -20,18 +22,19 @@ const CAT_REQS = Object.fromEntries(
 // or the 助手 role forever while overall fairness stays dominant.
 const ROTATE_WINDOW = 5;
 
-// Year is inferred relative to `ref` (the slot being assigned) with a ±6-month
-// window — matches pastHistory.mjs so the picker and suggest engine parse alike.
-function parseDate(str, ref = new Date()) {
-  const s = String(str ?? '');
-  const m = s.match(/(\d+)月\s*(\d+)日/) ?? s.match(/^(\d+)\/(\d+)$/);
-  if (!m) return null;
-  let yr = ref.getFullYear();
-  const mo = +m[1];
-  if (mo > ref.getMonth() + 7) yr--;
-  else if (mo < ref.getMonth() - 5) yr++;
-  return new Date(yr, mo - 1, +m[2]);
-}
+// …but the window may only reorder people who are roughly EQUALLY rested.
+// 用心準備傳道工作 parts (初次交談 / 再次交談 / 解釋自己的信仰 / 教導人成為門徒)
+// are all the same kind of student practice, so the goal is a steady rotation
+// through the pool — the type distinction is for the record, not a licence to
+// bring someone back early. Without this guard the rotation window could promote
+// the 5th-ranked candidate (who served last week) over the 1st (who served two
+// months ago) merely because they had never done THAT title, producing
+// back-to-back weeks. A candidate may only be rotated ahead if their own gap is
+// within one meeting cycle of the best available gap.
+const ROTATE_GAP_TOLERANCE_DAYS = 7;
+
+// Year inference lives in cnDate.mjs so the picker (pastHistory) and this
+// engine can never disagree about what 「6月 3日」 means.
 
 // Returns candidates sorted: widest gap desc, then fewest total asc.
 // The gap is BIDIRECTIONAL — the distance from `ref` (the slot's meeting date)
@@ -84,14 +87,37 @@ function rankCandidates(people, tag, gender, history, ref) {
 // whole pool is busy.
 const CROWD_WINDOW_DAYS = 7;
 
-// Ministry student-practice parts (傳道示範 pairs + single-slot 演講 talks) get
-// their own, much wider demotion window: per member feedback, the same
-// student/helper should not repeat within roughly the same month whenever the
-// pool allows it. This is on top of (not instead of) the 7-day crowd window,
-// and — like crowd demotion generally — it only demotes, never excludes, so a
-// small pool still fills every slot.
+// ── Assignment families ──────────────────────────────────────────────────────
+// Some cats are, in the members' eyes, "the same kind of turn". Those get:
+//   1. ONE shared fairness history — ranking asks "when did this person last do
+//      anything in this family", never "when did they last do this exact cat",
+//      so a different title/pool can't make a recently-used person look due; and
+//   2. a monthly repeat demotion (±MONTHLY_REPEAT_WINDOW_DAYS, much wider than
+//      the general 7-day crowd window) so the same person doesn't come round
+//      twice in a month while others in the pool are still free.
+// Both are demotions, never exclusions, so a small pool still fills every slot.
+// Per-cat eligibility (tag + gender) is UNCHANGED — a family shares history,
+// not candidates: 研經班朗讀 still needs the 研經班朗讀 qual.
+//
+// The families (member feedback: 學生練習與朗讀安排整個月份內人員盡量不要重複):
+//   ministry — 用心準備傳道工作 student practice: 初次交談 / 再次交談 /
+//     解釋自己的信仰 / 教導人成為門徒 (cat 'ministry') + the single-slot 演講
+//     talks ('ministrytalk'). The per-title distinction survives in `type`
+//     (records + the rotation tiebreak) — it just no longer decides who is due.
+//   reading — 朗讀 duties: 經文朗讀 ('reading') + 研經班朗讀 ('cbsread').
+// Cats NOT in a family (chairman, prayer, treasures, gems, living, cbs,
+// ministrydisc, and the weekend cats) keep the old per-cat behaviour.
 const MONTHLY_REPEAT_WINDOW_DAYS = 28;
-const MONTHLY_REPEAT_CATS = new Set(['ministry', 'ministrytalk']);
+
+const FAMILIES = {
+  ministry: ['ministry', 'ministrytalk'],
+  reading: ['reading', 'cbsread'],
+};
+
+// cat -> family key (cats with no family are absent)
+const FAMILY_OF = new Map(
+  Object.entries(FAMILIES).flatMap(([fam, cats]) => cats.map(c => [c, fam]))
+);
 
 function crowdedNames(entries, ref, windowDays = CROWD_WINDOW_DAYS) {
   const refMs = ref.getTime();
@@ -132,7 +158,9 @@ function pickOne(ranked, used) {
 //   be of the same sex) but fall back to anyone rather than leave a blank.
 // - type/role: among the top ROTATE_WINDOW by fairness, pick whoever has gone
 //   longest without this specific (type, role) — never-done beats any date.
-function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf, crowded } = {}) {
+// - pairedRecently: names already paired with this slot's counterpart inside the
+//   pair-repeat window (學生／助手 variety) — demoted below everyone else.
+function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf, crowded, pairedRecently } = {}) {
   let avail = ranked.filter(c => !used.has(c.name));
   if (preferG && genderOf) {
     const same = avail.filter(c => genderOf(c.name) === preferG);
@@ -146,10 +174,23 @@ function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf
     const free = avail.filter(c => !crowded.has(c.name));
     if (free.length) avail = free;
   }
+  // Pair variety: someone already paired with this slot's counterpart inside
+  // PAIR_REPEAT_WINDOW_DAYS drops below everyone who has not been. Applied
+  // AFTER the crowd/monthly filter on purpose — spreading the LOAD matters more
+  // than spreading the partnerships, and like every other rule here it is a
+  // demotion, not an exclusion, so the slot still fills from a small pool.
+  if (pairedRecently?.size) {
+    const fresh = avail.filter(c => !pairedRecently.has(c.name));
+    if (fresh.length) avail = fresh;
+  }
   if (!avail.length) return null;
   let best = avail[0];
   if (type && typeRoleLast) {
-    const pool = avail.slice(0, ROTATE_WINDOW);
+    // Only near-ties on fairness may be reordered by part type (see
+    // ROTATE_GAP_TOLERANCE_DAYS) — otherwise type rotation would undo the
+    // spacing the gap ranking just produced.
+    const floor = avail[0].gap - ROTATE_GAP_TOLERANCE_DAYS;
+    const pool = avail.filter(c => c.gap >= floor).slice(0, ROTATE_WINDOW);
     best = pool.reduce((a, b) => {
       const la = typeRoleLast.get(`${a.name}|${type}|${role}`) ?? -1;
       const lb = typeRoleLast.get(`${b.name}|${type}|${role}`) ?? -1;
@@ -221,23 +262,58 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
     }
   }
 
+  // 學生／助手 pairing history. Entries carrying a `pairId` (weekId+partKey)
+  // are the two halves of ONE pair-capable part: grouping by pairId recovers
+  // who served WITH whom, without the caller having to pass a second history.
+  const pairSlots = new Map();
+  for (const h of pastHistory) {
+    if (!h.pairId || h.role == null || !h.name) continue;
+    const slot = pairSlots.get(h.pairId) ?? { date: h.date };
+    slot[String(h.role)] = h.name;
+    pairSlots.set(h.pairId, slot);
+  }
+  const pairIndex = buildPairIndex(
+    [...pairSlots.values()]
+      .filter(s => s['0'] && s['1'])
+      .map(s => ({ a: s['0'], b: s['1'], date: parseDate(s.date, ref) }))
+      .filter(s => s.date)
+  );
+
   const crowded = crowdedNames(pastHistory, ref);
-  const monthlyRepeat = crowdedNames(
-    pastHistory.filter(h => MONTHLY_REPEAT_CATS.has(h.cat)),
-    ref,
-    MONTHLY_REPEAT_WINDOW_DAYS,
+  // Per-FAMILY monthly repeat sets — a 朗讀 turn last week must not demote a
+  // ministry candidate (and vice versa); only same-family load counts.
+  const monthlyByFamily = Object.fromEntries(
+    Object.entries(FAMILIES).map(([fam, cats]) => [
+      fam,
+      crowdedNames(
+        pastHistory.filter(h => cats.includes(h.cat)),
+        ref,
+        MONTHLY_REPEAT_WINDOW_DAYS,
+      ),
+    ])
   );
   const suggest = (slotId, catKey, opts = {}) => {
     if (existingAssignments[slotId]) return;
     const req = CAT_REQS[catKey];
     if (!req) return;
-    // Student-practice cats add the monthly-repeat set on top of the regular
-    // 7-day crowd window (see MONTHLY_REPEAT_WINDOW_DAYS above).
-    const effCrowded = MONTHLY_REPEAT_CATS.has(catKey)
-      ? new Set([...crowded, ...monthlyRepeat])
+    const fam = FAMILY_OF.get(catKey);
+    // Family cats add their family's monthly-repeat set on top of the regular
+    // 7-day crowd window, and rank on the whole family's shared history, so a
+    // brother who read at 研經班 last month is not treated as "never did
+    // 經文朗讀" and pulled straight back in. (See FAMILIES above.)
+    const effCrowded = fam
+      ? new Set([...crowded, ...monthlyByFamily[fam]])
       : crowded;
-    const ranked = demoteCrowded(rankCandidates(people, req.tag, req.g, histByCat[catKey] ?? [], ref), effCrowded);
-    const name = pickRotated(ranked, used, { ...opts, typeRoleLast, genderOf, crowded: effCrowded });
+    const hist = fam
+      ? FAMILIES[fam].flatMap(c => histByCat[c] ?? [])
+      : (histByCat[catKey] ?? []);
+    const ranked = demoteCrowded(rankCandidates(people, req.tag, req.g, hist, ref), effCrowded);
+    // `pairWith` = whoever holds the other half of this part. Anyone already
+    // paired with them inside the window is demoted (see pickRotated).
+    const pairedRecently = opts.pairWith
+      ? partnersWithin(pairIndex, opts.pairWith, ref, PAIR_REPEAT_WINDOW_DAYS)
+      : null;
+    const name = pickRotated(ranked, used, { ...opts, typeRoleLast, genderOf, crowded: effCrowded, pairedRecently });
     if (name) result[slotId] = name;
   };
 
@@ -248,13 +324,24 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
   for (const section of ['treasures', 'ministry', 'living']) {
     for (const part of week[section] ?? []) {
       const type = part.cat === 'ministry' ? partTypeOf(part.title) : null;
+      const isDemo = part.cat === 'ministry' && String(part.roleLabel ?? '').includes('/');
       const slot0 = `${wId}_${part.id}_0`;
-      suggest(slot0, effectiveCat(part), { type, role: '0' });
+      const slot1 = `${wId}_${part.id}_1`;
+      // Pair variety applies to 傳道示範 demos only. When the helper is already
+      // set (the admin filled it, or is re-running ✦ on a half-filled part) the
+      // STUDENT pick avoids her past partners too, not just the other way round.
+      suggest(slot0, effectiveCat(part), {
+        type, role: '0',
+        pairWith: isDemo ? existingAssignments[slot1] || null : null,
+      });
       if (String(part.roleLabel ?? '').includes('/')) {
         // Helper prefers the student's gender (S-38); CBS reader has its own pool.
         const student = existingAssignments[slot0] || result[slot0];
         const preferG = part.cat === 'ministry' ? genderOf(student) ?? null : null;
-        suggest(`${wId}_${part.id}_1`, slotCat(part, '1'), { type, role: '1', preferG });
+        suggest(slot1, slotCat(part, '1'), {
+          type, role: '1', preferG,
+          pairWith: isDemo ? student || null : null,
+        });
       }
     }
   }

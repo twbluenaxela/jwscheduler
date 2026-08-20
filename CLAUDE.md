@@ -137,12 +137,31 @@ app/
                          wider than the general 7-day crowd window, scoped to those two
                          cats only (chairman/prayer/etc. are unaffected), still a demotion
                          not an exclusion so a small pool still fills every slot.
+                         **Assignment families** (`FAMILIES`) — cats that members experience
+                         as "the same kind of turn" share ONE fairness history AND the
+                         monthly (±28d) repeat demotion, computed PER FAMILY (a 朗讀 turn
+                         must not demote a ministry pick, hence `monthlyByFamily`, not one
+                         lumped set). Ranking a family cat unions the family's history, so
+                         "last did anything in this family" decides who is due, never "last
+                         did this exact cat". Eligibility is UNCHANGED — a family shares
+                         history, not candidates (研經班朗讀 still needs its own qual).
+                         Families: `ministry` = 用心準備傳道工作 student practice
+                         (`ministry` + `ministrytalk`: 初次交談 / 再次交談 / 解釋自己的信仰 /
+                         教導人成為門徒 / 演講); `reading` = 朗讀 duties (`reading` +
+                         `cbsread`). Everything else (chairman, prayer, treasures, gems,
+                         living, cbs, ministrydisc, weekend cats) keeps per-cat behaviour.
+                         The per-title distinction survives in `type` (records + rotation
+                         tiebreak only).
                          Part-type rotation: history entries may carry {type, role}; within
                          the top-5 fairness window the candidate who has gone longest
                          without that specific (part type, 學生/助手 role) wins — a future
                          booking counts as the MOST recent holder of a type, never as
-                         "never did it". Ministry demo helper slots prefer the student's
-                         gender (S-38); that preference outranks crowd demotion
+                         "never did it". The window may only reorder candidates whose own
+                         gap is within `ROTATE_GAP_TOLERANCE_DAYS` (7 = one meeting cycle)
+                         of the best available gap — without that guard a new title pulled
+                         someone back the very next week, undoing the spacing the gap
+                         ranking had just produced. Ministry demo helper slots prefer the
+                         student's gender (S-38); that preference outranks crowd demotion
     partTypes.mjs      — pure slot/cat classifiers shared by suggest, the suggest route,
                          pastHistory and MidweekWeek: partTypeOf(title) (初次交談/再次交談/
                          教導人成為門徒/解釋自己的信仰/演講), effectiveCat(part)
@@ -257,6 +276,17 @@ scripts/
   add-ministry-disc-qual.mjs — one-time (idempotent): seed 傳道討論主持 qual (conducts
                          節目包括討論 ministry parts) to active 生活演講 brothers
                          (node --env-file=.env scripts/add-ministry-disc-qual.mjs)
+  sim-family-rotation.mjs — diagnostic (read-only DB): replays the last 8 real week
+                         structures forward 26 weeks, auto-accepting every ✦ suggestion,
+                         and reports per FAMILY (用心準備傳道工作 / 朗讀) the spacing
+                         between a person's consecutive turns, same-month repeats, and
+                         who never gets a turn — split by gender (the 傳道示範 pool is
+                         42 sisters to 4 brothers, so a whole-pool average hides the
+                         sisters' rotation). Drop a copy of a previous engine at
+                         `app/lib/suggest.old.js` (e.g. `git show HEAD:app/lib/suggest.js >
+                         app/lib/suggest.old.js`) and it reports both side by side, so an
+                         algorithm change is measured rather than asserted. Delete the copy
+                         afterwards — it is a scratch file, not part of the app
   sim-suggest.mjs      — diagnostic: simulates N weeks of auto-accepted ✦ suggestions
                          against real DB history and reports part-type/role distribution
                          per person (used to tune the rotation algorithm; read-only DB)

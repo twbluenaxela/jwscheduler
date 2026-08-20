@@ -40,7 +40,7 @@ export async function POST(request) {
     }
     const week = { id: targetWeek.id, ...sections };
 
-    // Build pastHistory: [{ name, cat, date }]
+    // Build pastHistory: [{ name, cat, date, type, role, pairId }]
     const pastHistory = [];
     for (const w of historyWeeks) {
       const partMap = new Map(w.parts.map(p => [p.partKey, p]));
@@ -53,12 +53,15 @@ export async function POST(request) {
         const partMatch = a.slotId.match(/^mw\d+_(.+?)_([01])$/);
         if (partMatch) {
           const part = partMap.get(partMatch[1]);
+          // pairId groups the two halves of one pair-capable part so the
+          // engine can recover 學生／助手 pairings (who served WITH whom).
           if (part) pastHistory.push({
             name: a.name,
             cat: slotCat(part, partMatch[2]),
             date: w.date,
             type: part.cat === 'ministry' ? partTypeOf(part.title) : null,
             role: partMatch[2],
+            pairId: String(part.roleLabel ?? '').includes('/') ? `${w.id}_${partMatch[1]}` : null,
           });
         }
       }

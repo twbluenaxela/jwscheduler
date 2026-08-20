@@ -1,8 +1,12 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CATS } from '../data/index';
+import { recentPairing } from '../lib/pairHistory.mjs';
 
-function buildCandidates(people, catKey, jitter, spread, pastHistory) {
+// pair = { index, with: name, ref: Date } — the 學生／助手 counterpart for this
+// slot, so a candidate who was recently paired with them can be flagged and
+// pushed down the list (repeats are allowed, just not back-to-back).
+function buildCandidates(people, catKey, jitter, spread, pastHistory, pair) {
   const c = CATS[catKey];
   if (!c || !people?.length) return [];
   return people
@@ -31,13 +35,19 @@ function buildCandidates(people, catKey, jitter, spread, pastHistory) {
       const busyNearby = !recent && !soon && anyGap !== null && anyGap < 7;
       if (recent || soon) w *= 0.1;
       else if (busyNearby) w *= 0.3;
+      // 學生／助手 variety: already paired with this slot's counterpart inside
+      // the window → knocked down the list, but still pickable.
+      const paired = pair?.with
+        ? recentPairing(pair.index, p.name, pair.with, pair.ref)
+        : null;
+      if (paired) w *= 0.25;
       if (jitter) w *= 0.55 + Math.random() * 0.9;
-      return { n: p.name, g: p.g, a: p.appt, d, u, w, recent, soon, busyNearby, load };
+      return { n: p.name, g: p.g, a: p.appt, d, u, w, recent, soon, busyNearby, load, paired };
     })
     .sort((a, b) => b.w - a.w);
 }
 
-export default function AssignSheet({ sheet, assignments, getAssign, onPick, onClose, people, pastHistory }) {
+export default function AssignSheet({ sheet, assignments, getAssign, onPick, onClose, people, pastHistory, pairIndex, pairWith, refDate }) {
   const [query, setQuery] = useState('');
   const [jitter, setJitter] = useState(false);
   const [spread, setSpread] = useState(2);
@@ -55,18 +65,22 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
       .map(([, v]) => v)
   );
 
+  const pair = pairWith ? { index: pairIndex, with: pairWith, ref: refDate } : null;
+
   const rebuild = useCallback((j) => {
-    setList(buildCandidates(people, sheet.catKey, j, spread, pastHistory));
-  }, [people, sheet.catKey, spread, pastHistory]);
+    setList(buildCandidates(people, sheet.catKey, j, spread, pastHistory, pair));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [people, sheet.catKey, spread, pastHistory, pairIndex, pairWith, refDate]);
 
   useEffect(() => {
     setQuery('');
     setManual('');
     setJitter(false);
     setSpread(2);
-    setList(buildCandidates(people, sheet.catKey, false, 2, pastHistory));
+    setList(buildCandidates(people, sheet.catKey, false, 2, pastHistory, pair));
     setTimeout(() => inputRef.current?.focus(), 120);
-  }, [sheet, people, pastHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet, people, pastHistory, pairIndex, pairWith, refDate]);
 
   useEffect(() => {
     if (!sheet) return;
@@ -111,6 +125,7 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
             <div className="sheet__ctx">
               {sheet.ctxLabel}
               {currentName ? `　·　目前：${currentName}` : '　·　尚未指派'}
+              {pairWith ? `　·　搭檔：${pairWith}` : ''}
             </div>
           </div>
           <button className="sheet__close" aria-label="關閉" onClick={onClose}>✕</button>
@@ -206,6 +221,15 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
                         <>
                           <span className="meta-dot">·</span>
                           <span className="meta-warn">● 前後一週內另有安排</span>
+                        </>
+                      )}
+                      {c.paired && (
+                        <>
+                          <span className="meta-dot">·</span>
+                          <span className="meta-warn">
+                            ● {c.paired.future ? `${c.paired.days} 天後` : `${c.paired.days} 天前`}
+                            曾與 {pairWith} 搭檔
+                          </span>
                         </>
                       )}
                       <span className="meta-dot">·</span>

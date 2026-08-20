@@ -19,19 +19,7 @@
 
 import { CATS } from '../data/index.js';
 import { slotCat } from './partTypes.mjs';
-
-function parseDate(str, ref) {
-  const s = String(str ?? '');
-  const cn = s.match(/(\d+)月\s*(\d+)日/);
-  const sl = s.match(/^(\d+)\/(\d+)$/);
-  const m = cn ?? sl;
-  if (!m) return null;
-  let yr = ref.getFullYear();
-  const mo = +m[1];
-  if (mo > ref.getMonth() + 7) yr--;
-  else if (mo < ref.getMonth() - 5) yr++;
-  return new Date(yr, mo - 1, +m[2]);
-}
+import { parseCnDate as parseDate } from './cnDate.mjs';
 
 // Returns the meeting date for the slot being assigned.
 // Falls back to today if the slot's week/row can't be found.

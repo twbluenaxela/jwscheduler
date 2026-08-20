@@ -241,6 +241,43 @@ test('rotates roles: perpetual 助手 gets the 學生 slot over a recent 學生'
   assert.equal(res['mw4_m0_1'], '甲');
 });
 
+test('rotation may not resurrect a much-more-recently-used candidate', () => {
+  // 用心準備傳道工作 parts are one family of student practice: never having done
+  // THIS title does not make someone due. 甲 practised 6 weeks ago (outside the
+  // monthly window, so not demoted) and has never done 教導人成為門徒;
+  // 乙 last practised 5 months ago. Fairness must win — the rotation window only
+  // reorders candidates within one meeting cycle of each other.
+  const week = {
+    id: 9,
+    treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '教導人成為門徒 — 《美好生命》第19課' }],
+  };
+  const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範'])];
+  const history = [
+    { name: '甲', cat: 'ministry', date: '5月 20日', type: '初次交談', role: '0' },       // 42 days before REF
+    { name: '乙', cat: 'ministry', date: '2月 1日',  type: '教導人成為門徒', role: '0' }, // 150 days before REF
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw9_m0_0'], '乙', '甲 practised 6 weeks ago — a new title must not pull her back in');
+});
+
+test('ministry practice history is shared across the whole family (demo + 演講)', () => {
+  // 弟兄甲 gave a ministry 演講 6 weeks ago; that IS ministry practice, so he must
+  // not rank as "never practised" against 弟兄乙, who last practised 4 months ago.
+  const week = {
+    id: 10,
+    treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談 — 向住戶作見證' }],
+  };
+  const people = [brother('弟兄甲', ['傳道示範', '傳道演講']), brother('弟兄乙', ['傳道示範'])];
+  const history = [
+    { name: '弟兄甲', cat: 'ministrytalk', date: '5月 20日', type: '演講', role: '0' }, // 42 days before REF
+    { name: '弟兄乙', cat: 'ministry',     date: '3月 2日',  type: '初次交談', role: '0' },
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw10_m0_0'], '弟兄乙', 'a recent 演講 counts as ministry practice');
+});
+
 test('helper slot prefers the same gender as the student (S-38)', () => {
   const week = {
     id: 5,
@@ -260,6 +297,98 @@ test('helper slot prefers the same gender as the student (S-38)', () => {
   const res = suggestMidweekWeek(people, week, {}, history, REF);
   assert.equal(res['mw5_m0_0'], '姊妹甲');
   assert.equal(res['mw5_m0_1'], '姊妹丙', 'same-gender helper preferred over a brother with longer gap');
+});
+
+// ── 學生／助手 pairing variety ────────────────────────────────────────────────
+
+test('helper slot avoids a sister recently paired with this student', () => {
+  // 甲 is already the 學生. 乙 partnered 甲 two months ago; 丙 never has.
+  // Both have the same fairness gap, so the pairing history is what decides.
+  const week = {
+    id: 20, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談 — 向住戶作見證' }],
+  };
+  const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範']), sister('丙', ['傳道示範'])];
+  const history = [
+    // 甲 + 乙 served together on 5月 2日 (60 days before REF)
+    { name: '甲', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '0', pairId: 'w9_m0' },
+    { name: '乙', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '1', pairId: 'w9_m0' },
+    // 丙 was 助手 the same day, with someone outside the candidate pool — so 乙
+    // and 丙 are identical on fairness AND on part-type rotation (both last did
+    // 初次交談 as 助手 on the same date). Only the pairing history separates them.
+    { name: '丁', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '0', pairId: 'w9_m1' },
+    { name: '丙', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '1', pairId: 'w9_m1' },
+  ];
+  const res = suggestMidweekWeek(people, week, { 'mw20_m0_0': '甲' }, history, REF);
+  assert.equal(res['mw20_m0_1'], '丙', '乙 partnered 甲 two months ago — 丙 is the fresh pairing');
+});
+
+test('pair variety is a demotion, not an exclusion', () => {
+  const week = {
+    id: 21, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談 — 向住戶作見證' }],
+  };
+  const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範'])];
+  const history = [
+    { name: '甲', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '0', pairId: 'w9_m0' },
+    { name: '乙', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '1', pairId: 'w9_m0' },
+  ];
+  const res = suggestMidweekWeek(people, week, { 'mw21_m0_0': '甲' }, history, REF);
+  assert.equal(res['mw21_m0_1'], '乙', '乙 is the only candidate left — the slot still fills');
+});
+
+test('a pairing older than the window no longer counts against the candidate', () => {
+  const week = {
+    id: 22, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談 — 向住戶作見證' }],
+  };
+  const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範']), sister('丙', ['傳道示範'])];
+  const history = [
+    // 甲 + 乙 served together on 12月 31日 — 183 days from REF, just outside the
+    // 180-day window (the ±6-month year inference caps how far a date can land).
+    { name: '甲', cat: 'ministry', date: '12月 31日', type: '初次交談', role: '0', pairId: 'w1_m0' },
+    { name: '乙', cat: 'ministry', date: '12月 31日', type: '初次交談', role: '1', pairId: 'w1_m0' },
+    { name: '丙', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '0', pairId: 'w9_m1' },
+    { name: '丁', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '1', pairId: 'w9_m1' },
+  ];
+  const res = suggestMidweekWeek(people, week, { 'mw22_m0_0': '甲' }, history, REF);
+  assert.equal(res['mw22_m0_1'], '乙', '乙 has the longer gap and the old pairing is out of window');
+});
+
+// ── 朗讀 family (經文朗讀 + 研經班朗讀 share one fairness history) ────────────
+
+test('a recent 研經班朗讀 counts against a brother for 經文朗讀 (朗讀 family)', () => {
+  const week = {
+    id: 11, ministry: [], living: [],
+    treasures: [{ id: 't2', cat: 'reading', roleLabel: '學生', title: '讀經' }],
+  };
+  const people = [
+    brother('甲', ['經文朗讀', '研經班朗讀']),
+    brother('乙', ['經文朗讀']),
+  ];
+  const history = [
+    { name: '甲', cat: 'cbsread', date: '5月 20日' }, // 42 days before REF — a 朗讀 turn
+    { name: '乙', cat: 'reading', date: '2月 1日' },  // 150 days before REF
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw11_t2_0'], '乙', '甲 read at 研經班 6 weeks ago — not "never read"');
+});
+
+test('朗讀 and ministry families are independent (a 朗讀 turn does not demote a ministry pick)', () => {
+  // 甲 read 12 days ago — inside the monthly window for the 朗讀 family, but
+  // that must not bleed into the (separate) 用心準備傳道工作 family. Neither
+  // brother has ever done ministry practice, so the stable order keeps 甲 first.
+  const week = {
+    id: 12, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談 — 向住戶作見證' }],
+  };
+  const people = [
+    brother('甲', ['傳道示範', '經文朗讀']),
+    brother('乙', ['傳道示範']),
+  ];
+  const history = [{ name: '甲', cat: 'reading', date: '6月 19日' }]; // 12 days before REF
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw12_m0_0'], '甲', 'a 朗讀 entry must not demote 甲 for ministry practice');
 });
 
 // ── CBS reader pool ───────────────────────────────────────────────────────────
