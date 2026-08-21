@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { getToken } from '../lib/auth-context';
+import AssignmentHeatmap from './AssignmentHeatmap';
 
 // ─── ChangesPanel ────────────────────────────────────────────────────────────
 
@@ -664,6 +665,7 @@ const FILTER_LABELS = { all: '全部', mw: '週中', we: '週末', gap: '待補'
 export default function OverviewPage({
   midweekWeeks = [],
   weekendRows = [],
+  people = [],
   getAssign,
   loading = false,
   canEdit = false,
@@ -672,7 +674,7 @@ export default function OverviewPage({
   setView,
 }) {
   const [tab, setTab] = useState('schedule');
-  const activeTab = tab === 'changes' && !canEdit ? 'schedule' : tab;
+  const activeTab = (tab === 'changes' || tab === 'heatmap') && !canEdit ? 'schedule' : tab;
   const [filter, setFilter] = useState('all');
   const [showPast, setShowPast] = useState(false);
   const [openItems, setOpenItems] = useState(new Set());
@@ -738,10 +740,29 @@ export default function OverviewPage({
               最近變更
             </button>
           )}
+          {canEdit && (
+            <button
+              className="tab"
+              role="tab"
+              aria-selected={activeTab === 'heatmap' ? 'true' : 'false'}
+              onClick={() => setTab('heatmap')}
+            >
+              指派分布
+            </button>
+          )}
         </div>
       </div>
 
       {activeTab === 'changes' && <ChangesPanel />}
+
+      {activeTab === 'heatmap' && (
+        <AssignmentHeatmap
+          people={people}
+          midweekWeeks={midweekWeeks}
+          weekendRows={weekendRows}
+          getAssign={getAssign}
+        />
+      )}
 
       {activeTab === 'schedule' && (
         <div id="ovBody">

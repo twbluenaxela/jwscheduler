@@ -1,52 +1,11 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CATS } from '../data/index';
-import { recentPairing } from '../lib/pairHistory.mjs';
+import { buildCandidates } from '../lib/candidates.mjs';
 
 // pair = { index, with: name, ref: Date } — the 學生／助手 counterpart for this
 // slot, so a candidate who was recently paired with them can be flagged and
 // pushed down the list (repeats are allowed, just not back-to-back).
-function buildCandidates(people, catKey, jitter, spread, pastHistory, pair) {
-  const c = CATS[catKey];
-  if (!c || !people?.length) return [];
-  return people
-    .filter(p => p.status !== 'inactive' && p.quals.includes(c.tag) && (c.g === 'any' || p.g === c.g))
-    .map(p => {
-      const entry = pastHistory?.[p.name]?.[c.tag];
-      // daysSince/daysUntil are precomputed relative to the slot's date in
-      // buildPastHistory. The weight uses the BIDIRECTIONAL gap: someone
-      // already booked for this part in an upcoming week ranks like someone
-      // who just served — otherwise editing an earlier week double-books them.
-      const d = entry?.daysSince ?? null;
-      const u = entry?.daysUntil ?? null;
-      const load = entry?.halfYearCount ?? 0;
-      // Nearest assignment in ANY category — warns when the person is busy
-      // with a different part around this date.
-      let anyGap = null;
-      for (const e of Object.values(pastHistory?.[p.name] ?? {})) {
-        for (const g of [e.daysSince, e.daysUntil]) {
-          if (g != null && (anyGap === null || g < anyGap)) anyGap = g;
-        }
-      }
-      const gap = Math.min(d ?? 9999, u ?? 9999);
-      let w = Math.pow(gap, spread);
-      const recent = d !== null && d < 14;
-      const soon = u !== null && u < 14;
-      const busyNearby = !recent && !soon && anyGap !== null && anyGap < 7;
-      if (recent || soon) w *= 0.1;
-      else if (busyNearby) w *= 0.3;
-      // 學生／助手 variety: already paired with this slot's counterpart inside
-      // the window → knocked down the list, but still pickable.
-      const paired = pair?.with
-        ? recentPairing(pair.index, p.name, pair.with, pair.ref)
-        : null;
-      if (paired) w *= 0.25;
-      if (jitter) w *= 0.55 + Math.random() * 0.9;
-      return { n: p.name, g: p.g, a: p.appt, d, u, w, recent, soon, busyNearby, load, paired };
-    })
-    .sort((a, b) => b.w - a.w);
-}
-
 export default function AssignSheet({ sheet, assignments, getAssign, onPick, onClose, people, pastHistory, pairIndex, pairWith, refDate }) {
   const [query, setQuery] = useState('');
   const [jitter, setJitter] = useState(false);
@@ -204,6 +163,14 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
                         <span className="meta-strong">從未擔任此項</span>
                       ) : (
                         <span className="meta-strong">{c.d} 天未擔任此項</span>
+                      )}
+                      {c.viaFamily && (
+                        <>
+                          <span className="meta-dot">·</span>
+                          <span className="meta-warn">
+                            ● {c.viaFamily.days} 天前擔任{c.viaFamily.name}
+                          </span>
+                        </>
                       )}
                       {c.soon && (
                         <>

@@ -137,21 +137,19 @@ app/
                          wider than the general 7-day crowd window, scoped to those two
                          cats only (chairman/prayer/etc. are unaffected), still a demotion
                          not an exclusion so a small pool still fills every slot.
-                         **Assignment families** (`FAMILIES`) — cats that members experience
-                         as "the same kind of turn" share ONE fairness history AND the
-                         monthly (±28d) repeat demotion, computed PER FAMILY (a 朗讀 turn
-                         must not demote a ministry pick, hence `monthlyByFamily`, not one
-                         lumped set). Ranking a family cat unions the family's history, so
-                         "last did anything in this family" decides who is due, never "last
-                         did this exact cat". Eligibility is UNCHANGED — a family shares
-                         history, not candidates (研經班朗讀 still needs its own qual).
-                         Families: `ministry` = 用心準備傳道工作 student practice
-                         (`ministry` + `ministrytalk`: 初次交談 / 再次交談 / 解釋自己的信仰 /
-                         教導人成為門徒 / 演講); `reading` = 朗讀 duties (`reading` +
-                         `cbsread`). Everything else (chairman, prayer, treasures, gems,
-                         living, cbs, ministrydisc, weekend cats) keeps per-cat behaviour.
-                         The per-title distinction survives in `type` (records + rotation
-                         tiebreak only).
+                         **Assignment families** (`FAMILIES` — defined in partTypes.mjs so
+                         the picker shares them): family cats rank on the UNION of the
+                         family's history plus a monthly (±28d) repeat demotion computed PER
+                         FAMILY (`monthlyByFamily`, NOT one lumped set — a 朗讀 turn must not
+                         demote a ministry pick). Eligibility is UNCHANGED — a family shares
+                         history, not candidates. The per-title distinction survives in
+                         `type` (records + rotation tiebreak only).
+                         **學生／助手 pair variety**: history entries carrying a `pairId`
+                         (weekId+partKey) let the engine recover who served WITH whom; when
+                         filling either half of a 傳道示範 demo, anyone paired with the
+                         counterpart inside `PAIR_REPEAT_WINDOW_DAYS` (180) is demoted —
+                         applied AFTER the crowd/monthly filter, because spreading LOAD
+                         outranks spreading partnerships. Demotion, not exclusion.
                          Part-type rotation: history entries may carry {type, role}; within
                          the top-5 fairness window the candidate who has gone longest
                          without that specific (part type, 學生/助手 role) wins — a future
@@ -162,14 +160,59 @@ app/
                          someone back the very next week, undoing the spacing the gap
                          ranking had just produced. Ministry demo helper slots prefer the
                          student's gender (S-38); that preference outranks crowd demotion
+    cnDate.mjs         — `parseCnDate(str, ref)` — the ONE Chinese/slash date parser
+                         ("6月 3日" / "8/9") with ±6-month year inference, shared by
+                         pastHistory, suggest and pairHistory so the picker and the ✦
+                         engine can never disagree about what a date means
+    pairHistory.mjs    — pure 學生／助手 pairing history: `buildPairIndex(pairs)`,
+                         `recentPairing(index, a, b, ref)` (bidirectional — a pairing
+                         booked next month counts like one last month; a pairing ON ref is
+                         the assignment being edited and is ignored),
+                         `partnersWithin(index, name, ref)` (the engine's demotion set),
+                         `collectMidweekPairs(weeks, assignments)` and
+                         `counterpartName(slotId, weeks, assignments)` (client side).
+                         Scoped to 傳道示範 demos — the 研經班 主持/朗讀 pools are far
+                         smaller, so warning about repeats there would be noise
+    candidates.mjs     — `buildCandidates(people, catKey, jitter, spread, pastHistory,
+                         pair)`: the manual picker's ranking, extracted from AssignSheet so
+                         it is unit-testable ALONGSIDE the ✦ engine it must agree with.
+                         Uses `familyCats` for recency (so 研經班朗讀 counts toward
+                         經文朗讀) and flags `viaFamily` + `paired`
     partTypes.mjs      — pure slot/cat classifiers shared by suggest, the suggest route,
                          pastHistory and MidweekWeek: partTypeOf(title) (初次交談/再次交談/
                          教導人成為門徒/解釋自己的信仰/演講), effectiveCat(part)
                          (single-slot ministry 演講 parts → 'ministrytalk', brothers-only;
                          roleLabel with '/' overrides the title → mixed demo pool), and
-                         slotCat(part, idx) (CBS _1 → 'cbsread' reader pool)
+                         slotCat(part, idx) (CBS _1 → 'cbsread' reader pool). ALSO the
+                         home of `FAMILIES` / `FAMILY_OF` / `familyCats(catKey)` — the
+                         "same kind of turn" table (`ministry`+`ministrytalk`,
+                         `reading`+`cbsread`). It lives here, not in suggest.js, so the ✦
+                         engine and the manual picker share one definition
     icalExport.js      — pure iCal (.ics) generator; exports generateIcal(assignments,
                          personName, congCode) → RFC-5545 string and downloadIcal(str, filename)
+    heatmap.mjs        — pure, DB-free 指派分布 (assignment distribution heatmap) helpers for
+                         OverviewPage's 指派分布 tab. Time axis is the SERVICE YEAR
+                         (September–August); `serviceYearStartYear(refDate)` picks the
+                         September containing/preceding refDate. `parseServiceYearDate`
+                         resolves "6月 3日"/"8/9" against that boundary directly (month ≥ 9
+                         → the start year, else start year + 1) rather than the ±6-month
+                         proximity window other date parsers use — that window is too narrow
+                         for a full 12-month axis and would misjudge e.g. April against a
+                         September reference. `collectPersonEvents` walks midweekWeeks +
+                         weekendRows (same traversal shape as `buildOverviewRows` in
+                         OverviewPage.js) into a flat per-name event list, capturing the
+                         `partner` name for pair slots (學生/助手, 主持/朗讀) and whether the
+                         label falls in the ministry-family bucket. `buildHeatmapRows` (grid)
+                         and `buildPersonDetail` (drill-down) both apply the two flag rules
+                         from member feedback: 姊妹 flag on ANY two parts in a month; 弟兄
+                         flag only on two parts within 用心準備傳道工作 — matched by
+                         substring on the assembled label (傳道示範/傳道演講/助手/經文朗讀)
+                         — so a brother's 寶藏演講 + 生活演講 in the same month is NOT a
+                         double. Idle flag: a zero-assignment run ≥ `max(3, round(visibleMonths/2))`
+                         months, window-relative. Sort rank (doubles first, then idle, then
+                         roster order) matches the design handoff exactly.
+                         `buildPersonSummary` is separate from the React layer so print,
+                         複製文字, and the on-screen paragraph can never drift
     assignments.mjs    — pure, DB-free date + assignment helpers shared by line/webhook
                          and meetings/publish: parseCnDate, collectAssignments
                          (skipSuspended option — webhook passes true, publish keeps its
@@ -215,11 +258,39 @@ app/
                          (desktop) and dashed card (mobile) — NOT in the toolbar; new
                          rows auto-scroll into view via `bottomRef` + useEffect on
                          `weekendRows.length`
-    OverviewPage.js    — two tabs: [安排] overview list with sort (最近/最緊迫/最早),
-                         past-items toggle (hidden by default), swipe/button dismiss with
-                         undo toast + reset; [最近變更] the change-log panel (ChangesPanel
-                         fetches GET /api/changelog and renders assign/reassign/clear rows
-                         with timestamp + actor)
+    OverviewPage.js    — three tabs, [安排]/[最近變更]/[指派分布] canEdit-gated the same way
+                         (最近變更 and 指派分布 both hidden from viewers — same precedent as
+                         人員): [安排] overview list with sort (最近/最緊迫/最早), past-items
+                         toggle (hidden by default), swipe/button dismiss with undo toast +
+                         reset; [最近變更] the change-log panel (ChangesPanel fetches
+                         GET /api/changelog and renders assign/reassign/clear rows with
+                         timestamp + actor); [指派分布] renders `AssignmentHeatmap`
+    AssignmentHeatmap.js — 指派分布 (assignment distribution heatmap), read-only. Two views
+                         toggled by local state (`selected`), no routing: `OverviewGrid`
+                         (GitHub-contributions-style grid, one row per person) and
+                         `PersonDetail` (52-week grid + monthly bar chart + record list for
+                         one person, reached by tapping a row). All derivation is pure
+                         `lib/heatmap.mjs` — the component only renders and holds UI state
+                         (gender/range/offset filters, which cell's tooltip is open).
+                         Responsive via a local `useIsMobile()` (same `matchMedia('(max-width:
+                         720px)')` pattern as PeoplePage) that swaps cell/row pixel sizes,
+                         not two separate render trees — the design handoff's 4a/4b and 5a/5b
+                         breakpoints are the same DOM, resized. Grid squares size themselves
+                         with inline styles computed the same way the design math specifies
+                         (`labelWidth = cells*(cell+gap) - gap + pad*2`) so month headers stay
+                         pixel-aligned with the squares under them — this couldn't be pure CSS
+                         without duplicating the range/window logic in a stylesheet. The name
+                         and count columns are `position: sticky` inside one scrolling
+                         `.hm-tablewrap` (header + body share the scroll container so they
+                         can never drift out of horizontal sync). Cell tooltip only appears
+                         for non-empty cells (mouseenter on desktop, click/toggle on touch —
+                         no `:hover` dependency, no native `title`), matching the "cells with
+                         zero assignments are inert" requirement from the design handoff.
+                         列印一頁 is a plain `window.print()` (not the popup-window pattern
+                         banned elsewhere for PDF export — that ban is about
+                         `window.open(...).print()`, a different mechanism); `@media print`
+                         in globals.css hides the app chrome and any `.hm-print-hide` element
+                         so only the person-detail card prints
     PeoplePage.js      — congregation member list; 近期指派 shows 3 most-recent by default
                          with expand button for full history; detail panel is sticky +
                          scrollable on desktop. On mobile (useIsMobile via matchMedia) the
@@ -247,6 +318,11 @@ app/
                          below. Viewers: profile + role badge only. isAdmin includes SYSADMIN
     AssignSheet.js     — bottom-sheet candidate picker; uses real `people` state (not seed
                          data); "✕ 留空此項" button clears a slot (leaves it unassigned).
+                         Ranking lives in `lib/candidates.mjs` (pure, tested). For a
+                         傳道示範 slot the header shows `搭檔：X` and any candidate paired
+                         with X inside 180 days is flagged `● N 天前曾與 X 搭檔` and
+                         weighted down (×0.25) — repeats are allowed, just not back-to-back.
+                         Family recency shows as `● N 天前擔任研經班朗讀`.
                          Candidate weight uses the bidirectional gap from pastHistory.mjs
                          (min of daysSince/daysUntil) and warns "N 天後已排此項" /
                          "前後一週內另有安排", so manual reassignment can't silently
@@ -617,6 +693,13 @@ for the webhook, a `reply` spy + injectable `now`. Coverage:
   help text, and the two-step registration flow.
 - `roles.test.mjs` — `canEdit`/`isAdmin`/`isGuest` policy + a regression guard asserting every
   schedule-mutating route enforces `canEdit`.
+- `suggest.test.mjs` — the ✦ engine: fairness/bidirectional gap, crowd + monthly demotion,
+  assignment families, part-type rotation and its gap guard, S-38 gender rules, 學生／助手
+  pair variety.
+- `pairHistory.test.mjs` — pair keys, window boundaries (inclusive at 180 days), pairing ON
+  refDate ignored, `collectMidweekPairs` / `counterpartName`.
+- `candidates.test.mjs` — the manual picker's ranking, including the assertion that it and
+  `suggestMidweekWeek` return the SAME person for a 朗讀-family slot.
 
 Tests are non-vacuous (verified by mutation: breaking a label produced the expected failures).
 
@@ -684,6 +767,15 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 - Do not filter out empty strings in `mapPart` for parts where `roleLabel?.includes('/')` — those parts must always return `[s0, s1]` (with `''` for unassigned) so the helper slot is always visible
 - Do not hardcode `roleLabel: '學生/助手'` for ministry parts in `epubParser.js` — 演講-type ministry parts are single-slot talks (`學生` only, no assistant) and 你會怎麼說 discussion parts are single-slot with no label; `ministryRoleLabel(title, durText)` decides from the description line and `assignTimes` must pass it through (`p.roleLabel`), not overwrite it
 - Do not pass one `catKey` to both slots of a pair — use `slotCat(part, idx)` from `partTypes.mjs`: the CBS reader (`_1`) draws from `cbsread` (研經班朗讀), and single-slot ministry 演講 parts use `ministrytalk` (brothers-only), not the mixed `ministry` pool
+- Do not let the ✦ suggest engine (`lib/suggest.js`) and the manual picker (`lib/candidates.mjs`)
+  rank on different notions of recency. They are two entry points to ONE decision, so the family
+  table lives in `partTypes.mjs` and both import it — a review caught them diverging, with the
+  engine ranking 經文朗讀 on the whole 朗讀 family while the picker still called a brother who
+  read at 研經班 six weeks ago 從未擔任此項. `candidates.test.mjs` asserts they agree
+- Do not test the ±28-day monthly demotion with a case where plain fairness already gives the
+  asserted answer — that is how it went untested for a release. A pin must put the
+  monthly-window candidate AHEAD on fairness so only the demotion can flip the pick (see
+  "monthly demotion outranks a merely-crowded rival")
 - Do not derive ministry-talk eligibility from the title alone — a `/` in `roleLabel` (admin added a 助手 via the edit-mode toggle) means it IS a demo and must use the mixed pool; `effectiveCat(part)` already encodes this precedence
 
 ---
@@ -701,3 +793,4 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 | **Phase 4 — Suggestions** | Done — recency-scoring algorithm in `app/lib/suggest.js` (no AI). Ghost pills (dashed blue border, italic) for unconfirmed suggestions. ✦ button in midweek navstrip fills all empty slots; ✦ button per weekend row fills speaker/chair/wt/read. 接受全部/清除建議 toolbar batch actions. Ghosts clear on edit-mode exit and week navigation. Part-ID bug fix (p.dbId not p.id). Weekend row default date = last row + 7 days. |
 | **Phase 5 — iCal Export** | Done — `app/lib/icalExport.js` generates RFC-5545 `.ics` (Taiwan UTC+8, stable UIDs, 1h45m events). "↓ iCal (N)" button in PeoplePage 未來安排 section downloads `{name}-schedule.ics` for import into Outlook/Google Calendar/Apple Calendar. |
 | **Phase 6 — PWA + UX polish** | Done — installable PWA (`app/manifest.js` + `public/sw.js` network-first worker + `PWARegister`, themeColor/apple-web-app meta in `layout.js`). Plus: clear/留空 button in AssignSheet; serialized people writes (quals no longer self-deselect); mobile people detail renders inline under the tapped card; mobile row dot+partnum no longer squished; silent client-side PDF + 複製文字 in meetings export menu; wired ImportPage 匯出 cards with 全部/本月/自訂 range. Ministry/CBS parts always show two assignment slots (student + helper) with correct role labels; edit-mode ＋/− toggle to add/remove helper slot per part; LINE notifications include role labels (學生/助手/主持/朗讀) and CBS textbook references. 匯出 page JPG/PDF/列印 now screenshot real off-screen MidweekWeek cards (`exportNodes*`) instead of the removed hand-drawn canvas; PDF pages sized to the card; PeoplePage cards toggle-to-deselect with an animated recenter when nothing is selected. 總覽 has a 最近變更 tab backed by a `ChangeLog` table written best-effort on every assignment edit (assignments + weekend-rows routes) — decoupled from 發佈通知 (which is unchanged). |
+| **Phase 7 — Assignment heatmap** | Done — 總覽 ▸ 指派分布 (canEdit-only, like 最近變更 and 人員): a GitHub-contributions-style grid (`AssignmentHeatmap.js` + `lib/heatmap.mjs`) over the congregation's service year (Sept–Aug), one row per person, one cell per month (整年) or week (3/6 個月), shaded by assignment count. Gender + range segmented filters, window arrows, sort puts flagged people first (same-month doubles, then long idle runs). Tapping a row opens a per-person 個人檢視: 52-week grid, monthly bar chart, dated record list, 助手搭配 pairing tally, a plain-language summary + callout (server/print/copy-safe via `buildPersonSummary`), 複製文字 and 列印一頁. Encodes the member-feedback rules: 姊妹 flag on any two parts in a month, 弟兄 flag only within the 用心準備傳道工作 bucket (傳道示範/傳道演講/助手/經文朗讀). Read-only by design — no editing, no navigation to a meeting. |

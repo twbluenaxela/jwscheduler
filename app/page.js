@@ -646,6 +646,7 @@ export default function App() {
             <OverviewPage
               midweekWeeks={midweekWeeks}
               weekendRows={weekendRows}
+              people={people}
               getAssign={getAssign}
               loading={workspaceLoading}
               canEdit={canEdit}

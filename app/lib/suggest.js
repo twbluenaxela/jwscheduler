@@ -8,7 +8,7 @@
 // CAT_REQS table with the legacy 主席 tag — it was split into 傳道與生活主席 /
 // 週末聚會主席 / 守望台主持人 and no member carries 主席 anymore.)
 import { CATS } from '../data/index.js';
-import { partTypeOf, effectiveCat, slotCat } from './partTypes.mjs';
+import { partTypeOf, effectiveCat, slotCat, FAMILIES, FAMILY_OF } from './partTypes.mjs';
 import { parseCnDate as parseDate } from './cnDate.mjs';
 import { buildPairIndex, partnersWithin, PAIR_REPEAT_WINDOW_DAYS } from './pairHistory.mjs';
 
@@ -87,37 +87,13 @@ function rankCandidates(people, tag, gender, history, ref) {
 // whole pool is busy.
 const CROWD_WINDOW_DAYS = 7;
 
-// ── Assignment families ──────────────────────────────────────────────────────
-// Some cats are, in the members' eyes, "the same kind of turn". Those get:
-//   1. ONE shared fairness history — ranking asks "when did this person last do
-//      anything in this family", never "when did they last do this exact cat",
-//      so a different title/pool can't make a recently-used person look due; and
-//   2. a monthly repeat demotion (±MONTHLY_REPEAT_WINDOW_DAYS, much wider than
-//      the general 7-day crowd window) so the same person doesn't come round
-//      twice in a month while others in the pool are still free.
-// Both are demotions, never exclusions, so a small pool still fills every slot.
-// Per-cat eligibility (tag + gender) is UNCHANGED — a family shares history,
-// not candidates: 研經班朗讀 still needs the 研經班朗讀 qual.
-//
-// The families (member feedback: 學生練習與朗讀安排整個月份內人員盡量不要重複):
-//   ministry — 用心準備傳道工作 student practice: 初次交談 / 再次交談 /
-//     解釋自己的信仰 / 教導人成為門徒 (cat 'ministry') + the single-slot 演講
-//     talks ('ministrytalk'). The per-title distinction survives in `type`
-//     (records + the rotation tiebreak) — it just no longer decides who is due.
-//   reading — 朗讀 duties: 經文朗讀 ('reading') + 研經班朗讀 ('cbsread').
-// Cats NOT in a family (chairman, prayer, treasures, gems, living, cbs,
-// ministrydisc, and the weekend cats) keep the old per-cat behaviour.
+// Assignment families (FAMILIES / FAMILY_OF) live in partTypes.mjs so the
+// manual picker uses the same table. On top of the shared history they get a
+// monthly repeat demotion here (±MONTHLY_REPEAT_WINDOW_DAYS, much wider than the
+// general 7-day crowd window) so the same person doesn't come round twice in a
+// month while others in the pool are still free. Like every rule in this file it
+// is a demotion, never an exclusion — a small pool still fills every slot.
 const MONTHLY_REPEAT_WINDOW_DAYS = 28;
-
-const FAMILIES = {
-  ministry: ['ministry', 'ministrytalk'],
-  reading: ['reading', 'cbsread'],
-};
-
-// cat -> family key (cats with no family are absent)
-const FAMILY_OF = new Map(
-  Object.entries(FAMILIES).flatMap(([fam, cats]) => cats.map(c => [c, fam]))
-);
 
 function crowdedNames(entries, ref, windowDays = CROWD_WINDOW_DAYS) {
   const refMs = ref.getTime();

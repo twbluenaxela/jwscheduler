@@ -299,6 +299,45 @@ test('helper slot prefers the same gender as the student (S-38)', () => {
   assert.equal(res['mw5_m0_1'], '姊妹丙', 'same-gender helper preferred over a brother with longer gap');
 });
 
+// ── monthly repeat demotion (the ±28-day family window) ──────────────────────
+// These pin the demotion itself. The older monthly tests are all cases where
+// plain fairness already produces the asserted answer, so deleting
+// `monthlyByFamily` from effCrowded left them green — a reviewer caught that.
+// Here the monthly-window candidate has the BETTER fairness gap, so only the
+// demotion can flip the pick.
+
+test('monthly demotion outranks a merely-crowded rival (ministry)', () => {
+  // 甲: practised 20 days ago → family gap 20, outside the 7-day crowd window.
+  // 乙: never practised (family gap 9999) but has a prayer part 3 days later,
+  //     so the general crowd rule demotes him.
+  // Fairness alone picks 甲; the ±28-day monthly window must flip it to 乙.
+  const week = {
+    id: 30, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談 — 向住戶作見證' }],
+  };
+  const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範'])];
+  const history = [
+    { name: '甲', cat: 'ministry', date: '6月 11日', type: '初次交談', role: '0' }, // 20 days before REF
+    { name: '乙', cat: 'prayer',   date: '7月 4日' },                                // 3 days after REF
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw30_m0_0'], '乙', '甲 practised 20 days ago — inside the month');
+});
+
+test('monthly demotion outranks a merely-crowded rival (朗讀 family)', () => {
+  const week = {
+    id: 31, ministry: [], living: [],
+    treasures: [{ id: 't2', cat: 'reading', roleLabel: '學生', title: '讀經' }],
+  };
+  const people = [brother('丙', ['經文朗讀']), brother('丁', ['經文朗讀'])];
+  const history = [
+    { name: '丙', cat: 'cbsread', date: '6月 11日' }, // a 朗讀 turn 20 days before REF
+    { name: '丁', cat: 'prayer',  date: '7月 4日' },  // busy that week, but no 朗讀 turn
+  ];
+  const res = suggestMidweekWeek(people, week, {}, history, REF);
+  assert.equal(res['mw31_t2_0'], '丁', '丙 read 20 days ago — inside the month');
+});
+
 // ── 學生／助手 pairing variety ────────────────────────────────────────────────
 
 test('helper slot avoids a sister recently paired with this student', () => {
