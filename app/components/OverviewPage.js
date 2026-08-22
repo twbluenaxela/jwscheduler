@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { getToken } from '../lib/auth-context';
 import AssignmentHeatmap from './AssignmentHeatmap';
+import { resolveRowDate } from '../lib/cnDate.mjs';
 
 // ─── ChangesPanel ────────────────────────────────────────────────────────────
 
@@ -140,30 +141,11 @@ function ChangesPanel() {
 
 const WEEKDAY = ['日', '一', '二', '三', '四', '五', '六'];
 
-function parseRowDate(dateStr) {
-  const text = String(dateStr ?? '');
-  // Chinese: "6月 3日" or slash "8/9"
-  const cn = text.match(/(\d+)月\s*(\d+)日/);
-  if (cn) {
-    const month = Number(cn[1]);
-    const day = Number(cn[2]);
-    const now = new Date();
-    let year = now.getFullYear();
-    if (month === 12 && now.getMonth() <= 1) year--;
-    if (month <= 2 && now.getMonth() >= 10) year++;
-    return new Date(year, month - 1, day);
-  }
-  const slash = text.match(/^(\d+)\/(\d+)$/);
-  if (slash) {
-    const month = Number(slash[1]);
-    const day = Number(slash[2]);
-    const now = new Date();
-    let year = now.getFullYear();
-    if (month === 12 && now.getMonth() <= 1) year--;
-    if (month <= 2 && now.getMonth() >= 10) year++;
-    return new Date(year, month - 1, day);
-  }
-  return null;
+// Prefers the row's stored isoDate; falls back to inferring a year from the
+// display string. Was a private copy of the inference with its own drift-prone
+// rules — see cnDate.mjs.
+function parseRowDate(rowOrStr) {
+  return resolveRowDate(rowOrStr);
 }
 
 function compactDate(date) {
@@ -190,7 +172,7 @@ function partGapCount(part) {
 
 function buildOverviewRows(midweekWeeks, weekendRows, getAssign = (_, d) => d ?? '') {
   const midweekItems = midweekWeeks.map((week, weekIdx) => {
-    const rawDate = parseRowDate(week.date);
+    const rawDate = parseRowDate(week);
     const weekType = week.type ?? 'normal';
     const weekLabel = week.label ?? '';
 
@@ -288,7 +270,7 @@ function buildOverviewRows(midweekWeeks, weekendRows, getAssign = (_, d) => d ??
 
   const weekendItems = weekendRows.map((row) => {
     if (row.type === 'event') {
-      const rawDate = parseRowDate(row.date);
+      const rawDate = parseRowDate(row);
       return {
         id: `we_${row._id ?? row.id}`,
         rawDate,
@@ -302,7 +284,7 @@ function buildOverviewRows(midweekWeeks, weekendRows, getAssign = (_, d) => d ??
       };
     }
     if (row.type === 'suspended') {
-      const rawDate = parseRowDate(row.date);
+      const rawDate = parseRowDate(row);
       return {
         id: `we_${row._id ?? row.id}`,
         rawDate,
@@ -316,7 +298,7 @@ function buildOverviewRows(midweekWeeks, weekendRows, getAssign = (_, d) => d ??
       };
     }
     const gaps = [row.speaker, row.chair, row.wt, row.read].filter((v) => !String(v ?? '').trim()).length;
-    const rawDate = parseRowDate(row.date);
+    const rawDate = parseRowDate(row);
     const detail = [
       { role: '講者', who: row.speaker ? `${row.speaker}${row.cong ? ` · ${row.cong}` : ''}` : '' },
       { role: '主席', who: row.chair || '' },

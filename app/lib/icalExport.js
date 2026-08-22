@@ -2,27 +2,15 @@
 // Produces RFC-5545 VCALENDAR output for one person's upcoming assignments.
 // Taiwan Standard Time (UTC+8) is hardcoded — no DST.
 
-function parseAssignmentDate(dateStr) {
-  const s = String(dateStr ?? '');
-  const cn = s.match(/(\d+)月\s*(\d+)日/);
-  if (cn) {
-    const now = new Date();
-    let yr = now.getFullYear();
-    const mo = +cn[1];
-    if (mo < now.getMonth() + 1 - 6) yr++;
-    else if (mo > now.getMonth() + 1 + 6) yr--;
-    return { year: yr, month: mo, day: +cn[2] };
-  }
-  const sl = s.match(/^(\d+)\/(\d+)$/);
-  if (sl) {
-    const now = new Date();
-    let yr = now.getFullYear();
-    const mo = +sl[1];
-    if (mo < now.getMonth() + 1 - 6) yr++;
-    else if (mo > now.getMonth() + 1 + 6) yr--;
-    return { year: yr, month: mo, day: +sl[2] };
-  }
-  return null;
+import { resolveRowDate } from './cnDate.mjs';
+
+// Prefers an item's stored isoDate; otherwise infers the year from the year-less
+// display string via the shared parser. A wrong year here writes a wrong date
+// into someone's calendar, so this must not be a private copy of the rule.
+function parseAssignmentDate(item) {
+  const d = resolveRowDate(item);
+  if (!d) return null;
+  return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
 }
 
 function extractTime(weekdayPill) {
@@ -65,7 +53,7 @@ export function generateIcal(assignments, personName, congCode = 'jwscheduler') 
   ];
 
   for (const a of assignments) {
-    const parsed = parseAssignmentDate(a.date);
+    const parsed = parseAssignmentDate(a);
     if (!parsed) continue;
 
     const weekend = isWeekendSlot(a.date, a.weekdayPill);

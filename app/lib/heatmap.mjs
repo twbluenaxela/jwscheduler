@@ -1,21 +1,19 @@
 // Pure, DB-free helpers for the 指派分布 (assignment distribution heatmap) on
 // the Overview page. No React, no fetch — testable with `node --test`.
 //
-// DATES: this module does NOT parse dates itself. Schedule dates carry no year
-// (`MidweekWeek.date` / `WeekendRow.date` are bare strings like "6月 3日" and
-// "8/9"), so the year is always inferred from "now" — and that inference lives
-// in exactly ONE place, `cnDate.mjs`, shared with pastHistory / suggest /
-// pairHistory. An earlier version of this file had its own service-year parser;
-// it disagreed with cnDate (reading "10月 8日" as last October while the rest of
-// the app read it as next October), which silently sorted a member's whole
-// 指派記錄 wrong. Never reintroduce a private parser here.
+// DATES: this module does NOT parse dates itself — it calls `resolveRowDate`
+// from `cnDate.mjs`, which prefers a row's stored `isoDate` and only falls back
+// to inferring a year from the legacy display string. An earlier version had its
+// own service-year parser; it disagreed with the shared one (reading "10月 8日"
+// as last October while the rest of the app read it as next October), which
+// silently sorted a member's whole 指派記錄 wrong. Never reintroduce one here.
 //
-// TIME WINDOW: because that inference resolves roughly 5 months back and 7
-// forward, there is no reliable 12-month *past*. So rolling windows are CENTRED
-// on the current month (half past, half upcoming) — which is also what a
-// scheduler needs, and mirrors the ✦ suggest engine, whose fairness gap is
-// already bidirectional so an earlier week never double-books someone booked
-// ahead. A fixed Sept–Aug service year is available as a separate mode.
+// TIME WINDOW: rolling windows are CENTRED on the current month (half past, half
+// upcoming). That mirrors the ✦ suggest engine, whose fairness gap is already
+// bidirectional so an earlier week never double-books someone booked ahead, and
+// it degrades gracefully for rows not yet backfilled with an isoDate (whose
+// inferred year is only trustworthy near "now"). A fixed Sept–Aug service year
+// is available as a separate mode.
 //
 // COVERAGE: a month with no meetings loaded is NOT a month with zero
 // assignments. `coveredKeys` marks the months that actually have a scheduled
@@ -30,7 +28,7 @@
 //     treated as one bucket (matched by substring on the assembled label).
 //   - Counting: 1 part = 1 count, no weighting by part type.
 
-import { parseCnDate } from './cnDate.mjs';
+import { resolveRowDate } from './cnDate.mjs';
 
 const MINISTRY_FAMILY_MARKERS = ['傳道示範', '傳道演講', '助手', '經文朗讀'];
 
@@ -83,12 +81,12 @@ export function buildMonthWindow({ mode = 'rolling', range = 12, offset = 0, ref
 export function coveredMonths(midweekWeeks, weekendRows, refDate = new Date()) {
   const keys = new Set();
   for (const w of midweekWeeks ?? []) {
-    const d = parseCnDate(w.date, refDate);
+    const d = resolveRowDate(w, refDate);
     if (d) keys.add(keyOfDate(d));
   }
   for (const r of weekendRows ?? []) {
     if (r.type === 'event' || r.type === 'suspended') continue;
-    const d = parseCnDate(r.date, refDate);
+    const d = resolveRowDate(r, refDate);
     if (d) keys.add(keyOfDate(d));
   }
   return keys;
@@ -109,7 +107,7 @@ export function collectPersonEvents(midweekWeeks, assignments, weekendRows, refD
   }
 
   for (const week of midweekWeeks ?? []) {
-    const date = parseCnDate(week.date, refDate);
+    const date = resolveRowDate(week, refDate);
     if (!date) continue;
 
     push(ga(`mw${week.id}_chairman`, week.chairman), date, '主席', null, 'midweek');
@@ -135,7 +133,7 @@ export function collectPersonEvents(midweekWeeks, assignments, weekendRows, refD
 
   for (const row of weekendRows ?? []) {
     if (row.type === 'event' || row.type === 'suspended') continue;
-    const date = parseCnDate(row.date, refDate);
+    const date = resolveRowDate(row, refDate);
     if (!date) continue;
     if (row.speaker) push(row.speaker, date, '公眾演講', null, 'weekend');
     if (row.chair) push(row.chair, date, '週末聚會主席', null, 'weekend');

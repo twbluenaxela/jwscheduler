@@ -162,10 +162,23 @@ app/
                          someone back the very next week, undoing the spacing the gap
                          ranking had just produced. Ministry demo helper slots prefer the
                          student's gender (S-38); that preference outranks crowd demotion
-    cnDate.mjs         — `parseCnDate(str, ref)` — the ONE Chinese/slash date parser
-                         ("6月 3日" / "8/9") with ±6-month year inference, shared by
-                         pastHistory, suggest and pairHistory so the picker and the ✦
-                         engine can never disagree about what a date means
+    cnDate.mjs         — THE date layer. Everything that asks "what day is this week/row?"
+                         goes through here, so a date can never mean two things on two
+                         screens. Two tiers: (1) `isoDate` — a real "YYYY-MM-DD" stored on
+                         the row, unambiguous; (2) the legacy display string ("6月 3日" /
+                         "8/9"), which carries NO year, so one is inferred from "now" with a
+                         ±6-month window — only ~12 months wide and unable to hold two
+                         service years. `resolveRowDate(rowOrString, ref)` is the resolver:
+                         stored date wins, inference is the fallback (a malformed isoDate
+                         falls back rather than returning null). Also `parseIsoDate` /
+                         `toIsoDate` (LOCAL parts — `toISOString()` shifts the day for UTC+8),
+                         `toCnLabel`, and `resolveSequenceYears(rows, {anchorIndex, anchorYear})`
+                         which recovers real years for an ordered run by rolling at each
+                         month decrease (used by the EPUB import, where the anchor year is
+                         known and one issue's weeks ARE in order — NOT safe for a whole
+                         table, see the backfill script). This module replaced FOUR
+                         divergent copies of the inference (page.js, OverviewPage,
+                         PeoplePage, assignments.mjs, icalExport)
     pairHistory.mjs    — pure 學生／助手 pairing history: `buildPairIndex(pairs)`,
                          `recentPairing(index, a, b, ref)` (bidirectional — a pairing
                          booked next month counts like one last month; a pairing ON ref is
@@ -460,10 +473,10 @@ the **code** to share (the old invite-link cards were removed). Legacy `/join/{t
 |---|---|
 | `Congregation` | `name`, `code` (unique slug), `inviteToken` (UUID), `guestInviteToken` (read-only join link; DB default `gen_random_uuid()::text` so adding it backfilled existing rows), `meetingDayOffset`, `meetingTime`, `exceptions` (JSON), `publishedSnapshot` (JSON — future-only assignments per person, for diff) |
 | `User` | `firebaseUid`, `email`, `displayName`, `role` (SYSADMIN/ADMIN/VIEWER, default VIEWER), `congregationId` (nullable — sysadmins may have none) |
-| `MidweekWeek` | `congregationId`, `date`, `dateLabel`, `weekStart` (original EPUB Monday date), `weekdayPill`, songs, times |
+| `MidweekWeek` | `congregationId`, `date` (display label, no year), **`isoDate`** (real "YYYY-MM-DD" — authoritative), **`weekStartIso`** (real Monday), `dateLabel`, `weekStart` (legacy label), `weekdayPill`, songs, times. `@@unique([congregationId, isoDate])` — the display string repeats every year, so keying on it made two service years collide |
 | `Part` | `weekId`, `partKey`, `section`, `partNum`, `title`, `dur`, `cat`, `roleLabel`, `cbsRef` |
 | `Assignment` | `slotId` (unique string key), `weekId`, `name` |
-| `WeekendRow` | `congregationId`, `sortOrder`, `date`, `type`, `no`, `topic`, `cong`, `speaker`, `chair`, `wt`, `read`, `host`, `away`, `label`, `note` |
+| `WeekendRow` | `congregationId`, `sortOrder`, `date` (display label), **`isoDate`** (real date — authoritative), `type`, `no`, `topic`, `cong`, `speaker`, `chair`, `wt`, `read`, `host`, `away`, `label`, `note` |
 | `Person` | `congregationId`, `name`, `gender`, `appointment`, `tags[]`, `status`, `lineUserId` (nullable — opt-in LINE notifications) |
 | `LinePendingLink` | `lineUserId` (PK), `congregationId` — stores mid-flow state during two-step LINE registration; deleted once linking completes |
 | `ChangeLog` | `congregationId`, `slotId`, `date`, `label`, `name`, `prevName`, `action` (assign/clear/reassign), `actorName`, `createdAt` — append-only recent-changes log (`@@index([congregationId, createdAt])`). New table → run `prisma db push` manually after deploy |
@@ -796,6 +809,17 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   asserted answer — that is how it went untested for a release. A pin must put the
   monthly-window candidate AHEAD on fairness so only the demotion can flip the pick (see
   "monthly demotion outranks a merely-crowded rival")
+- Do not backfill `isoDate` by walking the schedule table and rolling the year whenever the
+  month decreases. Rows are NOT in chronological order — issues are imported when they are
+  published, so a real table reads Sept–Oct (next issue) then May–Aug (months just past), and
+  the walk reads 10月 → 5月 as a year boundary and dates the upcoming September a year into the
+  past. `scripts/backfill-iso-dates.mjs` dates each row independently and skips what it cannot
+  place. (The walk — `resolveSequenceYears` — IS correct inside one EPUB issue, where the
+  anchor year comes from the OPF title and the weeks really are in order.)
+- Do not read a date off `week.date` / `row.date` directly, and do not write another year
+  inference. Call `resolveRowDate(row)` from `cnDate.mjs` and pass the ROW, not the string, so a
+  stored `isoDate` is actually used. There were four divergent copies of that inference; one of
+  them silently mis-sorted a member's 指派記錄
 - Do not give the 指派分布 heatmap its own date parser. `app/lib/cnDate.mjs` is the ONE parser;
   `heatmap.mjs` must import `parseCnDate` from it. A private service-year parser read
   "10月 8日" as LAST October while the rest of the app read it as NEXT October, so a member's

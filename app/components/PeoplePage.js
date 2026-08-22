@@ -2,6 +2,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getToken } from '../lib/auth-context';
 import { generateIcal, downloadIcal } from '../lib/icalExport';
+import { resolveRowDate } from '../lib/cnDate.mjs';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -41,27 +42,11 @@ const OFFICE_OPTIONS = {
 
 const DEFAULT_OFFICE = '傳道員';
 
-function parseDateForCompare(dateStr) {
-  // Handles "5月 20日" and "7/5" formats
-  const cn = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
-  if (cn) {
-    const now = new Date();
-    let year = now.getFullYear();
-    const mo = parseInt(cn[1]);
-    if (mo < now.getMonth() + 1 - 6) year++;
-    else if (mo > now.getMonth() + 1 + 6) year--;
-    return new Date(year, mo - 1, parseInt(cn[2]));
-  }
-  const slash = String(dateStr ?? '').match(/(\d+)\/(\d+)/);
-  if (slash) {
-    const now = new Date();
-    let year = now.getFullYear();
-    const mo = parseInt(slash[1]);
-    if (mo < now.getMonth() + 1 - 6) year++;
-    else if (mo > now.getMonth() + 1 + 6) year--;
-    return new Date(year, mo - 1, parseInt(slash[2]));
-  }
-  return null;
+// Prefers a row's stored isoDate; falls back to inferring a year from the
+// year-less display string. Was a third private copy of that inference — see
+// cnDate.mjs, which is now the only one.
+function parseDateForCompare(rowOrStr) {
+  return resolveRowDate(rowOrStr);
 }
 
 function collectRecentAssignments(name, midweekWeeks, weekendRows) {
@@ -70,31 +55,31 @@ function collectRecentAssignments(name, midweekWeeks, weekendRows) {
   const items = [];
 
   midweekWeeks.forEach((week) => {
-    const d = parseDateForCompare(week.date);
+    const d = parseDateForCompare(week);
     if (!d || d >= today) return;
-    if (week.chairman === name) items.push({ date: week.date, label: '主席', context: week.weekdayPill, _d: d });
-    if (week.openPrayer === name) items.push({ date: week.date, label: '開始禱告', context: week.weekdayPill, _d: d });
-    if (week.closePrayer === name) items.push({ date: week.date, label: '結束禱告', context: week.weekdayPill, _d: d });
+    if (week.chairman === name) items.push({ date: week.date, isoDate: week.isoDate, label: '主席', context: week.weekdayPill, _d: d });
+    if (week.openPrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '開始禱告', context: week.weekdayPill, _d: d });
+    if (week.closePrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '結束禱告', context: week.weekdayPill, _d: d });
     week.treasures.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill, _d: d });
+      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill, _d: d });
     });
     week.ministry.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill, _d: d });
+      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill, _d: d });
     });
     week.living.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill, _d: d });
+      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill, _d: d });
     });
   });
 
   weekendRows.forEach((row) => {
     if (row.type === 'event') return;
-    const d = parseDateForCompare(row.date);
+    const d = parseDateForCompare(row);
     if (!d || d >= today) return;
-    if (row.speaker === name) items.push({ date: row.date, label: '公眾演講', context: row.topic, _d: d });
-    if (row.chair === name) items.push({ date: row.date, label: '主席', context: row.topic, _d: d });
-    if (row.wt === name) items.push({ date: row.date, label: '守望台主持', context: row.topic, _d: d });
-    if (row.read === name) items.push({ date: row.date, label: '朗讀', context: row.topic, _d: d });
-    if (row.host === name) items.push({ date: row.date, label: '招待', context: row.topic, _d: d });
+    if (row.speaker === name) items.push({ date: row.date, isoDate: row.isoDate, label: '公眾演講', context: row.topic, _d: d });
+    if (row.chair === name) items.push({ date: row.date, isoDate: row.isoDate, label: '主席', context: row.topic, _d: d });
+    if (row.wt === name) items.push({ date: row.date, isoDate: row.isoDate, label: '守望台主持', context: row.topic, _d: d });
+    if (row.read === name) items.push({ date: row.date, isoDate: row.isoDate, label: '朗讀', context: row.topic, _d: d });
+    if (row.host === name) items.push({ date: row.date, isoDate: row.isoDate, label: '招待', context: row.topic, _d: d });
   });
 
   return items
@@ -108,31 +93,31 @@ function collectUpcomingAssignments(name, midweekWeeks, weekendRows) {
   const items = [];
 
   midweekWeeks.forEach((week) => {
-    const d = parseDateForCompare(week.date);
+    const d = parseDateForCompare(week);
     if (!d || d < today) return;
-    if (week.chairman === name) items.push({ date: week.date, label: '主席', context: week.weekdayPill });
-    if (week.openPrayer === name) items.push({ date: week.date, label: '開始禱告', context: week.weekdayPill });
-    if (week.closePrayer === name) items.push({ date: week.date, label: '結束禱告', context: week.weekdayPill });
+    if (week.chairman === name) items.push({ date: week.date, isoDate: week.isoDate, label: '主席', context: week.weekdayPill });
+    if (week.openPrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '開始禱告', context: week.weekdayPill });
+    if (week.closePrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '結束禱告', context: week.weekdayPill });
     week.treasures.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill });
+      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill });
     });
     week.ministry.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill });
+      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill });
     });
     week.living.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, label: part.title, context: week.weekdayPill });
+      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill });
     });
   });
 
   weekendRows.forEach((row) => {
     if (row.type === 'event') return;
-    const d = parseDateForCompare(row.date);
+    const d = parseDateForCompare(row);
     if (!d || d < today) return;
-    if (row.speaker === name) items.push({ date: row.date, label: '公眾演講', context: row.topic });
-    if (row.chair === name) items.push({ date: row.date, label: '主席', context: row.topic });
-    if (row.wt === name) items.push({ date: row.date, label: '守望台主持', context: row.topic });
-    if (row.read === name) items.push({ date: row.date, label: '朗讀', context: row.topic });
-    if (row.host === name) items.push({ date: row.date, label: '招待', context: row.topic });
+    if (row.speaker === name) items.push({ date: row.date, isoDate: row.isoDate, label: '公眾演講', context: row.topic });
+    if (row.chair === name) items.push({ date: row.date, isoDate: row.isoDate, label: '主席', context: row.topic });
+    if (row.wt === name) items.push({ date: row.date, isoDate: row.isoDate, label: '守望台主持', context: row.topic });
+    if (row.read === name) items.push({ date: row.date, isoDate: row.isoDate, label: '朗讀', context: row.topic });
+    if (row.host === name) items.push({ date: row.date, isoDate: row.isoDate, label: '招待', context: row.topic });
   });
 
   return items.slice(0, 8);

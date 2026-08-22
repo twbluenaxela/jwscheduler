@@ -45,6 +45,38 @@ test('指派記錄 sorts ascending across a year boundary (the 鄧渝文 case)',
   assert.deepEqual(d.records.map((r) => r.year), [2026, 2026, 2026, 2026]);
 });
 
+test('a stored isoDate overrides the ambiguous string, and spans multiple years', () => {
+  // Two Septembers a year apart. With only the display string these are
+  // indistinguishable — inference would collapse both onto one year. With
+  // isoDate they land in the right months, which is the whole point of the field.
+  const weeks = [
+    { ...mkWeek(1, '9月 16日', { chairman: '甲' }), isoDate: '2025-09-16' },
+    { ...mkWeek(2, '9月 15日', { chairman: '甲' }), isoDate: '2026-09-15' },
+  ];
+  const evts = collectPersonEvents(weeks, {}, [], REF).get('甲');
+  assert.deepEqual(evts.map((e) => e.date.getFullYear()), [2025, 2026]);
+
+  // Both months are "covered", a year apart — impossible without isoDate.
+  const covered = coveredMonths(weeks, [], REF);
+  assert.ok(covered.has(monthKey(2025, 9)));
+  assert.ok(covered.has(monthKey(2026, 9)));
+
+  // And the service-year view can now actually reach back to Sept 2025.
+  const { rows } = buildHeatmapRows([{ name: '甲', g: 'M' }], weeks, {}, [], {
+    mode: 'serviceYear', refDate: REF,
+  });
+  const sept25 = rows[0].monthly.find((m) => m.key === monthKey(2025, 9));
+  assert.equal(sept25.n, 1, 'Sept 2025 should be populated from isoDate');
+  assert.equal(sept25.covered, true);
+});
+
+test('a malformed isoDate falls back instead of dropping the row', () => {
+  const weeks = [{ ...mkWeek(1, '8月 5日', { chairman: '甲' }), isoDate: 'not-a-date' }];
+  const evts = collectPersonEvents(weeks, {}, [], REF).get('甲');
+  assert.equal(evts.length, 1);
+  assert.equal(evts[0].date.getFullYear(), 2026);
+});
+
 test('rolling window is centred on the current month; serviceYear runs Sept→Aug', () => {
   const rolling = buildMonthWindow({ mode: 'rolling', range: 12, refDate: REF });
   assert.equal(rolling.length, 12);

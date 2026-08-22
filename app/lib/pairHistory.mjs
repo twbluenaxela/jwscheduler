@@ -5,7 +5,7 @@
 // sisters paired again a few weeks later wastes the variety the pool allows.
 // A repeat is allowed - it is a warning and a demotion, never a block - but
 // only once the pair has had time to breathe.
-import { parseCnDate } from './cnDate.mjs';
+import { parseCnDate, resolveRowDate } from './cnDate.mjs';
 
 export const PAIR_REPEAT_WINDOW_DAYS = 180;
 

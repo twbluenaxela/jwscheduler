@@ -1416,10 +1416,12 @@ body.editing .week-edit__input { background: #fff; }
 .hm-subhead { font-size: 13px; color: var(--ink-2); }
 
 .hm-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.hm-seg { display: flex; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 11px; }
+.hm-seg { display: flex; flex: 0 1 auto; min-width: 0; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 11px; overflow-x: auto; }
 .hm-seg__btn {
-  flex: 1; min-width: 0; border: none; background: transparent; color: var(--ink-2);
-  border-radius: 8px; height: 34px; padding: 0 14px; font: 400 13px var(--font); cursor: pointer;
+  /* Size to the label, don't force equal widths — "本服務年度" is five glyphs
+     and was overflowing a 1fr segment sized for "3 個月". */
+  flex: 0 0 auto; border: none; background: transparent; color: var(--ink-2);
+  border-radius: 8px; height: 34px; padding: 0 12px; font: 400 13px var(--font); cursor: pointer;
   white-space: nowrap;
 }
 .hm-seg__btn.is-on { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.12); }

@@ -19,7 +19,7 @@
 
 import { CATS } from '../data/index.js';
 import { slotCat } from './partTypes.mjs';
-import { parseCnDate as parseDate } from './cnDate.mjs';
+import { parseCnDate as parseDate, resolveRowDate } from './cnDate.mjs';
 
 // Returns the meeting date for the slot being assigned.
 // Falls back to today if the slot's week/row can't be found.
@@ -30,14 +30,14 @@ export function slotRefDate(slotId, midweekWeeks, weekendRows) {
     const weekId = Number(slotId.split('_')[0].slice(2));
     const w = midweekWeeks.find(wk => wk.id === weekId);
     if (w) {
-      const d = parseDate(w.date, now);
+      const d = resolveRowDate(w, now);
       if (d) return d;
     }
   } else if (slotId?.startsWith('we')) {
     const rowId = Number(slotId.split('_')[0].slice(2));
     const row = weekendRows.find(r => r._id === rowId || r.id === rowId);
     if (row) {
-      const d = parseDate(row.date, now);
+      const d = resolveRowDate(row, now);
       if (d) return d;
     }
   }
@@ -52,7 +52,7 @@ export function buildPastHistory(midweekWeeks, assignments, weekendRows, refDate
 
   const weekDateMap = {};
   for (const w of midweekWeeks) {
-    const d = parseDate(w.date, ref);
+    const d = resolveRowDate(w, ref);
     if (d) weekDateMap[w.id] = d;
   }
 
@@ -111,7 +111,7 @@ export function buildPastHistory(midweekWeeks, assignments, weekendRows, refDate
     read:    CATS.wtread?.tag,
   };
   for (const row of weekendRows) {
-    const d = parseDate(row.date, ref);
+    const d = resolveRowDate(row, ref);
     if (!d) continue;
     for (const [field, tag] of Object.entries(weTagMap)) {
       if (tag) record(row[field], tag, d);
