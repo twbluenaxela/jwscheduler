@@ -4,6 +4,7 @@ import MidweekWeek from './MidweekWeek';
 import WeekendView from './WeekendView';
 import {
   getMidweekExportFilename,
+  captureBox,
   downloadWeekXlsx,
   jpegImagesToPdfBlob,
   jpegDataUrlToImage,
@@ -21,13 +22,6 @@ const EXPORT_ITEMS = [
   { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
   { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
 ];
-
-// Pin html-to-image to the element's real rendered box so the capture has no
-// extra whitespace on the right (mobile screenshots were padded out otherwise).
-function captureBox(node) {
-  const rect = node.getBoundingClientRect();
-  return { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
-}
 
 function getDateLabel(week) {
   if (!week) return '';

@@ -384,6 +384,13 @@ export async function exportWeeksXlsx(weeks, getAssign) {
 
 /* ===================== Shared download / PDF helpers ===================== */
 
+// Pin html-to-image to the element's real rendered box so the capture has no
+// extra whitespace on the right (mobile screenshots were padded out otherwise).
+export function captureBox(node) {
+  const rect = node.getBoundingClientRect();
+  return { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
+}
+
 export function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

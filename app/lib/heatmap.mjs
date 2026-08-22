@@ -1,20 +1,36 @@
 // Pure, DB-free helpers for the 指派分布 (assignment distribution heatmap) on
 // the Overview page. No React, no fetch — testable with `node --test`.
 //
-// Time axis is the congregation's SERVICE YEAR: September through August.
-// `serviceYearStartYear(refDate)` picks the September that the reference date
-// falls inside/after, so "today" always lands somewhere in the 12-month window.
+// DATES: this module does NOT parse dates itself. Schedule dates carry no year
+// (`MidweekWeek.date` / `WeekendRow.date` are bare strings like "6月 3日" and
+// "8/9"), so the year is always inferred from "now" — and that inference lives
+// in exactly ONE place, `cnDate.mjs`, shared with pastHistory / suggest /
+// pairHistory. An earlier version of this file had its own service-year parser;
+// it disagreed with cnDate (reading "10月 8日" as last October while the rest of
+// the app read it as next October), which silently sorted a member's whole
+// 指派記錄 wrong. Never reintroduce a private parser here.
 //
-// Rules encoded here (from member feedback, see CLAUDE.md 指派分布 section):
+// TIME WINDOW: because that inference resolves roughly 5 months back and 7
+// forward, there is no reliable 12-month *past*. So rolling windows are CENTRED
+// on the current month (half past, half upcoming) — which is also what a
+// scheduler needs, and mirrors the ✦ suggest engine, whose fairness gap is
+// already bidirectional so an earlier week never double-books someone booked
+// ahead. A fixed Sept–Aug service year is available as a separate mode.
+//
+// COVERAGE: a month with no meetings loaded is NOT a month with zero
+// assignments. `coveredKeys` marks the months that actually have a scheduled
+// meeting; uncovered months are excluded from idle runs (otherwise everyone
+// gets a phantom "12 個月未派") and render as 無資料 rather than as an empty
+// ramp cell.
+//
+// Flag rules (from member feedback, see CLAUDE.md 指派分布 section):
 //   - 姊妹: should not have two parts in the same calendar month (any type).
 //   - 弟兄: should not appear twice in the same month within the
 //     用心準備傳道工作 bucket — 傳道示範 / 傳道演講 / 助手 / 經文朗讀,
 //     treated as one bucket (matched by substring on the assembled label).
 //   - Counting: 1 part = 1 count, no weighting by part type.
-//   - Idle flag: a zero-assignment run of at least max(3, round(visibleMonths/2))
-//     months within the visible window (window-relative, not calendar-absolute).
 
-export const SERVICE_MONTH_ORDER = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8];
+import { parseCnDate } from './cnDate.mjs';
 
 const MINISTRY_FAMILY_MARKERS = ['傳道示範', '傳道演講', '助手', '經文朗讀'];
 
@@ -23,61 +39,64 @@ function isMinistryFamily(label) {
   return MINISTRY_FAMILY_MARKERS.some((m) => s.includes(m));
 }
 
+export function monthKey(year, month) { return `${year}-${month}`; }
+
+function keyOfDate(d) { return monthKey(d.getFullYear(), d.getMonth() + 1); }
+
+// Week-of-month bucket (0-4) — a plain calendar split, no service-year anchor.
+export function weekOfMonth(date) { return Math.floor((date.getDate() - 1) / 7); }
+
+export function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
+
+// How many week-columns a month needs (4 or 5).
+export function weeksInMonth(year, month) { return Math.ceil(daysInMonth(year, month) / 7); }
+
 // The September that starts the service year containing refDate.
 export function serviceYearStartYear(refDate = new Date()) {
-  const m = refDate.getMonth() + 1; // 1-12
+  const m = refDate.getMonth() + 1;
   return m >= 9 ? refDate.getFullYear() : refDate.getFullYear() - 1;
 }
 
-export function serviceYearStartDate(startYear) {
-  return new Date(startYear, 8, 1); // Sept 1
+function addMonths(year, month, delta) {
+  const idx = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
 }
 
-// Parse "6月 3日" / "8/9" into a Date, resolving the year from which side of
-// the Sept/Aug boundary the month falls on — exact, unlike the ±6-month
-// inference other parsers use (this window spans a full 12 months, so a
-// proximity guess would be ambiguous).
-export function parseServiceYearDate(str, startYear) {
-  const s = String(str ?? '');
-  const m = s.match(/(\d+)月\s*(\d+)日/) ?? s.match(/^(\d+)\/(\d+)$/);
-  if (!m) return null;
-  const month = Number(m[1]);
-  const day = Number(m[2]);
-  if (!month || !day) return null;
-  const year = month >= 9 ? startYear : startYear + 1;
-  return new Date(year, month - 1, day);
-}
-
-export function weekIndexOf(date, startYear) {
-  const start = serviceYearStartDate(startYear);
-  return Math.floor((date - start) / (7 * 86400000));
-}
-
-// 52 synthetic weeks anchored on the service year's Thursdays, used only to
-// group events into month bands for the grid — not a claim about the exact
-// real-world meeting week boundaries.
-export function buildWeeksMeta(startYear) {
-  const weeks = [];
-  for (let i = 0; i < 52; i++) {
-    const anchor = new Date(startYear, 8, 1 + i * 7 + 3);
-    weeks.push({ i, month: anchor.getMonth() + 1, year: anchor.getFullYear() });
+// The visible months, oldest → newest.
+//   rolling      — `range` months CENTRED on the current month; arrows step by `range`
+//   serviceYear  — the Sept–Aug block containing refDate; arrows step whole years
+export function buildMonthWindow({ mode = 'rolling', range = 12, offset = 0, refDate = new Date() } = {}) {
+  const out = [];
+  if (mode === 'serviceYear') {
+    const startYear = serviceYearStartYear(refDate) - offset;
+    for (let i = 0; i < 12; i++) out.push(addMonths(startYear, 9, i));
+    return out;
   }
-  return weeks;
+  const back = Math.floor(range / 2);
+  const base = addMonths(refDate.getFullYear(), refDate.getMonth() + 1, -back - offset * range);
+  for (let i = 0; i < range; i++) out.push(addMonths(base.year, base.month, i));
+  return out;
 }
 
-export function monthBands(weeksMeta) {
-  const months = [];
-  weeksMeta.forEach((w) => {
-    const last = months[months.length - 1];
-    if (last && last.month === w.month && last.year === w.year) last.weekIdxs.push(w.i);
-    else months.push({ month: w.month, year: w.year, weekIdxs: [w.i] });
-  });
-  return months;
+// Months that actually have a meeting loaded, so "no data" can be told apart
+// from "zero assignments".
+export function coveredMonths(midweekWeeks, weekendRows, refDate = new Date()) {
+  const keys = new Set();
+  for (const w of midweekWeeks ?? []) {
+    const d = parseCnDate(w.date, refDate);
+    if (d) keys.add(keyOfDate(d));
+  }
+  for (const r of weekendRows ?? []) {
+    if (r.type === 'event' || r.type === 'suspended') continue;
+    const d = parseCnDate(r.date, refDate);
+    if (d) keys.add(keyOfDate(d));
+  }
+  return keys;
 }
 
-// Build a flat per-person list of assignment events for one service year.
+// Flat per-person list of assignment events.
 // Returns Map(name -> [{ date, label, partner, family, meetingType }]) sorted by date.
-export function collectPersonEvents(midweekWeeks, assignments, weekendRows, startYear, getAssign) {
+export function collectPersonEvents(midweekWeeks, assignments, weekendRows, refDate = new Date(), getAssign) {
   const ga = getAssign ?? ((slotId, fallback) => (
     assignments && slotId in assignments ? assignments[slotId] : (fallback ?? '')
   ));
@@ -90,7 +109,7 @@ export function collectPersonEvents(midweekWeeks, assignments, weekendRows, star
   }
 
   for (const week of midweekWeeks ?? []) {
-    const date = parseServiceYearDate(week.date, startYear);
+    const date = parseCnDate(week.date, refDate);
     if (!date) continue;
 
     push(ga(`mw${week.id}_chairman`, week.chairman), date, '主席', null, 'midweek');
@@ -116,7 +135,7 @@ export function collectPersonEvents(midweekWeeks, assignments, weekendRows, star
 
   for (const row of weekendRows ?? []) {
     if (row.type === 'event' || row.type === 'suspended') continue;
-    const date = parseServiceYearDate(row.date, startYear);
+    const date = parseCnDate(row.date, refDate);
     if (!date) continue;
     if (row.speaker) push(row.speaker, date, '公眾演講', null, 'weekend');
     if (row.chair) push(row.chair, date, '週末聚會主席', null, 'weekend');
@@ -129,76 +148,93 @@ export function collectPersonEvents(midweekWeeks, assignments, weekendRows, star
   return events;
 }
 
-export function eventsByWeek(evts, startYear) {
+export function eventsByMonth(evts) {
   const map = new Map();
   for (const e of evts) {
-    const wi = weekIndexOf(e.date, startYear);
-    if (!map.has(wi)) map.set(wi, []);
-    map.get(wi).push(e);
+    const k = keyOfDate(e.date);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(e);
   }
   return map;
 }
 
-function monthlyFor(evts, win, startYear, isM) {
-  const byWeek = eventsByWeek(evts, startYear);
+function monthlyFor(evts, win, covered, isM) {
+  const byMonth = eventsByMonth(evts);
   return win.map((m) => {
-    const monthEvts = m.weekIdxs.flatMap((wi) => byWeek.get(wi) ?? []);
+    const k = monthKey(m.year, m.month);
+    const monthEvts = byMonth.get(k) ?? [];
     const flagEvts = isM ? monthEvts.filter((e) => e.family) : monthEvts;
-    return { month: m.month, year: m.year, n: monthEvts.length, flagN: flagEvts.length, weekIdxs: m.weekIdxs, events: monthEvts };
+    // Weeks-within-month, for the 3 個月 (weekly) display.
+    const weeks = Array.from({ length: weeksInMonth(m.year, m.month) },
+      (_, wi) => monthEvts.filter((e) => weekOfMonth(e.date) === wi));
+    return {
+      year: m.year, month: m.month, key: k,
+      n: monthEvts.length, flagN: flagEvts.length,
+      covered: covered.has(k), events: monthEvts, weeks,
+    };
   });
 }
 
 // Sortable, filterable rows for the overview grid.
-// gender: 'all' | 'F' | 'M'; range: 3 | 6 | 12; offset: months back from the
-// end of the service year (0 = most recent).
 export function buildHeatmapRows(people, midweekWeeks, assignments, weekendRows, {
-  gender = 'all', range = 12, offset = 0, refDate = new Date(), getAssign,
+  gender = 'all', mode = 'rolling', range = 12, offset = 0, refDate = new Date(), getAssign,
 } = {}) {
-  const startYear = serviceYearStartYear(refDate);
-  const perPerson = collectPersonEvents(midweekWeeks, assignments, weekendRows, startYear, getAssign);
-  const weeksMeta = buildWeeksMeta(startYear);
-  const months = monthBands(weeksMeta);
-
-  const endIdx = months.length - offset;
-  const startIdx = Math.max(0, endIdx - range);
-  const win = months.slice(startIdx, endIdx);
+  const perPerson = collectPersonEvents(midweekWeeks, assignments, weekendRows, refDate, getAssign);
+  const covered = coveredMonths(midweekWeeks, weekendRows, refDate);
+  const win = buildMonthWindow({ mode, range, offset, refDate });
 
   const activePeople = (people ?? []).filter((p) => p.status !== 'inactive');
   const filtered = gender === 'all' ? activePeople : activePeople.filter((p) => p.g === gender);
-  const idleThreshold = Math.max(3, Math.round(win.length / 2));
+
+  // Threshold scales with how much of the window we can actually judge — a
+  // window that is mostly unloaded must not manufacture idle flags.
+  const coveredCount = win.filter((m) => covered.has(monthKey(m.year, m.month))).length;
+  const idleThreshold = Math.max(3, Math.round(coveredCount / 2));
 
   const rows = filtered.map((p) => {
     const evts = perPerson.get(p.name) ?? [];
     const isM = p.g === 'M';
-    const monthly = monthlyFor(evts, win, startYear, isM);
+    const monthly = monthlyFor(evts, win, covered, isM);
     const total = monthly.reduce((a, m) => a + m.n, 0);
     const dbl = monthly.filter((m) => m.flagN >= 2).length;
+    // Only covered months count toward an idle run; an uncovered month neither
+    // extends nor breaks it.
     let gap = 0, run = 0;
-    monthly.forEach((m) => { if (m.n === 0) { run++; gap = Math.max(gap, run); } else run = 0; });
-    const idle = gap >= idleThreshold ? gap : 0;
+    monthly.forEach((m) => {
+      if (!m.covered) return;
+      if (m.n === 0) { run++; gap = Math.max(gap, run); } else run = 0;
+    });
+    const idle = coveredCount >= 3 && gap >= idleThreshold ? gap : 0;
     const rank = dbl ? 2 : idle ? 1 : 0;
-    return { person: p, monthly, total, dbl, idle, rank, byWeek: eventsByWeek(evts, startYear) };
+    return { person: p, monthly, total, dbl, idle, rank };
   });
 
   rows.sort((a, b) => (b.rank - a.rank) || (b.dbl - a.dbl) || (b.idle - a.idle) || 0);
 
-  return { rows, win, weeksMeta, monthMode: range === 12, startYear, idleThreshold };
+  // Week-level squares only make sense for the narrowest (3-month) window — at
+  // 6 months the per-week grid runs to ~26 columns, wider than a phone (or even
+  // the iPad card) can show without scrolling months out of view (member
+  // feedback: "6個月 view overflows — just make it month blocks").
+  return { rows, win, covered, monthMode: range !== 3 || mode === 'serviceYear', idleThreshold, coveredCount };
 }
 
-// Full-year detail for one person (used by the 個人檢視 screen).
+// Per-person detail for the 個人檢視 screen, over the SAME window as the grid
+// so the two views can never disagree about what period is being shown.
 export function buildPersonDetail(personName, gender, midweekWeeks, assignments, weekendRows, {
-  refDate = new Date(), getAssign,
+  mode = 'rolling', range = 12, offset = 0, refDate = new Date(), getAssign,
 } = {}) {
-  const startYear = serviceYearStartYear(refDate);
-  const perPerson = collectPersonEvents(midweekWeeks, assignments, weekendRows, startYear, getAssign);
-  const evts = (perPerson.get(personName) ?? []).slice().sort((a, b) => a.date - b.date);
-  const weeksMeta = buildWeeksMeta(startYear);
-  const months = monthBands(weeksMeta);
+  const perPerson = collectPersonEvents(midweekWeeks, assignments, weekendRows, refDate, getAssign);
+  const covered = coveredMonths(midweekWeeks, weekendRows, refDate);
+  const win = buildMonthWindow({ mode, range, offset, refDate });
+  const winKeys = new Set(win.map((m) => monthKey(m.year, m.month)));
   const isM = gender === 'M';
 
-  const monthly = monthlyFor(evts, months, startYear, isM);
-  const flaggedMonths = new Set(monthly.filter((m) => m.flagN >= 2).map((m) => `${m.year}-${m.month}`));
+  const all = perPerson.get(personName) ?? [];
+  const evts = all.filter((e) => winKeys.has(keyOfDate(e.date))).sort((a, b) => a.date - b.date);
+
+  const monthly = monthlyFor(evts, win, covered, isM);
   const doubleMonths = monthly.filter((m) => m.flagN >= 2);
+  const flaggedKeys = new Set(doubleMonths.map((m) => m.key));
 
   const total = evts.length;
   const gapsDays = [];
@@ -208,10 +244,11 @@ export function buildPersonDetail(personName, gender, midweekWeeks, assignments,
 
   const records = evts.map((e) => ({
     date: `${e.date.getMonth() + 1}/${e.date.getDate()}`,
+    year: e.date.getFullYear(),
     rawDate: e.date,
     label: e.label,
     partner: e.partner,
-    flagged: flaggedMonths.has(`${e.date.getFullYear()}-${e.date.getMonth() + 1}`) && (!isM || e.family),
+    flagged: flaggedKeys.has(keyOfDate(e.date)) && (!isM || e.family),
   }));
 
   const pairCounts = new Map();
@@ -220,16 +257,23 @@ export function buildPersonDetail(personName, gender, midweekWeeks, assignments,
   }
   const pairings = [...pairCounts.entries()].sort((a, b) => b[1] - a[1]).map(([name, n]) => ({ name, n }));
 
-  return { evts, monthly, months, weeksMeta, total, avgGapWeeks, maxGapWeeks, records, pairings, doubleMonths, startYear };
+  return { evts, monthly, win, covered, total, avgGapWeeks, maxGapWeeks, records, pairings, doubleMonths, mode, range };
+}
+
+// Human label for the active window, e.g. "3月 – 2月" / "2025–2026 服務年度".
+export function windowLabel(win, mode) {
+  if (!win?.length) return '';
+  if (mode === 'serviceYear') return `${win[0].year}–${win[win.length - 1].year} 服務年度`;
+  return `${win[0].month}月 – ${win[win.length - 1].month}月`;
 }
 
 // Server/client-shared plain-language summary (so print + copy-to-text match).
 export function buildPersonSummary(name, gender, detail) {
-  const { total, avgGapWeeks, doubleMonths } = detail;
-  const genderWord = gender === 'F' ? '姊妹' : '弟兄';
-  if (total === 0) return `${name}在這個服務年度目前沒有任何指派。`;
+  const { total, avgGapWeeks, doubleMonths, win, mode } = detail;
+  const period = mode === 'serviceYear' ? '這個服務年度' : `這 ${win?.length ?? 0} 個月`;
+  if (total === 0) return `${name}在${period}目前沒有任何指派。`;
   const bucket = gender === 'M' ? '「用心準備傳道工作」相關的' : '';
-  let s = `${name}在這個服務年度共有 ${total} 份指派`;
+  let s = `${name}在${period}共有 ${total} 份指派`;
   if (avgGapWeeks != null) s += `，平均每 ${avgGapWeeks.toFixed(1)} 週一次`;
   s += '。';
   if (doubleMonths.length > 0) {

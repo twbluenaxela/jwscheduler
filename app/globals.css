@@ -505,6 +505,9 @@ html, body {
 .menu__item:hover { background: var(--accent-soft); }
 .menu__ic { width: 20px; text-align: center; color: var(--accent); font-size: 16px; }
 .menu__div { height: 1px; background: var(--line); margin: 6px 8px; }
+/* Viewport-anchored variant (position set by JS) — used where an absolutely
+   positioned menu would be clipped by a scrolling/rounded ancestor. */
+.menu--anchored { position: fixed; right: auto; top: 0; left: 0; z-index: 70; }
 
 /* ============================= Overview ============================= */
 .chip--alert[aria-pressed="false"] { color: var(--special); border-color: #e7c4bf; }
@@ -1390,6 +1393,11 @@ body.editing .week-edit__input { background: #fff; }
   flex-direction: column;
   overflow: hidden;
 }
+/* The 匯出 dropdown lives in this card's header; `overflow: hidden` would clip
+   it off-screen. Inner scrolling is owned by .hm-person__body, so the card
+   itself does not need to clip. */
+.hm-person { overflow: visible; }
+.hm-person__head { position: relative; z-index: 20; }
 
 .hm-header {
   flex: none;
@@ -1421,14 +1429,15 @@ body.editing .week-edit__input { background: #fff; }
 .hm-arrow:disabled { opacity: .3; cursor: default; }
 .hm-arrow:not(:disabled):hover { border-color: var(--ink-3); }
 
-.hm-tablewrap { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+.hm-tablewrap { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; -webkit-overflow-scrolling: touch; }
 
 .hm-colhead {
   flex: none; display: flex; align-items: center; position: sticky; top: 0; z-index: 3;
   background: var(--surface-2); border-bottom: 1px solid var(--line);
 }
 .hm-colhead__name { flex: none; padding-left: 14px; font-size: 11.5px; color: var(--ink-3); position: sticky; left: 0; background: var(--surface-2); z-index: 1; }
-.hm-colhead__month { font-size: 12px; color: var(--ink-2); }
+.hm-colhead__month { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.hm-colhead__month--now { font-weight: 700; color: var(--accent); }
 .hm-colhead__attn { flex: 1; min-width: 120px; padding-left: 18px; font-size: 11.5px; color: var(--ink-3); }
 .hm-colhead__count { width: 56px; flex: none; text-align: right; padding-right: 16px; font-size: 11.5px; color: var(--ink-3); position: sticky; right: 0; background: var(--surface-2); z-index: 1; }
 
@@ -1437,15 +1446,18 @@ body.editing .week-edit__input { background: #fff; }
 .hm-row--lastAttn { border-bottom: 2px solid var(--line-2); }
 
 .hm-name {
-  flex: none; display: flex; align-items: center; gap: 7px; height: 100%; padding-left: 14px;
+  flex: none; display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 8px 0 14px;
   position: sticky; left: 0; z-index: 2; background: var(--surface);
-  border: none; cursor: pointer; text-align: left;
+  border: none; cursor: pointer; text-align: left; font: inherit;
 }
+.hm-name--stack { flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; padding-top: 5px; padding-bottom: 5px; }
+.hm-name__row { flex: none; display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
 .hm-name:hover .hm-name__text { text-decoration: underline; }
 .hm-badge { flex: none; width: 18px; height: 18px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font: 500 10px var(--font); color: var(--ink-2); }
 .hm-badge--f { background: var(--living-soft); }
 .hm-badge--m { background: var(--treasures-soft); }
-.hm-name__text { font-size: 14px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Never elide a member's name — the table scrolls sideways instead. */
+.hm-name__text { font-size: 14px; color: var(--ink); white-space: nowrap; }
 
 .hm-cellwrap { position: relative; flex: none; display: flex; }
 .hm-cell { flex: none; }
@@ -1454,18 +1466,32 @@ body.editing .week-edit__input { background: #fff; }
 .hm-cell--2 { background: var(--hm-ramp-2); }
 .hm-cell--3 { background: var(--hm-ramp-3); }
 .hm-cell--warn { background: var(--hm-warn); }
+/* "no meetings imported for this month" — must not read as "zero assignments" */
+.hm-cell--nodata {
+  background: repeating-linear-gradient(-45deg,
+    var(--surface-2) 0 3px, transparent 3px 6px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
 
+/* Placed by JS (see BubbleLayer): position:fixed so it escapes the scroll
+   containers that would otherwise clip it — .hm-tablewrap scrolls, and
+   .hm-grid52's overflow-x makes overflow-y compute to auto too. */
 .hm-bubble {
-  position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
-  z-index: 20; background: var(--ink); color: #fff; padding: 7px 10px; border-radius: 6px;
-  font: 400 10.5px/1.6 var(--font); white-space: pre-line; text-align: center; min-width: 118px;
+  position: fixed; top: 0; left: 0;
+  z-index: 60; background: var(--ink); color: #fff; padding: 7px 10px; border-radius: 6px;
+  font: 400 10.5px/1.6 var(--font); white-space: pre-line; text-align: center;
+  min-width: 118px; max-width: min(280px, calc(100vw - 16px));
   pointer-events: none; box-shadow: var(--shadow-lg);
 }
 
 .hm-attn { flex: 1; min-width: 120px; padding-left: 18px; display: flex; align-items: center; }
-.hm-chip { flex: none; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+.hm-chip { flex: none; max-width: 100%; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-chip--sm { padding: 2px 7px; font-size: 9.5px; }
 .hm-chip--warn { background: var(--hm-warn-surface); color: var(--hm-warn); }
-.hm-count { width: 56px; flex: none; text-align: right; padding-right: 16px; position: sticky; right: 0; background: var(--surface); z-index: 2; font: 500 13px var(--mono); }
+.hm-count {
+  width: 56px; flex: none; height: 100%; display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 16px; position: sticky; right: 0; background: var(--surface); z-index: 2; font: 500 13px var(--mono);
+}
 
 .hm-legend {
   flex: none; display: flex; align-items: center; gap: 22px; padding: 12px 22px;
@@ -1479,6 +1505,12 @@ body.editing .week-edit__input { background: #fff; }
 .hm-swatch--1 { background: var(--hm-ramp-1); }
 .hm-swatch--2 { background: var(--hm-ramp-2); }
 .hm-swatch--3 { background: var(--hm-ramp-3); }
+.hm-swatch--nodata {
+  background: repeating-linear-gradient(-45deg,
+    var(--surface-2) 0 3px, transparent 3px 6px);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.hm-legend__swatch-wrap--nodata { margin-left: 8px; }
 .hm-legend__n { font: 500 9.5px var(--mono); color: var(--ink-3); }
 .hm-legend__note { font-size: 12px; color: var(--ink-2); }
 
@@ -1506,8 +1538,15 @@ body.editing .week-edit__input { background: #fff; }
 .hm-recwrap__count { font-size: 12px; font-weight: 400; color: var(--ink-3); }
 .hm-person__summary { margin: 0; padding: 15px 17px; background: var(--surface-2); border-radius: 8px; font-size: 14px; line-height: 1.85; color: var(--ink); }
 
-.hm-grid52 { display: flex; gap: 10px; }
+/* The week bands and their month labels scroll together in ONE container, so
+   they stay aligned and — critically — neither can widen the page. The label
+   row has explicit per-month widths; left outside a scroller it stretched the
+   document to ~937px on a 390px phone, which also dragged the fixed tab bar
+   out to that width. */
+.hm-grid52-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; max-width: 100%; }
+.hm-grid52 { display: flex; gap: 10px; width: max-content; }
 .hm-grid52__band { display: flex; flex: none; }
+.hm-cellwrap--now .hm-cell { box-shadow: 0 0 0 2px var(--accent); }
 
 .hm-bars { display: flex; align-items: flex-end; gap: 6px; height: 78px; }
 .hm-bars__col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; }
@@ -1518,6 +1557,13 @@ body.editing .week-edit__input { background: #fff; }
 
 .hm-recwrap { flex: 1; min-height: 200px; display: flex; flex-direction: column; }
 .hm-reclist { flex: 1; min-height: 0; overflow: auto; }
+.hm-rec__year {
+  font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--ink-3);
+  padding: 10px 0 4px; border-top: 1px solid var(--line); margin-top: 4px;
+}
+.hm-reclist > div:first-child .hm-rec__year { border-top: none; margin-top: 0; padding-top: 2px; }
+.hm-grid52__months { display: flex; gap: 10px; margin-top: 4px; width: max-content; }
+.hm-grid52__mlbl { flex: none; text-align: center; font-size: 10.5px; color: var(--ink-3); }
 .hm-rec { display: flex; align-items: center; gap: 14px; padding: 11px 14px; border-radius: 7px; border-top: 1px solid var(--line); }
 .hm-rec:first-child { border-top: none; }
 .hm-rec--flag { background: var(--hm-warn-surface); }
@@ -1545,9 +1591,12 @@ body.editing .week-edit__input { background: #fff; }
   .hm-person__right { width: auto; }
 }
 
-@media print {
-  .sidebar, .topbar, .tabbar, .toolbar, .ov-toast { display: none !important; }
-  .hm-print-hide { display: none !important; }
-  .hm-person { border: none; box-shadow: none; }
-  .hm-person__body { overflow: visible; }
-}
+/* Capture mode for the 匯出 JPG/PDF/複製圖片 actions: unpin every inner scroll
+   area so html-to-image photographs the WHOLE card, not just the slice that
+   happens to be scrolled into view, and drop the toolbar from the shot. */
+.hm-person.is-capturing { height: auto; max-height: none; box-shadow: none; }
+.hm-person.is-capturing .hm-noexport { display: none; }
+.hm-person.is-capturing .hm-person__body,
+.hm-person.is-capturing .hm-reclist,
+.hm-person.is-capturing .hm-grid52 { overflow: visible; max-height: none; height: auto; }
+.hm-person.is-capturing .hm-recwrap { min-height: 0; }

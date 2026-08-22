@@ -100,7 +100,9 @@ app/
                          DCTDecode) — each page is sized to its image's aspect ratio so the
                          card fills the page edge-to-edge (no A4 letterbox), no print dialog;
                          `buildWeekText()` = plain-text week schedule for pasting into LINE;
-                         `triggerDownload()` = blob → download anchor; `downloadWeekXlsx` /
+                         `triggerDownload()` = blob → download anchor; `captureBox(node)` =
+                         html-to-image size opts pinned to the node's real box (shared with
+                         MeetingsPage and AssignmentHeatmap so captures don't drift); `downloadWeekXlsx` /
                          `exportWeeksXlsx` = Excel via `buildMidweekXlsxBlob()` — a styled
                          workbook mirroring the card (section-colour bands, grey time/role
                          cols, bold names) with A4 portrait page setup + a manual page break
@@ -191,28 +193,36 @@ app/
     icalExport.js      — pure iCal (.ics) generator; exports generateIcal(assignments,
                          personName, congCode) → RFC-5545 string and downloadIcal(str, filename)
     heatmap.mjs        — pure, DB-free 指派分布 (assignment distribution heatmap) helpers for
-                         OverviewPage's 指派分布 tab. Time axis is the SERVICE YEAR
-                         (September–August); `serviceYearStartYear(refDate)` picks the
-                         September containing/preceding refDate. `parseServiceYearDate`
-                         resolves "6月 3日"/"8/9" against that boundary directly (month ≥ 9
-                         → the start year, else start year + 1) rather than the ±6-month
-                         proximity window other date parsers use — that window is too narrow
-                         for a full 12-month axis and would misjudge e.g. April against a
-                         September reference. `collectPersonEvents` walks midweekWeeks +
-                         weekendRows (same traversal shape as `buildOverviewRows` in
-                         OverviewPage.js) into a flat per-name event list, capturing the
-                         `partner` name for pair slots (學生/助手, 主持/朗讀) and whether the
-                         label falls in the ministry-family bucket. `buildHeatmapRows` (grid)
-                         and `buildPersonDetail` (drill-down) both apply the two flag rules
-                         from member feedback: 姊妹 flag on ANY two parts in a month; 弟兄
-                         flag only on two parts within 用心準備傳道工作 — matched by
-                         substring on the assembled label (傳道示範/傳道演講/助手/經文朗讀)
-                         — so a brother's 寶藏演講 + 生活演講 in the same month is NOT a
-                         double. Idle flag: a zero-assignment run ≥ `max(3, round(visibleMonths/2))`
-                         months, window-relative. Sort rank (doubles first, then idle, then
-                         roster order) matches the design handoff exactly.
-                         `buildPersonSummary` is separate from the React layer so print,
-                         複製文字, and the on-screen paragraph can never drift
+                         OverviewPage's 指派分布 tab.
+                         **It does NOT parse dates itself** — it imports `parseCnDate` from
+                         `cnDate.mjs` like pastHistory/suggest/pairHistory do. An earlier
+                         version had its own service-year parser; it disagreed with cnDate
+                         (reading "10月 8日" as LAST October while the rest of the app read
+                         it as NEXT October), which silently sorted a real member's whole
+                         指派記錄 backwards and put a future booking at the top as the
+                         oldest entry. `heatmap.test.mjs` now pins the two together.
+                         **Window** (`buildMonthWindow`): schedule dates carry no year, so
+                         cnDate's ±6-month inference resolves only ~5 months back but ~7
+                         forward — there is no reliable 12-month PAST. Rolling windows are
+                         therefore CENTRED on the current month (`back = floor(range/2)`),
+                         which is also what a scheduler needs and mirrors the ✦ engine's
+                         bidirectional fairness gap. `mode: 'serviceYear'` gives the fixed
+                         Sept–Aug block instead (arrows step whole years; rolling arrows
+                         step by `range`).
+                         **Coverage** (`coveredMonths`): a month with no meetings imported
+                         is NOT a month with zero assignments. Uncovered months are excluded
+                         from idle runs — without this every person got a phantom
+                         `12 個月未派` purely because those months had no data, which
+                         corrupted the attention ranking — and render as 無資料 rather than
+                         as an empty ramp cell.
+                         Flag rules: 姊妹 flag on ANY two parts in a month; 弟兄 only on two
+                         within 用心準備傳道工作 (傳道示範/傳道演講/助手/經文朗讀, matched by
+                         substring on the assembled label), so a brother's 寶藏演講 +
+                         生活演講 in one month is not a double. Sort rank = doubles, then
+                         idle, then roster order. `buildPersonDetail` takes the SAME window
+                         as the grid so the two views can't disagree, and
+                         `buildPersonSummary` / `windowLabel` are pure so the on-screen,
+                         copied and exported text can never drift
     assignments.mjs    — pure, DB-free date + assignment helpers shared by line/webhook
                          and meetings/publish: parseCnDate, collectAssignments
                          (skipSuspended option — webhook passes true, publish keeps its
@@ -266,31 +276,41 @@ app/
                          GET /api/changelog and renders assign/reassign/clear rows with
                          timestamp + actor); [指派分布] renders `AssignmentHeatmap`
     AssignmentHeatmap.js — 指派分布 (assignment distribution heatmap), read-only. Two views
-                         toggled by local state (`selected`), no routing: `OverviewGrid`
-                         (GitHub-contributions-style grid, one row per person) and
-                         `PersonDetail` (52-week grid + monthly bar chart + record list for
-                         one person, reached by tapping a row). All derivation is pure
-                         `lib/heatmap.mjs` — the component only renders and holds UI state
-                         (gender/range/offset filters, which cell's tooltip is open).
-                         Responsive via a local `useIsMobile()` (same `matchMedia('(max-width:
-                         720px)')` pattern as PeoplePage) that swaps cell/row pixel sizes,
-                         not two separate render trees — the design handoff's 4a/4b and 5a/5b
-                         breakpoints are the same DOM, resized. Grid squares size themselves
-                         with inline styles computed the same way the design math specifies
-                         (`labelWidth = cells*(cell+gap) - gap + pad*2`) so month headers stay
-                         pixel-aligned with the squares under them — this couldn't be pure CSS
-                         without duplicating the range/window logic in a stylesheet. The name
-                         and count columns are `position: sticky` inside one scrolling
-                         `.hm-tablewrap` (header + body share the scroll container so they
-                         can never drift out of horizontal sync). Cell tooltip only appears
-                         for non-empty cells (mouseenter on desktop, click/toggle on touch —
-                         no `:hover` dependency, no native `title`), matching the "cells with
-                         zero assignments are inert" requirement from the design handoff.
-                         列印一頁 is a plain `window.print()` (not the popup-window pattern
-                         banned elsewhere for PDF export — that ban is about
-                         `window.open(...).print()`, a different mechanism); `@media print`
-                         in globals.css hides the app chrome and any `.hm-print-hide` element
-                         so only the person-detail card prints
+                         toggled by local state (`selected`), no routing: `OverviewGrid` and
+                         `PersonDetail`. Both share ONE `view` state ({gender, rangeKey,
+                         offset}) so opening a person shows the same period the grid was on.
+                         Range chips: 3 個月 / 6 個月 / 12 個月 / 本服務年度 (see heatmap.mjs
+                         for why rolling windows are centred). All derivation is in
+                         `lib/heatmap.mjs`; the component only renders and holds UI state.
+                         **Names are never truncated** — the name column is sized to the
+                         longest name present and the table scrolls sideways instead (sticky
+                         name + 件數 columns). Squares are fit-to-width via `ResizeObserver`,
+                         floored at a size that keeps the month label on one line (a smaller
+                         floor made "10月" wrap to two lines and spill out of the header).
+                         When the grid does overflow, the current month is scrolled into
+                         view and its header label is accented.
+                         **Tooltip**: rendered once, `position: fixed`, placed from a
+                         measured rect (`useBubble` + `BubbleLayer`) — above by preference,
+                         flipped below when there is no room, clamped horizontally. It
+                         cannot be a child of the cell: `.hm-tablewrap` scrolls and
+                         `.hm-grid52-scroll`'s `overflow-x` makes `overflow-y` compute to
+                         auto too, so an absolutely-positioned bubble was clipped on the top
+                         row and at both edges. Hover-to-open is gated on
+                         `(hover: hover) and (pointer: fine)` — on a touchscreen a tap fires
+                         mouseenter AND click, so wiring both made the bubble flash open and
+                         shut. Touch gets click-to-toggle; any press outside a cell, plus any
+                         scroll or resize, dismisses it.
+                         **Export**: the same set as the meetings page (匯出 JPG / 複製圖片 /
+                         複製文字 / 下載 PDF), reusing `captureBox` / `triggerDownload` /
+                         `jpegDataUrlToImage` / `jpegImagesToPdfBlob` from `midweekExport.js`.
+                         There is NO 列印一頁 — `window.print()` produced a two-page PDF whose
+                         first page was just the name. Capture adds `is-capturing` to the
+                         card, which unpins every inner scroll area so html-to-image gets the
+                         whole card rather than the scrolled slice, and hides the toolbar.
+                         The 匯出 dropdown uses `AnchoredMenu` (`position: fixed`, clamped to
+                         the viewport, opening rightwards from the button) because an
+                         absolutely-positioned `.menu` was clipped by the card and opened
+                         leftwards off-screen on narrow phones
     PeoplePage.js      — congregation member list; 近期指派 shows 3 most-recent by default
                          with expand button for full history; detail panel is sticky +
                          scrollable on desktop. On mobile (useIsMobile via matchMedia) the
@@ -776,6 +796,27 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   asserted answer — that is how it went untested for a release. A pin must put the
   monthly-window candidate AHEAD on fairness so only the demotion can flip the pick (see
   "monthly demotion outranks a merely-crowded rival")
+- Do not give the 指派分布 heatmap its own date parser. `app/lib/cnDate.mjs` is the ONE parser;
+  `heatmap.mjs` must import `parseCnDate` from it. A private service-year parser read
+  "10月 8日" as LAST October while the rest of the app read it as NEXT October, so a member's
+  指派記錄 silently listed a future booking first as though it were the oldest, and their
+  monthly bars and 平均間隔 were wrong. `heatmap.test.mjs` pins the two together — keep that test
+- Do not treat a month with no imported meetings as a month with zero assignments in the heatmap.
+  `coveredMonths` marks which months have data; uncovered ones are excluded from idle runs and
+  render as 無資料. Without this every person gets a phantom `12 個月未派`, which ruins the
+  attention ranking the whole view exists for
+- Do not put the heatmap tooltip (or the 匯出 dropdown) back to `position: absolute`. Both live
+  inside scrolling, rounded containers that clip them — the bubble was cut off on the top row and
+  the menu opened off-screen. Both are `position: fixed` and placed from a measured rect
+- Do not wire both `onMouseEnter` and `onClick` to open the heatmap tooltip unconditionally — a
+  tap fires both, so the bubble opened and closed in the same gesture. Hover-open is gated on
+  `(hover: hover) and (pointer: fine)`
+- Do not give the 52-week grid's month-label row a width without putting it inside
+  `.hm-grid52-scroll`. Its per-month widths are explicit; outside a scroller it stretched the
+  document to ~937px on a 390px phone, which also dragged the fixed tab bar out to that width
+- Do not add `window.print()` back to the person view — it produced a two-page PDF whose first
+  page was just the name. Use the 匯出 menu (JPG / 複製圖片 / 複製文字 / PDF), which captures the
+  card with `is-capturing` so the whole card is in the shot
 - Do not derive ministry-talk eligibility from the title alone — a `/` in `roleLabel` (admin added a 助手 via the edit-mode toggle) means it IS a demo and must use the mixed pool; `effectiveCat(part)` already encodes this precedence
 
 ---
@@ -793,4 +834,4 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 | **Phase 4 — Suggestions** | Done — recency-scoring algorithm in `app/lib/suggest.js` (no AI). Ghost pills (dashed blue border, italic) for unconfirmed suggestions. ✦ button in midweek navstrip fills all empty slots; ✦ button per weekend row fills speaker/chair/wt/read. 接受全部/清除建議 toolbar batch actions. Ghosts clear on edit-mode exit and week navigation. Part-ID bug fix (p.dbId not p.id). Weekend row default date = last row + 7 days. |
 | **Phase 5 — iCal Export** | Done — `app/lib/icalExport.js` generates RFC-5545 `.ics` (Taiwan UTC+8, stable UIDs, 1h45m events). "↓ iCal (N)" button in PeoplePage 未來安排 section downloads `{name}-schedule.ics` for import into Outlook/Google Calendar/Apple Calendar. |
 | **Phase 6 — PWA + UX polish** | Done — installable PWA (`app/manifest.js` + `public/sw.js` network-first worker + `PWARegister`, themeColor/apple-web-app meta in `layout.js`). Plus: clear/留空 button in AssignSheet; serialized people writes (quals no longer self-deselect); mobile people detail renders inline under the tapped card; mobile row dot+partnum no longer squished; silent client-side PDF + 複製文字 in meetings export menu; wired ImportPage 匯出 cards with 全部/本月/自訂 range. Ministry/CBS parts always show two assignment slots (student + helper) with correct role labels; edit-mode ＋/− toggle to add/remove helper slot per part; LINE notifications include role labels (學生/助手/主持/朗讀) and CBS textbook references. 匯出 page JPG/PDF/列印 now screenshot real off-screen MidweekWeek cards (`exportNodes*`) instead of the removed hand-drawn canvas; PDF pages sized to the card; PeoplePage cards toggle-to-deselect with an animated recenter when nothing is selected. 總覽 has a 最近變更 tab backed by a `ChangeLog` table written best-effort on every assignment edit (assignments + weekend-rows routes) — decoupled from 發佈通知 (which is unchanged). |
-| **Phase 7 — Assignment heatmap** | Done — 總覽 ▸ 指派分布 (canEdit-only, like 最近變更 and 人員): a GitHub-contributions-style grid (`AssignmentHeatmap.js` + `lib/heatmap.mjs`) over the congregation's service year (Sept–Aug), one row per person, one cell per month (整年) or week (3/6 個月), shaded by assignment count. Gender + range segmented filters, window arrows, sort puts flagged people first (same-month doubles, then long idle runs). Tapping a row opens a per-person 個人檢視: 52-week grid, monthly bar chart, dated record list, 助手搭配 pairing tally, a plain-language summary + callout (server/print/copy-safe via `buildPersonSummary`), 複製文字 and 列印一頁. Encodes the member-feedback rules: 姊妹 flag on any two parts in a month, 弟兄 flag only within the 用心準備傳道工作 bucket (傳道示範/傳道演講/助手/經文朗讀). Read-only by design — no editing, no navigation to a meeting. |
+| **Phase 7 — Assignment heatmap** | Done — 總覽 ▸ 指派分布 (canEdit-only): a contributions-style grid (`AssignmentHeatmap.js` + `lib/heatmap.mjs`), one row per person, one cell per month (or per week at 3 個月), shaded by assignment count. Range chips 3/6/12 個月 + 本服務年度; rolling windows are **centred on the current month** because schedule dates carry no year and the shared `cnDate` parser resolves ~5 months back but ~7 forward — so half past / half upcoming is both what the data supports and what a scheduler needs (mirrors the ✦ engine's bidirectional fairness gap). Months with no imported meetings render as 無資料 and are excluded from idle detection. Gender filter, attention-first sort (same-month doubles, then idle runs). Tapping a row opens 個人檢視 over the same window: week grid, monthly bars, dated record list with year dividers, 助手搭配 tally, plain-language summary, and the meetings-page export set (JPG / 複製圖片 / 複製文字 / PDF). Squares are fit-to-width; names are never truncated. Read-only by design. Encodes the member-feedback rules: 姊妹 flag on any two parts in a month, 弟兄 only within the 用心準備傳道工作 bucket. |
