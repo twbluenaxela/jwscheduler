@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { resolveSequenceYears, toIsoDate } from './cnDate.mjs';
 
 // ── DOM text extraction ──────────────────────────────────────────────────────
 
@@ -216,6 +217,20 @@ function assignTimes(parsed) {
 
 // ── EPUB entry point ─────────────────────────────────────────────────────────
 
+// The issue's real year. The EPUB text only ever gives month/day, so without
+// this every downstream consumer has to guess the year from "now" — which only
+// works for ~12 months and cannot hold two service years at once.
+// Priority: the OPF title ("聚會手冊2026年9－10月刊") first, since it travels
+// inside the file; then the conventional file name (mwb_CH_202609).
+export function epubIssueAnchor(opfXml, fileName) {
+  const t = String(opfXml ?? '').match(/<dc:title>([^<]*)<\/dc:title>/)?.[1] ?? '';
+  const fromTitle = t.match(/(\d{4})\s*年\s*(\d{1,2})/);
+  if (fromTitle) return { year: +fromTitle[1], month: +fromTitle[2] };
+  const fromName = String(fileName ?? '').match(/(20\d{2})(0[1-9]|1[0-2])/);
+  if (fromName) return { year: +fromName[1], month: +fromName[2] };
+  return null;
+}
+
 export async function parseEpub(file) {
   const ab = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(ab);
@@ -283,5 +298,20 @@ export async function parseEpub(file) {
   }
 
   if (!weeks.length) throw new Error('找不到聚會節目。請確認這是聚會手冊 EPUB（mwb）。');
+
+  // Stamp each week with its REAL Monday date. `date` stays the display string;
+  // `weekStartIso` is the unambiguous one that page.js shifts into `isoDate`.
+  const anchor = epubIssueAnchor(opfXml, file?.name);
+  if (anchor) {
+    // Anchor on the first week that matches the issue's opening month, so an
+    // issue whose first spine entry is out of order still lands on the right year.
+    const idx = weeks.findIndex((w) => Number(w.date.match(/(\d+)月/)?.[1]) === anchor.month);
+    const dates = resolveSequenceYears(weeks.map((w) => w.date), {
+      anchorIndex: idx >= 0 ? idx : 0,
+      anchorYear: anchor.year,
+    });
+    weeks.forEach((w, i) => { w.weekStartIso = toIsoDate(dates[i]); });
+  }
+
   return weeks;
 }

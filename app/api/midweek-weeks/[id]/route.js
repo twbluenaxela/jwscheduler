@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 import { canEdit } from '../../../lib/roles.mjs';
+import { parseCnDate, parseIsoDate, toIsoDate } from '../../../lib/cnDate.mjs';
 
 const WEEK_FIELDS = new Set([
   'date', 'dateLabel', 'weekdayPill', 'reading',
@@ -33,6 +34,14 @@ export async function PATCH(request, context) {
       if (key === 'label') { weekData.label = val || null; }         // empty string → null
       else if (key === 'type') { weekData.type = val || 'normal'; }  // always has a value
       else weekData[key] = val ?? '';
+    }
+
+    // Keep the real date in step with an edited display date, anchored on the
+    // week's own current date so an edit stays in that week's year.
+    if ('date' in weekData) {
+      const anchor = parseIsoDate(existing.isoDate) ?? new Date();
+      const resolved = parseCnDate(weekData.date, anchor);
+      weekData.isoDate = resolved ? toIsoDate(resolved) : null;
     }
 
     const parts = Array.isArray(body.parts) ? body.parts : [];

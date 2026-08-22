@@ -4,6 +4,7 @@
 // with auth + HTTP plumbing.
 
 import { describeMidweekSlot, weekendFieldLabel, logChange, WEEKEND_NAME_FIELDS } from './changelog.mjs';
+import { parseCnDate, parseIsoDate, toIsoDate } from './cnDate.mjs';
 
 export const ALLOWED_WEEKEND_FIELDS = new Set([
   'speaker', 'chair', 'wt', 'read', 'host', 'away', 'topic', 'no', 'cong', 'note', 'label', 'date',
@@ -59,6 +60,16 @@ export async function applyWeekendPatch(db, user, existing, body) {
     if (ALLOWED_WEEKEND_FIELDS.has(key)) data[key] = val ?? '';
   }
   if (!Object.keys(data).length) return { status: 400, body: { error: '沒有可更新的欄位' } };
+
+  // Editing the display date must move the real one with it, or the row keeps a
+  // stale isoDate and every date-aware view disagrees with what's on screen.
+  // The row's OWN current date anchors the year inference, so nudging "8/9" to
+  // "8/16" stays in the same year even when that year isn't the current one.
+  if ('date' in data) {
+    const anchor = parseIsoDate(existing.isoDate) ?? new Date();
+    const resolved = parseCnDate(data.date, anchor);
+    data.isoDate = resolved ? toIsoDate(resolved) : null;
+  }
 
   const row = await db.weekendRow.update({ where: { id: existing.id }, data });
 

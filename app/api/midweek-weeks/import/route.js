@@ -45,6 +45,8 @@ function cleanWeek(week) {
   return {
     week: {
       date,
+      isoDate: week.isoDate ? cleanText(week.isoDate, 10) : null,
+      weekStartIso: week.weekStartIso ? cleanText(week.weekStartIso, 10) : null,
       dateLabel: week.dateLabel ? cleanText(week.dateLabel, 120) : null,
       weekStart: week.weekStart ? cleanText(week.weekStart, 80) : null,
       weekdayPill: cleanText(week.weekdayPill || '星期三 · 19:30', 120),
@@ -135,14 +137,19 @@ export async function POST(request) {
       const ids = [];
 
       for (const item of cleaned) {
+        // Match on the REAL date when we have one. Matching on the display
+        // string would make next September's import overwrite this September's
+        // week, since "9月 16日" repeats every year.
         const existing = await tx.midweekWeek.findFirst({
-          where: {
-            congregationId: user.congregationId,
-            OR: [
-              ...(item.week.weekStart ? [{ weekStart: item.week.weekStart }] : []),
-              { date: item.week.date },
-            ],
-          },
+          where: item.week.isoDate
+            ? { congregationId: user.congregationId, isoDate: item.week.isoDate }
+            : {
+                congregationId: user.congregationId,
+                OR: [
+                  ...(item.week.weekStart ? [{ weekStart: item.week.weekStart }] : []),
+                  { date: item.week.date },
+                ],
+              },
           orderBy: { id: 'asc' },
         });
 

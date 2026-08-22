@@ -67,7 +67,9 @@ model MidweekWeek {
   id             Int          @id @default(autoincrement())
   congregationId Int
   congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
-  date           String
+  date           String       // display label, e.g. "6月 3日" (no year — see isoDate)
+  isoDate        String?      // real meeting date "YYYY-MM-DD"; the authoritative one
+  weekStartIso   String?      // real Monday date "YYYY-MM-DD" for schedule reapply
   dateLabel      String?
   weekStart      String?      // original EPUB Monday date — used for schedule reapply
   weekdayPill    String       @default("星期三 · 19:30")
@@ -88,7 +90,10 @@ model MidweekWeek {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  @@unique([congregationId, date])
+  // Keyed on the REAL date: the display string repeats every year, so a
+  // congregation holding two service years would collide on "9月 16日".
+  @@unique([congregationId, isoDate])
+  @@index([congregationId, isoDate])
 }
 
 model Part {
@@ -155,7 +160,8 @@ model WeekendRow {
   congregationId Int
   congregation   Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
   sortOrder      Int          @default(0)
-  date           String
+  date           String       // display label, e.g. "8/9" (no year — see isoDate)
+  isoDate        String?      // real meeting date "YYYY-MM-DD"; the authoritative one
   type           String       @default("schedule")
   no             String?
   topic          String?

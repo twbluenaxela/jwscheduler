@@ -38,6 +38,8 @@ function mapWeek(week) {
   return {
     id: week.id,
     date: week.date,
+    isoDate: week.isoDate ?? undefined,
+    weekStartIso: week.weekStartIso ?? undefined,
     dateLabel: week.dateLabel ?? undefined,
     weekStart: week.weekStart ?? undefined,
     weekdayPill: week.weekdayPill,
@@ -79,6 +81,7 @@ function mapWeekendRow(row) {
   return {
     _id: row.id,
     date: row.date,
+    isoDate: row.isoDate ?? undefined,
     type: row.type,
     no: row.no ?? '',
     topic: row.topic ?? '',

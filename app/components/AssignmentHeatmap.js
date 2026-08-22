@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   buildHeatmapRows, buildPersonDetail, buildPersonSummary,
-  weeksInMonth, windowLabel,
+  weeksInMonth, windowLabel, monthKey, weekOfMonth,
 } from '../lib/heatmap.mjs';
 import {
   captureBox, triggerDownload, jpegDataUrlToImage, jpegImagesToPdfBlob,
@@ -175,6 +175,9 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
   const { gender, rangeKey, offset } = view;
   const opt = rangeOptOf(rangeKey);
   const today = useMemo(() => new Date(), []);
+  // A continuous tinted stripe down the current month's column, so you can still
+  // tell where "now" is after scrolling far down the roster.
+  const nowKey = monthKey(today.getFullYear(), today.getMonth() + 1);
 
   const data = useMemo(
     () => buildHeatmapRows(people, midweekWeeks, {}, weekendRows, {
@@ -236,17 +239,23 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
   const attnCount = rows.filter((r) => r.rank > 0).length;
   const noteText = `${monthMode ? '一格一個月' : '一格一週'}，${canHover ? '移到格子上' : '點一下'}看內容`;
 
-  function bandStyle(mi) {
+  function bandStyle(m, mi) {
+    const isNow = m.key === nowKey;
     return {
       display: 'flex', alignItems: 'center', gap, flex: 'none',
       padding: `0 ${pad}px`, height: rowH,
-      background: monthMode ? 'transparent' : (mi % 2 ? 'var(--hm-band-tint)' : 'transparent'),
+      background: isNow
+        ? 'var(--hm-now-tint)'
+        : (monthMode ? 'transparent' : (mi % 2 ? 'var(--hm-band-tint)' : 'transparent')),
     };
   }
 
   function monthHeaderStyle(m) {
     const cells = monthMode ? 1 : weeksInMonth(m.year, m.month);
-    return { flex: 'none', width: cells * (size + gap) - gap + pad * 2, textAlign: 'center' };
+    return {
+      flex: 'none', width: cells * (size + gap) - gap + pad * 2, textAlign: 'center',
+      background: monthKey(m.year, m.month) === nowKey ? 'var(--hm-now-tint)' : undefined,
+    };
   }
 
   return (
@@ -282,7 +291,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
         <div className="hm-colhead" style={{ height: isMobile ? 30 : 34 }}>
           <div className="hm-colhead__name" style={{ width: nameW }}>姓名</div>
           {win.map((m) => {
-            const isNow = m.month === today.getMonth() + 1 && m.year === today.getFullYear();
+            const isNow = monthKey(m.year, m.month) === nowKey;
             return (
               <div key={`${m.year}-${m.month}`} ref={isNow ? nowColRef : undefined} style={monthHeaderStyle(m)}>
                 <span className={`hm-colhead__month${isNow ? ' hm-colhead__month--now' : ''}`}>
@@ -321,7 +330,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
                 </button>
 
                 {r.monthly.map((m, mi) => (
-                  <div key={m.key} style={bandStyle(mi)}>
+                  <div key={m.key} style={bandStyle(m, mi)}>
                     {monthMode ? (
                       <Cell
                         cellKey={`${r.person.name}-m-${m.key}`}
@@ -538,6 +547,9 @@ function PersonDetail({ person, midweekWeeks, weekendRows, getAssign, view, onBa
 
   const genderLabel = person.g === 'F' ? '姊妹' : '弟兄';
   const periodLabel = windowLabel(detail.win, opt.mode);
+  const now = useMemo(() => new Date(), []);
+  const nowKey = monthKey(now.getFullYear(), now.getMonth() + 1);
+  const nowWeek = weekOfMonth(now);
   const size = isMobile ? 11 : 20;
   const bandGap = isMobile ? 3 : 4;
 
@@ -596,7 +608,11 @@ function PersonDetail({ person, midweekWeeks, weekendRows, getAssign, view, onBa
             <div className="hm-grid52-scroll" onMouseLeave={canHover ? close : undefined}>
             <div className="hm-grid52">
               {detail.monthly.map((m) => (
-                <div key={m.key} className="hm-grid52__band" style={{ gap: bandGap }}>
+                <div
+                  key={m.key}
+                  className={`hm-grid52__band${m.key === nowKey ? ' is-now' : ''}`}
+                  style={{ gap: bandGap }}
+                >
                   {m.weeks.map((wEvts, wi) => {
                     const dbl = wEvts.length >= 2;
                     const live = m.covered && wEvts.length > 0;
@@ -624,7 +640,7 @@ function PersonDetail({ person, midweekWeeks, weekendRows, getAssign, view, onBa
               {detail.monthly.map((m) => (
                 <span
                   key={m.key}
-                  className="hm-grid52__mlbl"
+                  className={`hm-grid52__mlbl${m.key === nowKey ? ' is-now' : ''}`}
                   style={{ width: m.weeks.length * (size + bandGap) - bandGap }}
                 >{m.month}</span>
               ))}
@@ -636,7 +652,7 @@ function PersonDetail({ person, midweekWeeks, weekendRows, getAssign, view, onBa
             <div className="hm-person__lbl">每月件數 · 褐色為同月兩份以上</div>
             <div className="hm-bars">
               {detail.monthly.map((m) => (
-                <div key={m.key} className="hm-bars__col">
+                <div key={m.key} className={`hm-bars__col${m.key === nowKey ? ' is-now' : ''}`}>
                   <span className="hm-bars__n">{m.covered ? m.n : '–'}</span>
                   <div
                     className={`hm-bars__bar ${m.flagN >= 2 ? 'is-warn' : !m.covered ? 'hm-cell--nodata' : `hm-cell--${Math.min(m.n, 3)}`}`}

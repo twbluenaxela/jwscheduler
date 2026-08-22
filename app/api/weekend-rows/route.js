@@ -11,7 +11,7 @@ export async function POST(request) {
     if (!user?.congregationId) return NextResponse.json({ error: '未加入會眾' }, { status: 403 });
     if (!canEdit(user.role)) return NextResponse.json({ error: '訪客無法修改' }, { status: 403 });
 
-    const { type = 'schedule', date = '' } = await request.json();
+    const { type = 'schedule', date = '', isoDate = null } = await request.json();
 
     const last = await db.weekendRow.findFirst({
       where: { congregationId: user.congregationId },
@@ -25,7 +25,9 @@ export async function POST(request) {
         congregationId: user.congregationId,
         sortOrder,
         type,
-        date, no: '', topic: '', cong: '',
+        date,
+        isoDate: typeof isoDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? isoDate : null,
+        no: '', topic: '', cong: '',
         speaker: '', chair: '', wt: '', read: '',
         host: '', away: '', label: '', note: '',
       },

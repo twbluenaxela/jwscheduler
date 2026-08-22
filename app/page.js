@@ -14,6 +14,7 @@ import AssignSheet from './components/AssignSheet';
 import Toast from './components/Toast';
 import { midweekWeeks as seedWeeks, weekendData as seedWeekendData } from './data/index';
 import { buildPastHistory, slotRefDate } from './lib/pastHistory.mjs';
+import { parseIsoDate, toIsoDate, resolveRowDate } from './lib/cnDate.mjs';
 import { buildPairIndex, collectMidweekPairs, counterpartName } from './lib/pairHistory.mjs';
 
 const DAY_NAMES = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
@@ -27,20 +28,31 @@ function shiftDate(dateStr, offsetDays) {
   return `${d.getMonth() + 1}月 ${d.getDate()}日`;
 }
 
+// Same shift, on the unambiguous date. Keeps isoDate in step with `date`
+// whenever the congregation's meeting day changes.
+function shiftIso(iso, offsetDays) {
+  const base = parseIsoDate(iso);
+  if (!base) return null;
+  base.setDate(base.getDate() + (offsetDays || 0));
+  return toIsoDate(base);
+}
+
 function dateKey(dateStr) {
   const m = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
   return m ? parseInt(m[1]) * 100 + parseInt(m[2]) : 0;
 }
 
-function parseChineseDate(dateStr) {
-  const m = String(dateStr ?? '').match(/(\d+)月\s*(\d+)日/);
-  if (!m) return null;
-  const mo = parseInt(m[1]), day = parseInt(m[2]);
-  const now = new Date();
-  let year = now.getFullYear();
-  if (mo < now.getMonth() + 1 - 6) year++;
-  else if (mo > now.getMonth() + 1 + 6) year--;
-  return new Date(year, mo - 1, day);
+// Accepts a week/row object (preferred — uses its stored isoDate) or a bare
+// legacy string. Delegates to the ONE resolver in cnDate.mjs so this screen can
+// never disagree with the suggest engine or the heatmap about a date.
+function parseChineseDate(weekOrStr) {
+  return resolveRowDate(weekOrStr);
+}
+
+// The week's Monday as a real date — stored isoDate first, legacy string last.
+function weekStartDate(w) {
+  if (!w) return null;
+  return parseIsoDate(w.weekStartIso) ?? resolveRowDate(w.weekStart || w.date);
 }
 
 function findCurrentWeekIndex(weeks) {
@@ -49,7 +61,7 @@ function findCurrentWeekIndex(weeks) {
   today.setHours(0, 0, 0, 0);
   let fallback = 0;
   for (let i = 0; i < weeks.length; i++) {
-    const start = parseChineseDate(weeks[i].weekStart || weeks[i].date);
+    const start = weekStartDate(weeks[i]);
     if (!start) continue;
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
@@ -221,8 +233,8 @@ export default function App() {
 
         setPeople(data.people ?? []);
         const loadedWeeks = (data.midweekWeeks ?? []).slice().sort((a, b) => {
-          const da = parseChineseDate(a.weekStart || a.date);
-          const db = parseChineseDate(b.weekStart || b.date);
+          const da = weekStartDate(a);
+          const db = weekStartDate(b);
           if (!da && !db) return 0;
           if (!da) return 1;
           if (!db) return -1;
@@ -334,35 +346,32 @@ export default function App() {
 
   const addWeekendRow = useCallback(async (type = 'schedule') => {
     const tempId = `temp-${nextWeekendId.current++}`;
-    const defaultDate = (() => {
+    // A week after the last row, or the coming Sunday. Resolved through the
+    // shared date layer so a stored isoDate wins over the year-less string.
+    const { date: defaultDate, isoDate: defaultIso } = (() => {
       for (let i = weekendRows.length - 1; i >= 0; i--) {
-        const m = String(weekendRows[i].date ?? '').match(/^(\d+)\/(\d+)$/);
-        if (m) {
-          const now = new Date();
-          let yr = now.getFullYear();
-          const mo = parseInt(m[1]);
-          if (mo < now.getMonth() + 1 - 6) yr++;
-          else if (mo > now.getMonth() + 1 + 6) yr--;
-          const d = new Date(yr, mo - 1, parseInt(m[2]));
+        const prev = resolveRowDate(weekendRows[i]);
+        if (prev) {
+          const d = new Date(prev);
           d.setDate(d.getDate() + 7);
-          return `${d.getMonth() + 1}/${d.getDate()}`;
+          return { date: `${d.getMonth() + 1}/${d.getDate()}`, isoDate: toIsoDate(d) };
         }
       }
       const d = new Date();
       const toSun = (7 - d.getDay()) % 7 || 7;
       d.setDate(d.getDate() + toSun);
-      return `${d.getMonth() + 1}/${d.getDate()}`;
+      return { date: `${d.getMonth() + 1}/${d.getDate()}`, isoDate: toIsoDate(d) };
     })();
     const optimistic = type === 'event'
-      ? { _id: tempId, date: defaultDate, type: 'event', label: '', note: '' }
-      : { _id: tempId, date: defaultDate, no: '', topic: '', cong: '', speaker: '', chair: '', wt: '', read: '', host: '', away: '' };
+      ? { _id: tempId, date: defaultDate, isoDate: defaultIso, type: 'event', label: '', note: '' }
+      : { _id: tempId, date: defaultDate, isoDate: defaultIso, no: '', topic: '', cong: '', speaker: '', chair: '', wt: '', read: '', host: '', away: '' };
     setWeekendRows(prev => [...prev, optimistic]);
     try {
       const token = await getToken();
       const res = await fetch('/api/weekend-rows', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, date: defaultDate }),
+        body: JSON.stringify({ type, date: defaultDate, isoDate: defaultIso }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -675,7 +684,12 @@ export default function App() {
                 setMidweekWeeks(prev => prev.map(w => {
                   if (!w.weekStart) return w;
                   const { dayOffset, time } = getEffectiveSchedule(w.weekStart, congSettings);
-                  return { ...w, date: shiftDate(w.weekStart, dayOffset), weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}` };
+                  return {
+                    ...w,
+                    date: shiftDate(w.weekStart, dayOffset),
+                    isoDate: shiftIso(w.weekStartIso, dayOffset) ?? w.isoDate,
+                    weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}`,
+                  };
                 }));
               }}
             />
@@ -690,14 +704,27 @@ export default function App() {
                 setMidweekWeeks(prev => prev.map(w => {
                   if (!w.weekStart) return w;
                   const { dayOffset, time } = getEffectiveSchedule(w.weekStart, congSettings);
-                  return { ...w, date: shiftDate(w.weekStart, dayOffset), weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}` };
+                  return {
+                    ...w,
+                    date: shiftDate(w.weekStart, dayOffset),
+                    isoDate: shiftIso(w.weekStartIso, dayOffset) ?? w.isoDate,
+                    weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}`,
+                  };
                 }));
               }}
               onImportWeeks={async (weeks) => {
                 const adjusted = weeks.map(w => {
                   const weekStart = w.date; // EPUB date is always the Monday
                   const { dayOffset, time } = getEffectiveSchedule(weekStart, congSettings);
-                  return { ...w, weekStart, date: shiftDate(weekStart, dayOffset), weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}` };
+                  return {
+                    ...w,
+                    weekStart,
+                    weekStartIso: w.weekStartIso ?? null,
+                    date: shiftDate(weekStart, dayOffset),
+                    // The real meeting date, derived from the EPUB's real Monday.
+                    isoDate: shiftIso(w.weekStartIso, dayOffset),
+                    weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}`,
+                  };
                 });
                 const savedWeeks = await saveImportedWeeks(adjusted);
                 const merged = [...midweekWeeks];
@@ -709,8 +736,8 @@ export default function App() {
                   else merged.push(w);
                 }
                 merged.sort((a, b) => {
-                  const da = parseChineseDate(a.weekStart || a.date);
-                  const db = parseChineseDate(b.weekStart || b.date);
+                  const da = weekStartDate(a);
+                  const db = weekStartDate(b);
                   if (!da && !db) return 0;
                   if (!da) return 1;
                   if (!db) return -1;
