@@ -65,6 +65,22 @@ test('說明：已連結者收到指令清單', async () => {
   assert.equal(replies[0].text, HELP_LINKED);
 });
 
+test('說明：日文/簡體字形（説明・说明）也視為指令', async () => {
+  for (const variant of ['説明', '说明', 'HELP', '帮助']) {
+    const db = makeFakeDb(baseSeed);
+    const { replies, reply } = replySpy();
+    await handleMessage(msg('U-wang', variant), { db, reply, now: NOW });
+    assert.equal(replies[0].text, HELP_LINKED, `variant: ${variant}`);
+  }
+});
+
+test('查詢：簡體字形「我的安排」變體也視為查詢', async () => {
+  const db = makeFakeDb(baseSeed);
+  const { replies, reply } = replySpy();
+  await handleMessage(msg('U-wang', '节目查询'), { db, reply, now: NOW });
+  assert.match(replies[0].text, /目前你沒有排定的安排|你目前的安排/);
+});
+
 test('已連結但非指令：回覆連結狀態與可用指令', async () => {
   const db = makeFakeDb(baseSeed);
   const { replies, reply } = replySpy();

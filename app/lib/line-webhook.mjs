@@ -8,6 +8,28 @@ import { collectAssignments } from './assignments.mjs';
 export const QUERY_KEYWORDS = ['我的安排', '查詢安排', '安排查詢', '節目查詢'];
 export const HELP_KEYWORDS = ['說明', '幫助', '指令', 'help', '?', '？'];
 
+// Phone IMEs hand back variant glyphs for characters our keywords spell the
+// traditional way — a user asking for help types 説明 (U+8AAC), not 說明
+// (U+8AAA), and the bot fell silent. Fold the variants of the characters that
+// actually appear in the keyword tables before matching. Only keyword matching
+// is normalized: congregation and person lookups keep the raw text, because a
+// name must still match the roster exactly.
+const KEYWORD_VARIANTS = { 説: '說', 说: '說', 帮: '幫', 询: '詢', 节: '節', 单: '單' };
+
+export function normalizeKeyword(text) {
+  return text.toLowerCase().replace(/[説说帮询节单]/g, (c) => KEYWORD_VARIANTS[c]);
+}
+
+export function isHelpText(text) {
+  const t = normalizeKeyword(text);
+  return HELP_KEYWORDS.some((kw) => t === normalizeKeyword(kw));
+}
+
+export function isQueryText(text) {
+  const t = normalizeKeyword(text);
+  return QUERY_KEYWORDS.some((kw) => t.includes(normalizeKeyword(kw)));
+}
+
 export const HELP_LINKED = `📋 可用指令：
 
 ▸ 我的安排 — 查詢你目前所有未來排班
@@ -50,8 +72,8 @@ export async function handleMessage(event, { db, reply, now }) {
   });
 
   if (linked) {
-    const isHelp = HELP_KEYWORDS.some((kw) => text === kw);
-    const isQuery = QUERY_KEYWORDS.some((kw) => text.includes(kw));
+    const isHelp = isHelpText(text);
+    const isQuery = isQueryText(text);
     if (isHelp) {
       await reply(event.replyToken, HELP_LINKED);
     } else if (isQuery) {
@@ -100,7 +122,7 @@ export async function handleMessage(event, { db, reply, now }) {
   }
 
   // ── Help for unlinked users ────────────────────────────────────────────────
-  if (HELP_KEYWORDS.some((kw) => text === kw)) {
+  if (isHelpText(text)) {
     await reply(event.replyToken, HELP_UNLINKED);
     return;
   }
