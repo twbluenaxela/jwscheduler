@@ -203,8 +203,23 @@ app/
                          "same kind of turn" table (`ministry`+`ministrytalk`,
                          `reading`+`cbsread`). It lives here, not in suggest.js, so the ✦
                          engine and the manual picker share one definition
+    appointments.mjs   — 職務 options (`OFFICE_OPTIONS`, `DEFAULT_OFFICE`) + the one rule
+                         that depends on them: `isPioneer` / `pioneerBonus` /
+                         `PIONEER_GAP_BONUS_DAYS` (7). 先驅 is a privilege, not really an
+                         appointment, but the congregation asked for ONE flat dropdown, so
+                         it is a value available to 弟兄 and 姊妹 alike. The preference is
+                         expressed in the rankers' own unit — a 先驅 ranks as though they
+                         had been free a week longer — so it wins ties and near-ties but
+                         never outranks someone genuinely much less used, and the crowd/
+                         monthly demotions and S-38 gender filters are untouched. Lives in
+                         its own module because PeoplePage, suggest.js and candidates.mjs
+                         all have to agree (same reason FAMILIES lives in partTypes.mjs)
     icalExport.js      — pure iCal (.ics) generator; exports generateIcal(assignments,
                          personName, congCode) → RFC-5545 string and downloadIcal(str, filename)
+    heatmapExport.js   — download layer for the 指派分布 匯出 menu (mirrors weekendExport.js):
+                         `downloadHeatmapGridXlsx` / `downloadHeatmapPersonXlsx` /
+                         `getHeatmapExportFilename`, wrapping the pure row builders in
+                         heatmap.mjs with `buildXlsxBuffer` + `triggerDownload`
     heatmap.mjs        — pure, DB-free 指派分布 (assignment distribution heatmap) helpers for
                          OverviewPage's 指派分布 tab.
                          **It does NOT parse dates itself** — it imports `parseCnDate` from
@@ -228,6 +243,13 @@ app/
                          `12 個月未派` purely because those months had no data, which
                          corrupted the attention ranking — and render as 無資料 rather than
                          as an empty ramp cell.
+                         **Export rows** (`buildGridExportRows` / `buildGridText` /
+                         `buildPersonExportRows` / `attentionNote`): pure, so the on-screen
+                         grid, the copied text and the spreadsheet cannot drift — the same
+                         reason `buildPersonSummary` lives here. `windowLabel` prints YEARS
+                         (`2026年3月 – 2027年2月`): rolling windows are centred, so 12 months
+                         almost always cross a year boundary and the year-less form read as
+                         a meaningless "3月 – 2月".
                          Flag rules: 姊妹 flag on ANY two parts in a month; 弟兄 only on two
                          within 用心準備傳道工作 (傳道示範/傳道演講/助手/經文朗讀, matched by
                          substring on the assembled label), so a brother's 寶藏演講 +
@@ -313,9 +335,15 @@ app/
                          mouseenter AND click, so wiring both made the bubble flash open and
                          shut. Touch gets click-to-toggle; any press outside a cell, plus any
                          scroll or resize, dismisses it.
-                         **Export**: the same set as the meetings page (匯出 JPG / 複製圖片 /
-                         複製文字 / 下載 PDF), reusing `captureBox` / `triggerDownload` /
-                         `jpegDataUrlToImage` / `jpegImagesToPdfBlob` from `midweekExport.js`.
+                         **Export**: `HeatmapExportMenu` serves BOTH views (匯出 JPG / 複製
+                         圖片 / 複製文字 / 匯出 Excel / 下載 PDF) — they differ only in the
+                         `buildText` / `buildXlsx` they hand it and the filename. Reuses
+                         `captureBox` / `triggerDownload` / `jpegDataUrlToImage` /
+                         `jpegImagesToPdfBlob` from `midweekExport.js` and the row builders
+                         in `heatmap.mjs`; Excel goes through `heatmapExport.js`.
+                         The grid card is height-capped (`.hm-root { max-height }`) so
+                         `.hm-tablewrap` is a real scrollport and the sticky month header
+                         actually follows you down the roster — see "What NOT to do".
                          There is NO 列印一頁 — `window.print()` produced a two-page PDF whose
                          first page was just the name. Capture adds `is-capturing` to the
                          card, which unpins every inner scroll area so html-to-image gets the
@@ -609,7 +637,10 @@ mechanism. S-38 also confirms: helpers
 same gender as the student (or family), 解釋自己的信仰 gender depends on 示範 vs 演講
 variant, ministry 演講 brothers-only — all encoded in suggest.js + partTypes.mjs.
 
-職務 (appt) options for brothers (M): `分區監督`, `長老`, `助理僕人`, `傳道員`, `未受浸傳道員`. For sisters (F): `傳道員`, `未受浸傳道員`.
+職務 (appt) options for brothers (M): `分區監督`, `長老`, `助理僕人`, `先驅`, `傳道員`,
+`未受浸傳道員`. For sisters (F): `先驅`, `傳道員`, `未受浸傳道員`. The list lives in
+`app/lib/appointments.mjs`, not in PeoplePage — the ✦ engine and the manual picker both give
+先驅 a small ranking nudge and must read the same table.
 
 `AssignSheet` builds candidates from the live `people` state (loaded from DB), not from `POOL`.
 
@@ -732,7 +763,11 @@ for the webhook, a `reply` spy + injectable `now`. Coverage:
 - `pairHistory.test.mjs` — pair keys, window boundaries (inclusive at 180 days), pairing ON
   refDate ignored, `collectMidweekPairs` / `counterpartName`.
 - `candidates.test.mjs` — the manual picker's ranking, including the assertion that it and
-  `suggestMidweekWeek` return the SAME person for a 朗讀-family slot.
+  `suggestMidweekWeek` return the SAME person for a 朗讀-family slot, and that both apply the
+  先驅 nudge identically.
+- `heatmap.test.mjs` — the 指派分布 derivation: agreement with the shared `cnDate` parser,
+  centred windows, coverage/idle rules, the slot-ID guard (a live `getAssign` override must beat
+  the `part.assign` snapshot), `windowLabel`, and the export row/text builders.
 
 Tests are non-vacuous (verified by mutation: breaking a label produced the expected failures).
 
@@ -829,6 +864,24 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   `coveredMonths` marks which months have data; uncovered ones are excluded from idle runs and
   render as 無資料. Without this every person gets a phantom `12 個月未派`, which ruins the
   attention ranking the whole view exists for
+- Do not build a midweek slot ID from the bare `part.id` — it is the `partKey` (`t0`), and
+  the real key is `mw{weekId}_{partKey}_{n}`. `heatmap.mjs` did exactly this, so its lookup
+  never matched a live assignment and every part silently fell back to `part.assign`, the
+  snapshot loaded at mount: edits to 人員 or the meetings page only appeared in 指派分布 after
+  a page refresh. A fixture that sets only `assign` cannot catch it — `heatmap.test.mjs` now
+  asserts a `getAssign` override BEATS the snapshot. (`OverviewPage` is safe because its local
+  `ga` prepends the week prefix.)
+- Do not remove the height cap on `.hm-root`. `.hm-tablewrap` has `overflow: auto` and so is
+  its own scrollport; without a bounded card height it never scrolls vertically, the document
+  scrolls instead, and `position: sticky` on `.hm-colhead` never engages — the month labels
+  scrolled away and a screenshot of the middle of the roster had no header.
+- Do not give the 指派分布 exports their own row builders or filename rules. The builders are
+  pure and live in `heatmap.mjs` (shared with 複製文字, unit-tested); `heatmapExport.js` only
+  turns them into a file, and images use the SAME `getHeatmapExportFilename` as the spreadsheet
+- Do not turn the 先驅 preference into an exclusion or a separate filter. It is a bonus on the
+  fairness gap (`pioneerBonus`, 7 days) applied inside both rankers, so it can win a tie and
+  lose to a genuinely wider gap; the S-38 gender rules and crowd/monthly demotions run after it
+  and still decide. `suggest.test.mjs` pins both directions
 - Do not put the heatmap tooltip (or the 匯出 dropdown) back to `position: absolute`. Both live
   inside scrolling, rounded containers that clip them — the bubble was cut off on the top row and
   the menu opened off-screen. Both are `position: fixed` and placed from a measured rect
@@ -858,4 +911,4 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 | **Phase 4 — Suggestions** | Done — recency-scoring algorithm in `app/lib/suggest.js` (no AI). Ghost pills (dashed blue border, italic) for unconfirmed suggestions. ✦ button in midweek navstrip fills all empty slots; ✦ button per weekend row fills speaker/chair/wt/read. 接受全部/清除建議 toolbar batch actions. Ghosts clear on edit-mode exit and week navigation. Part-ID bug fix (p.dbId not p.id). Weekend row default date = last row + 7 days. |
 | **Phase 5 — iCal Export** | Done — `app/lib/icalExport.js` generates RFC-5545 `.ics` (Taiwan UTC+8, stable UIDs, 1h45m events). "↓ iCal (N)" button in PeoplePage 未來安排 section downloads `{name}-schedule.ics` for import into Outlook/Google Calendar/Apple Calendar. |
 | **Phase 6 — PWA + UX polish** | Done — installable PWA (`app/manifest.js` + `public/sw.js` network-first worker + `PWARegister`, themeColor/apple-web-app meta in `layout.js`). Plus: clear/留空 button in AssignSheet; serialized people writes (quals no longer self-deselect); mobile people detail renders inline under the tapped card; mobile row dot+partnum no longer squished; silent client-side PDF + 複製文字 in meetings export menu; wired ImportPage 匯出 cards with 全部/本月/自訂 range. Ministry/CBS parts always show two assignment slots (student + helper) with correct role labels; edit-mode ＋/− toggle to add/remove helper slot per part; LINE notifications include role labels (學生/助手/主持/朗讀) and CBS textbook references. 匯出 page JPG/PDF/列印 now screenshot real off-screen MidweekWeek cards (`exportNodes*`) instead of the removed hand-drawn canvas; PDF pages sized to the card; PeoplePage cards toggle-to-deselect with an animated recenter when nothing is selected. 總覽 has a 最近變更 tab backed by a `ChangeLog` table written best-effort on every assignment edit (assignments + weekend-rows routes) — decoupled from 發佈通知 (which is unchanged). |
-| **Phase 7 — Assignment heatmap** | Done — 總覽 ▸ 指派分布 (canEdit-only): a contributions-style grid (`AssignmentHeatmap.js` + `lib/heatmap.mjs`), one row per person, one cell per month (or per week at 3 個月), shaded by assignment count. Range chips 3/6/12 個月 + 本服務年度; rolling windows are **centred on the current month** because schedule dates carry no year and the shared `cnDate` parser resolves ~5 months back but ~7 forward — so half past / half upcoming is both what the data supports and what a scheduler needs (mirrors the ✦ engine's bidirectional fairness gap). Months with no imported meetings render as 無資料 and are excluded from idle detection. Gender filter, attention-first sort (same-month doubles, then idle runs). Tapping a row opens 個人檢視 over the same window: week grid, monthly bars, dated record list with year dividers, 助手搭配 tally, plain-language summary, and the meetings-page export set (JPG / 複製圖片 / 複製文字 / PDF). Squares are fit-to-width; names are never truncated. Read-only by design. Encodes the member-feedback rules: 姊妹 flag on any two parts in a month, 弟兄 only within the 用心準備傳道工作 bucket. |
+| **Phase 7 — Assignment heatmap** | Done — 總覽 ▸ 指派分布 (canEdit-only): a contributions-style grid (`AssignmentHeatmap.js` + `lib/heatmap.mjs`), one row per person, one cell per month (or per week at 3 個月), shaded by assignment count. Range chips 3/6/12 個月 + 本服務年度; rolling windows are **centred on the current month** because schedule dates carry no year and the shared `cnDate` parser resolves ~5 months back but ~7 forward — so half past / half upcoming is both what the data supports and what a scheduler needs (mirrors the ✦ engine's bidirectional fairness gap). Months with no imported meetings render as 無資料 and are excluded from idle detection. Gender filter, attention-first sort (same-month doubles, then idle runs). Tapping a row opens 個人檢視 over the same window: week grid, monthly bars, dated record list with year dividers, 助手搭配 tally, plain-language summary, and the meetings-page export set (JPG / 複製圖片 / 複製文字 / PDF). Squares are fit-to-width; names are never truncated. Read-only by design. Encodes the member-feedback rules: 姊妹 flag on any two parts in a month, 弟兄 only within the 用心準備傳道工作 bucket. Exports (JPG / 複製圖片 / 複製文字 / Excel / PDF) are available on BOTH the grid and the person view via one shared `HeatmapExportMenu`; the month header stays pinned while the roster scrolls, so a screenshot of any part of the list carries its labels. |

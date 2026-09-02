@@ -4,6 +4,7 @@ import { parseCnDate } from './cnDate.mjs';
 import {
   serviceYearStartYear, buildMonthWindow, coveredMonths, collectPersonEvents,
   buildHeatmapRows, buildPersonDetail, buildPersonSummary, weekOfMonth, monthKey,
+  windowLabel, buildGridExportRows, buildGridText, buildPersonExportRows, attentionNote,
 } from './heatmap.mjs';
 
 const REF = new Date(2026, 7, 22); // 2026-08-22
@@ -210,4 +211,92 @@ test('coveredMonths ignores event and suspended weekend rows', () => {
   assert.ok(covered.has(monthKey(2026, 8)));
   assert.ok(!covered.has(monthKey(2026, 9)));
   assert.ok(!covered.has(monthKey(2026, 10)));
+});
+
+// ── The regression guard for the "I have to refresh" bug ─────────────────────
+// Slot IDs are `mw{weekId}_{partKey}_{n}`. This module built them from the bare
+// partKey, so the lookup never matched and every part silently fell back to
+// `part.assign` — the snapshot loaded at mount. Live edits therefore only
+// appeared in 指派分布 after a page reload. Fixtures that set only `assign`
+// cannot catch this: the override MUST win.
+test('a live getAssign override beats the part.assign snapshot', () => {
+  const weeks = [mkWeek(7, '8月 5日', {
+    ministry: [{ id: 'm0', title: '傳道示範', roleLabel: '學生/助手', assign: ['舊學生', '舊助手'] }],
+  })];
+  const assignments = { mw7_m0_0: '新學生', mw7_m0_1: '新助手' };
+  const ga = (slotId, fallback) => (slotId in assignments ? assignments[slotId] : (fallback ?? ''));
+
+  const evts = collectPersonEvents(weeks, {}, [], REF, ga);
+  assert.ok(evts.get('新學生'), '新學生 must appear — the reassignment is live');
+  assert.equal(evts.get('新學生')[0].partner, '新助手');
+  assert.equal(evts.get('舊學生'), undefined, '舊學生 was replaced and must be gone');
+
+  // Clearing a slot must remove the person too, not fall back to the snapshot.
+  const cleared = collectPersonEvents(weeks, {}, [], REF, (id, fb) => (id === 'mw7_m0_0' ? '' : (fb ?? '')));
+  assert.equal(cleared.get('舊學生'), undefined);
+});
+
+test('the assignments-map form of the same override also wins', () => {
+  const weeks = [mkWeek(7, '8月 5日', {
+    treasures: [{ id: 't0', title: '寶藏演講', assign: ['舊'] }],
+  })];
+  const evts = collectPersonEvents(weeks, { mw7_t0_0: '新' }, [], REF);
+  assert.ok(evts.get('新'));
+  assert.equal(evts.get('舊'), undefined);
+});
+
+// ── Window label ─────────────────────────────────────────────────────────────
+// Rolling windows are CENTRED on the current month, so 12 months almost always
+// cross a year boundary — the year-less "3月 – 2月" read as random noise.
+test('windowLabel carries years, and collapses within one year', () => {
+  const wide = buildMonthWindow({ mode: 'rolling', range: 12, refDate: new Date(2026, 8, 2) });
+  assert.equal(windowLabel(wide, 'rolling'), '2026年3月 – 2027年2月');
+
+  const narrow = buildMonthWindow({ mode: 'rolling', range: 3, refDate: new Date(2026, 6, 1) });
+  assert.equal(windowLabel(narrow, 'rolling'), '2026年6月 – 8月');
+
+  const sy = buildMonthWindow({ mode: 'serviceYear', refDate: REF });
+  assert.equal(windowLabel(sy, 'serviceYear'), '2025–2026 服務年度');
+  assert.equal(windowLabel([], 'rolling'), '');
+});
+
+// ── Export rows ──────────────────────────────────────────────────────────────
+test('grid export rows mirror the grid: months, 件數 and the 需要注意 note', () => {
+  const weeks = [
+    mkWeek(1, '7月 1日', { ministry: [{ id: 'm0', title: '傳道示範', roleLabel: '學生', assign: ['陳美惠'] }] }),
+    mkWeek(2, '7月 8日', { closePrayer: '陳美惠' }),
+  ];
+  const people = [{ name: '陳美惠', g: 'F' }];
+  const data = buildHeatmapRows(people, weeks, {}, [], { range: 3, refDate: REF });
+  const rows = buildGridExportRows(data, 'rolling');
+
+  // REF is 2026-08-22 and rolling windows are centred → 7月/8月/9月.
+  assert.deepEqual(rows[0], ['指派分布', '2026年7月 – 9月']);
+  assert.deepEqual(rows[2], ['姓名', '性別', '2026年7月', '2026年8月', '2026年9月', '件數', '需要注意']);
+  const chen = rows[3];
+  assert.equal(chen[0], '陳美惠');
+  assert.equal(chen[1], '姊妹');
+  assert.equal(chen[2], '2');
+  assert.equal(chen[3], '—', 'an uncovered month is 無資料, not a zero');
+  assert.equal(chen[chen.length - 2], '2');
+  assert.equal(chen[chen.length - 1], attentionNote(data.rows[0]));
+  assert.equal(chen[chen.length - 1], '同月 1 次重複');
+
+  const text = buildGridText(data, 'rolling');
+  assert.match(text, /2026年7月 – 9月 · 1 位/);
+  assert.match(text, /陳美惠（姊）　2 份　7月×2　⚠ 同月 1 次重複/);
+});
+
+test('person export rows carry full dates and the same summary as the screen', () => {
+  const weeks = [mkWeek(1, '7月 1日', {
+    ministry: [{ id: 'm0', title: '傳道示範', roleLabel: '學生/助手', assign: ['陳美惠', '張怡君'] }],
+  })];
+  const detail = buildPersonDetail('陳美惠', 'F', weeks, {}, [], { range: 3, refDate: REF });
+  const rows = buildPersonExportRows('陳美惠', 'F', detail);
+
+  assert.deepEqual(rows[0], ['陳美惠（姊妹）', '2026年7月 – 9月']);
+  assert.equal(rows[1][0], buildPersonSummary('陳美惠', 'F', detail));
+  const head = rows.findIndex((r) => r[0] === '日期');
+  assert.deepEqual(rows[head], ['日期', '項目', '搭檔']);
+  assert.deepEqual(rows[head + 1], ['2026/7/1', '傳道示範（學生）', '張怡君']);
 });

@@ -9,6 +9,7 @@
 import { CATS } from '../data/index.js';
 import { recentPairing } from './pairHistory.mjs';
 import { familyCats } from './partTypes.mjs';
+import { pioneerBonus } from './appointments.mjs';
 
 export function buildCandidates(people, catKey, jitter, spread, pastHistory, pair) {
   const c = CATS[catKey];
@@ -45,7 +46,10 @@ export function buildCandidates(people, catKey, jitter, spread, pastHistory, pai
           if (g != null && (anyGap === null || g < anyGap)) anyGap = g;
         }
       }
-      const gap = Math.min(d ?? 9999, u ?? 9999, famGap ?? 9999);
+      // Same 先驅 nudge the ✦ engine applies (appointments.mjs), in the same
+      // unit (days of gap) and before the weight curve, so the two entry points
+      // to this decision keep ranking on one rule.
+      const gap = Math.min(d ?? 9999, u ?? 9999, famGap ?? 9999) + pioneerBonus(p);
       let w = Math.pow(gap, spread);
       const recent = d !== null && d < 14;
       const soon = u !== null && u < 14;

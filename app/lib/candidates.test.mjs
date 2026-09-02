@@ -56,3 +56,26 @@ test('a cat in no family is unaffected by the family lookup', () => {
   assert.equal(ranked[0].n, '乙');
   assert.equal(ranked.find(c => c.n === '甲').viaFamily, null);
 });
+
+test('the 先驅 nudge is the same in the picker as in the engine', () => {
+  // Same tie as suggest.test.mjs: both entry points must prefer the 先驅.
+  const week = { id: 1, treasures: [{ id: 't0', cat: 'treasures', roleLabel: '學生' }], ministry: [], living: [] };
+  const people = [
+    brother('甲', ['寶藏演講']),
+    { ...brother('乙', ['寶藏演講']), appt: '先驅' },
+  ];
+  const weeks = [
+    { id: 9, date: '5月 6日', ministry: [], living: [], treasures: [{ id: 't0', cat: 'treasures', roleLabel: '學生' }] },
+    { id: 8, date: '5月 6日', ministry: [], living: [], treasures: [{ id: 't1', cat: 'treasures', roleLabel: '學生' }] },
+  ];
+  const assignments = { 'mw9_t0_0': '甲', 'mw8_t1_0': '乙' };
+
+  const hist = buildPastHistory(weeks, assignments, [], REF);
+  assert.equal(buildCandidates(people, 'treasures', false, 2, hist)[0].n, '乙');
+
+  const engineHistory = [
+    { name: '甲', cat: 'treasures', date: '5月 6日' },
+    { name: '乙', cat: 'treasures', date: '5月 6日' },
+  ];
+  assert.equal(suggestMidweekWeek(people, week, {}, engineHistory, REF)['mw1_t0_0'], '乙');
+});

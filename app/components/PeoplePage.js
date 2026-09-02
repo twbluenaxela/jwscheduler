@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getToken } from '../lib/auth-context';
 import { generateIcal, downloadIcal } from '../lib/icalExport';
 import { resolveRowDate } from '../lib/cnDate.mjs';
+import { OFFICE_OPTIONS, DEFAULT_OFFICE } from '../lib/appointments.mjs';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -35,12 +36,6 @@ const QUAL_OPTIONS = [
   '公眾演講',
 ];
 
-const OFFICE_OPTIONS = {
-  M: ['分區監督', '長老', '助理僕人', '傳道員', '未受浸傳道員'],
-  F: ['傳道員', '未受浸傳道員'],
-};
-
-const DEFAULT_OFFICE = '傳道員';
 
 // Prefers a row's stored isoDate; falls back to inferring a year from the
 // year-less display string. Was a third private copy of that inference — see

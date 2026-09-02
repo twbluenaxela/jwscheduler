@@ -480,3 +480,44 @@ test('你會怎麼說 discussion part suggests a 傳道討論主持 brother, not
   const res = suggestMidweekWeek(people, week, {}, [], REF);
   assert.equal(res['mw8_m2_0'], '長老甲', 'discussion parts are conducted by an elder/MS (S-38 ¶6)');
 });
+
+// ── 先驅 preference (appointments.mjs) ────────────────────────────────────────
+// The nudge is worth PIONEER_GAP_BONUS_DAYS (7) of extra rest: enough to win a
+// tie, never enough to outrank someone genuinely much less used.
+const pioneer = (name, quals) => ({ ...brother(name, quals), appt: '先驅' });
+
+test('先驅 wins a tie against an equally rested brother', () => {
+  const people = [brother('甲', ['傳道與生活主席']), pioneer('乙', ['傳道與生活主席'])];
+  const history = [
+    { name: '甲', cat: 'chairman', date: '5月 6日' },
+    { name: '乙', cat: 'chairman', date: '5月 6日' },
+  ];
+  const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF);
+  assert.equal(res['mw1_chairman'], '乙');
+});
+
+test('先驅 does NOT outrank a brother who is genuinely much less used', () => {
+  // 甲 last served 4 months ago, 乙 (先驅) last week. Seven days of bonus must
+  // not resurrect someone the fairness gap has just pushed down.
+  const people = [brother('甲', ['傳道與生活主席']), pioneer('乙', ['傳道與生活主席'])];
+  const history = [
+    { name: '甲', cat: 'chairman', date: '3月 4日' },
+    { name: '乙', cat: 'chairman', date: '6月 24日' },
+  ];
+  const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF);
+  assert.equal(res['mw1_chairman'], '甲');
+});
+
+test('先驅 does not override the S-38 gender rule', () => {
+  // Ministry 演講 parts are brothers-only; a 先驅 sister must stay ineligible.
+  const week = {
+    id: 1, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', title: '解釋自己的信仰 — 演講', roleLabel: '學生' }],
+  };
+  const people = [
+    { name: '姊妹先驅', g: 'F', quals: ['傳道演講', '傳道示範'], status: 'active', appt: '先驅' },
+    brother('弟兄', ['傳道演講']),
+  ];
+  const res = suggestMidweekWeek(people, week, {}, [], REF);
+  assert.equal(res['mw1_m0_0'], '弟兄');
+});

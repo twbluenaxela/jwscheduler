@@ -2,8 +2,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   buildHeatmapRows, buildPersonDetail, buildPersonSummary,
+  buildGridText, attentionNote,
   weeksInMonth, windowLabel, monthKey, weekOfMonth,
 } from '../lib/heatmap.mjs';
+import {
+  downloadHeatmapGridXlsx, downloadHeatmapPersonXlsx, getHeatmapExportFilename,
+} from '../lib/heatmapExport';
 import {
   captureBox, triggerDownload, jpegDataUrlToImage, jpegImagesToPdfBlob,
 } from '../lib/midweekExport';
@@ -171,6 +175,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
   const canHover = useCanHover();
   const [wrapRef, wrapWidth] = useMeasuredWidth();
   const nowColRef = useRef(null);
+  const cardRef = useRef(null);
 
   const { gender, rangeKey, offset } = view;
   const opt = rangeOptOf(rangeKey);
@@ -236,6 +241,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
     el.scrollIntoView({ inline: 'center', block: 'nearest' });
   }, [win, size, wrapWidth, wrapRef]);
 
+  const periodLabel = windowLabel(win, opt.mode);
   const attnCount = rows.filter((r) => r.rank > 0).length;
   const noteText = `${monthMode ? '一格一個月' : '一格一週'}，${canHover ? '移到格子上' : '點一下'}看內容`;
 
@@ -259,17 +265,17 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
   }
 
   return (
-    <div className="hm-root">
+    <div className="hm-root" ref={cardRef}>
       <div className="hm-header">
         <div>
           <div className="hm-title">指派分布</div>
           <div className="hm-subhead">
-            {windowLabel(win, opt.mode)} · {rows.length} 位 · {noteText}
+            {periodLabel} · {rows.length} 位 · {noteText}
             {coveredCount < win.length && `　·　${win.length - coveredCount} 個月尚無聚會資料`}
             {attnCount > 0 ? `　·　需要注意的 ${attnCount} 位排在最前面` : '　·　目前沒有需要注意的人'}
           </div>
         </div>
-        <div className="hm-filters">
+        <div className="hm-filters hm-noexport">
           <div className="hm-seg">
             {GENDER_OPTS.map(([v, label]) => (
               <button key={v} className={`hm-seg__btn${gender === v ? ' is-on' : ''}`} onClick={() => setGender(v)}>{label}</button>
@@ -284,6 +290,12 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
             <button className="hm-arrow" onClick={goPrev} aria-label="上一段期間">‹</button>
             <button className="hm-arrow" disabled={offset <= 0} onClick={goNext} aria-label="下一段期間">›</button>
           </div>
+          <HeatmapExportMenu
+            cardRef={cardRef}
+            periodLabel={periodLabel}
+            buildText={() => buildGridText(data, opt.mode)}
+            buildXlsx={() => downloadHeatmapGridXlsx(data, opt.mode, periodLabel)}
+          />
         </div>
       </div>
 
@@ -309,7 +321,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
           {rows.map((r, ri) => {
             const lastAttn = r.rank > 0 && (!rows[ri + 1] || rows[ri + 1].rank === 0);
             const flagged = r.dbl > 0;
-            const note = r.dbl ? `同月 ${r.dbl} 次重複` : r.idle ? `${r.idle} 個月未派` : '';
+            const note = attentionNote(r);
             const showMobileNote = isMobile && r.rank > 0;
             return (
               <div
@@ -425,19 +437,22 @@ function AnchoredMenu({ anchorRef, children }) {
   );
 }
 
-const PERSON_EXPORT_ITEMS = [
+const EXPORT_ITEMS = [
   { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組', action: 'jpg' },
   { ic: '▭', label: '複製圖片到剪貼簿', action: 'copy' },
   { ic: '✎', label: '複製文字', sub: '手動貼到 LINE 群組', action: 'text' },
   null,
+  { ic: '▩', label: '匯出 Excel', sub: '可再編輯的表格', action: 'xlsx' },
   { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
 ];
 
-// Same export set as the meetings page, sharing its helpers. The card is
-// captured as it renders, so the inner scroll areas are unpinned for the
-// duration of the shot (`is-capturing`) — otherwise html-to-image would
-// photograph only the currently-scrolled slice of 指派記錄.
-function PersonExportMenu({ cardRef, personName, periodLabel, buildText }) {
+// Same export set as the meetings page, sharing its helpers, and used by BOTH
+// heatmap views — the 總覽格線 and 個人檢視 differ only in what they hand over as
+// `buildText` / `buildXlsx` and what the file is called. The card is captured as
+// it renders, so the inner scroll areas are unpinned for the duration of the
+// shot (`is-capturing`) — otherwise html-to-image would photograph only the
+// currently-scrolled slice of the roster / 指派記錄.
+function HeatmapExportMenu({ cardRef, personName, periodLabel, buildText, buildXlsx }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);
@@ -449,7 +464,9 @@ function PersonExportMenu({ cardRef, personName, periodLabel, buildText }) {
     return () => document.removeEventListener('click', onDoc);
   }, [open]);
 
-  const filename = (ext) => `${personName}-指派分布-${periodLabel}.${ext}`.replace(/\s+/g, '');
+  // Same filename rules as the spreadsheet, so a JPG and an Excel of the same
+  // view sit next to each other in the downloads folder.
+  const filename = (ext) => getHeatmapExportFilename(periodLabel, ext, personName);
 
   async function withCapture(fn) {
     const node = cardRef.current;
@@ -471,7 +488,11 @@ function PersonExportMenu({ cardRef, personName, periodLabel, buildText }) {
         const text = buildText();
         if (!navigator.clipboard?.writeText) throw new Error('目前瀏覽器不支援複製文字。');
         await navigator.clipboard.writeText(text);
-        window.alert('已複製指派記錄文字，可貼到 LINE。');
+        window.alert('已複製指派分布文字，可貼到 LINE。');
+        return;
+      }
+      if (type === 'xlsx') {
+        await buildXlsx();
         return;
       }
       if (type === 'jpg') {
@@ -513,7 +534,7 @@ function PersonExportMenu({ cardRef, personName, periodLabel, buildText }) {
       </button>
       {open && (
         <AnchoredMenu anchorRef={btnRef}>
-          {PERSON_EXPORT_ITEMS.map((item, i) => item === null ? (
+          {EXPORT_ITEMS.map((item, i) => item === null ? (
             <div key={i} className="menu__div" />
           ) : (
             <button key={i} type="button" className="menu__item" onClick={() => handleExport(item.action)}>
@@ -588,11 +609,12 @@ function PersonDetail({ person, midweekWeeks, weekendRows, getAssign, view, onBa
           </div>
         </div>
         <div className="hm-person__actions hm-noexport">
-          <PersonExportMenu
+          <HeatmapExportMenu
             cardRef={cardRef}
             personName={person.name}
             periodLabel={periodLabel}
             buildText={buildText}
+            buildXlsx={() => downloadHeatmapPersonXlsx(person.name, person.g, detail, periodLabel)}
           />
         </div>
       </div>

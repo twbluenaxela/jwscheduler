@@ -118,8 +118,13 @@ export function collectPersonEvents(midweekWeeks, assignments, weekendRows, refD
     for (const p of allParts) {
       const isPair = String(p.roleLabel ?? '').includes('/') && !p.hideHelper;
       const rls = p.roleLabel?.split('/') ?? [];
-      const a0 = ga(`${p.id}_0`, (p.assign ?? [])[0] ?? '');
-      const a1 = isPair ? ga(`${p.id}_1`, (p.assign ?? [])[1] ?? '') : '';
+      // Slot IDs are `mw{weekId}_{partKey}_{n}` (see CLAUDE.md). `p.id` is the
+      // bare partKey, so the week prefix is NOT optional: without it the lookup
+      // never matched a live assignment and silently fell back to `p.assign`,
+      // the snapshot loaded at mount — which is why edits only showed up here
+      // after a page refresh.
+      const a0 = ga(`mw${week.id}_${p.id}_0`, (p.assign ?? [])[0] ?? '');
+      const a1 = isPair ? ga(`mw${week.id}_${p.id}_1`, (p.assign ?? [])[1] ?? '') : '';
       const base = p.cbsRef ? `${p.title}（${p.cbsRef}）` : p.title;
       if (isPair) {
         if (a0) push(a0, date, `${base}${rls[0] ? `（${rls[0]}）` : ''}`, a1 || null, 'midweek');
@@ -258,11 +263,16 @@ export function buildPersonDetail(personName, gender, midweekWeeks, assignments,
   return { evts, monthly, win, covered, total, avgGapWeeks, maxGapWeeks, records, pairings, doubleMonths, mode, range };
 }
 
-// Human label for the active window, e.g. "3月 – 2月" / "2025–2026 服務年度".
+// Human label for the active window, e.g. "2026年3月 – 2027年2月" /
+// "2025–2026 服務年度". The years are not decoration: rolling windows are
+// CENTRED on the current month, so a 12-month window almost always crosses a
+// year boundary and the year-less form read as a meaningless "3月 – 2月".
 export function windowLabel(win, mode) {
   if (!win?.length) return '';
   if (mode === 'serviceYear') return `${win[0].year}–${win[win.length - 1].year} 服務年度`;
-  return `${win[0].month}月 – ${win[win.length - 1].month}月`;
+  const a = win[0], b = win[win.length - 1];
+  if (a.year === b.year) return `${a.year}年${a.month}月 – ${b.month}月`;
+  return `${a.year}年${a.month}月 – ${b.year}年${b.month}月`;
 }
 
 // Server/client-shared plain-language summary (so print + copy-to-text match).
@@ -281,4 +291,86 @@ export function buildPersonSummary(name, gender, detail) {
     s += `分布大致平均，沒有同一個月${bucket}重複兩份以上的情形。`;
   }
   return s;
+}
+
+// ─── Export rows ──────────────────────────────────────────────────────────────
+// Pure row/text builders for the 匯出 menu. They live here, next to the
+// derivation they render, so the on-screen grid, the copied text and the
+// spreadsheet can never disagree — the same reason buildPersonSummary is here
+// rather than in the component. app/lib/heatmapExport.js is the thin browser
+// layer that turns these into a downloaded file.
+
+// The 需要注意 note shown on a grid row, in one place for screen + exports.
+export function attentionNote(row) {
+  if (row.dbl) return `同月 ${row.dbl} 次重複`;
+  if (row.idle) return `${row.idle} 個月未派`;
+  return '';
+}
+
+const GENDER_LABEL = (g) => (g === 'F' ? '姊妹' : '弟兄');
+
+// Grid → array-of-arrays, ready for buildXlsxBuffer. One row per person, one
+// column per month; an uncovered month is '—' (no meetings imported) rather
+// than 0, matching what the grid renders as 無資料.
+export function buildGridExportRows(data, mode) {
+  const { rows, win } = data;
+  const header = ['姓名', '性別', ...win.map((m) => `${m.year}年${m.month}月`), '件數', '需要注意'];
+  const body = rows.map((r) => [
+    r.person.name,
+    GENDER_LABEL(r.person.g),
+    ...r.monthly.map((m) => (m.covered ? String(m.n) : '—')),
+    String(r.total),
+    attentionNote(r),
+  ]);
+  return [
+    ['指派分布', windowLabel(win, mode)],
+    [],
+    header,
+    ...body,
+  ];
+}
+
+export function buildGridText(data, mode) {
+  const { rows, win } = data;
+  const lines = [
+    '指派分布',
+    `${windowLabel(win, mode)} · ${rows.length} 位`,
+    '',
+  ];
+  for (const r of rows) {
+    const months = r.monthly
+      .filter((m) => m.covered && m.n > 0)
+      .map((m) => `${m.month}月×${m.n}`)
+      .join(' ');
+    const note = attentionNote(r);
+    lines.push(
+      `${r.person.name}（${r.person.g === 'F' ? '姊' : '兄'}）　${r.total} 份`
+      + (months ? `　${months}` : '')
+      + (note ? `　⚠ ${note}` : '')
+    );
+  }
+  return lines.join('\n');
+}
+
+// Person detail → array-of-arrays. Full dates: M/D alone is ambiguous once the
+// window crosses a year boundary, which the centred window usually does.
+export function buildPersonExportRows(name, gender, detail) {
+  const rows = [
+    [`${name}（${GENDER_LABEL(gender)}）`, windowLabel(detail.win, detail.mode)],
+    [buildPersonSummary(name, gender, detail)],
+    [],
+    ['期間件數', String(detail.total)],
+    ['平均間隔', detail.avgGapWeeks != null ? `${detail.avgGapWeeks.toFixed(1)} 週` : '—'],
+    ['最長間隔', detail.maxGapWeeks != null ? `${Math.round(detail.maxGapWeeks)} 週` : '—'],
+    ['同月重複', detail.doubleMonths.length
+      ? `${detail.doubleMonths.length} 次（${detail.doubleMonths.map((m) => `${m.month}月`).join('、')}）`
+      : '無'],
+    [],
+    ['日期', '項目', '搭檔'],
+  ];
+  for (const r of detail.records) {
+    const d = r.rawDate;
+    rows.push([`${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`, r.label, r.partner ?? '']);
+  }
+  return rows;
 }

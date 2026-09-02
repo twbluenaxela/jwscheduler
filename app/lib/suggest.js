@@ -11,6 +11,7 @@ import { CATS } from '../data/index.js';
 import { partTypeOf, effectiveCat, slotCat, FAMILIES, FAMILY_OF } from './partTypes.mjs';
 import { parseCnDate as parseDate } from './cnDate.mjs';
 import { buildPairIndex, partnersWithin, PAIR_REPEAT_WINDOW_DAYS } from './pairHistory.mjs';
+import { pioneerBonus } from './appointments.mjs';
 
 const CAT_REQS = Object.fromEntries(
   Object.entries(CATS).map(([k, v]) => [k, { tag: v.tag, g: v.g }])
@@ -76,7 +77,13 @@ function rankCandidates(people, tag, gender, history, ref) {
       const daysUntil = nextSeen.has(p.name)
         ? Math.floor((nextSeen.get(p.name).getTime() - refMs) / 86400000)
         : 9999;
-      return { name: p.name, gap: Math.min(daysSince, daysUntil), count: counts.get(p.name) ?? 0 };
+      // 先驅 rank as though they had been free a little longer than they
+      // really have (appointments.mjs) — enough to win ties and near-ties, not
+      // enough to jump someone genuinely less used. `gap` carries the bonus so
+      // every consumer (pickRotated's tolerance window included) sees one
+      // consistent notion of "how rested is this person".
+      const gap = Math.min(daysSince, daysUntil) + pioneerBonus(p);
+      return { name: p.name, gap, count: counts.get(p.name) ?? 0 };
     })
     .sort((a, b) => b.gap - a.gap || a.count - b.count);
 }

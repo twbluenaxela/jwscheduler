@@ -1434,6 +1434,15 @@ body.editing .week-edit__input { background: #fff; }
 .hm-arrow:disabled { opacity: .3; cursor: default; }
 .hm-arrow:not(:disabled):hover { border-color: var(--ink-3); }
 
+/* .hm-tablewrap owns BOTH axes of scrolling (its overflow-x already forces
+   overflow-y to compute to auto), which makes it the scrollport the month
+   header sticks to. That only works if the card has a bounded height —
+   otherwise the card grows to fit the whole roster, the document scrolls
+   instead, and `position: sticky` on .hm-colhead never engages, so the month
+   labels scrolled away and a screenshot of the middle of the roster had no
+   header. Capping the card at the viewport moves that scrolling inside it. */
+.hm-root { max-height: calc(100dvh - 120px); }
+@media (max-width: 720px) { .hm-root { max-height: calc(100dvh - 150px); } }
 .hm-tablewrap { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: auto; -webkit-overflow-scrolling: touch; }
 
 .hm-colhead {
@@ -1603,8 +1612,12 @@ body.editing .week-edit__input { background: #fff; }
 /* Capture mode for the 匯出 JPG/PDF/複製圖片 actions: unpin every inner scroll
    area so html-to-image photographs the WHOLE card, not just the slice that
    happens to be scrolled into view, and drop the toolbar from the shot. */
+.hm-root.is-capturing,
 .hm-person.is-capturing { height: auto; max-height: none; box-shadow: none; }
+.hm-root.is-capturing .hm-noexport,
 .hm-person.is-capturing .hm-noexport { display: none; }
+.hm-root.is-capturing { overflow: visible; }
+.hm-root.is-capturing .hm-tablewrap { overflow: visible; max-height: none; height: auto; }
 .hm-person.is-capturing .hm-person__body,
 .hm-person.is-capturing .hm-reclist,
 .hm-person.is-capturing .hm-grid52 { overflow: visible; max-height: none; height: auto; }
