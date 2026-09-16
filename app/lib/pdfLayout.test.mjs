@@ -200,8 +200,7 @@ test('a notice image is fitted inside its band, not stretched to it', () => {
 
 test('the notice stays a THIN band, never a card-sized block', () => {
   // A cancelled week carries one line of text. Giving it a block the size of a
-  // week card put a pink slab in the middle of the page — the thing that made
-  // the first version of this layout unusable.
+  // week card put a slab in the middle of the page.
   const weeks = [normal(1), cancelled(2), normal(3)];
   const layout = setCount(2);
   const sizes = {
@@ -216,8 +215,40 @@ test('the notice stays a THIN band, never a card-sized block', () => {
 
   assert.ok(notice.h <= NOTICE_H + 0.01, `notice is ${notice.h}pt`);
   assert.ok(notice.h < week.h / 3, `notice (${notice.h}pt) is not thin beside a week (${week.h}pt)`);
-  // Full bleed across the text column, so it reads as a rule between the weeks.
-  assert.ok(Math.abs(notice.w - (A4_PT.w - 2 * MARGIN)) < 0.01);
+});
+
+test('VISUAL UNITY: every block on a page shares one width and one left edge', () => {
+  // The failure this pins: the week cards were shrunk to fit the page height
+  // while the notice kept the full page width, so a one-line cancelled-week band
+  // came out WIDER than the week cards above it.
+  const cases = [
+    // [layout count, week aspect] — the tall case is the one that forces a shrink
+    [2, { width: 960, height: 1400 }],
+    [2, { width: 960, height: 370 }],
+    [4, { width: 960, height: 370 }],
+    [1, { width: 960, height: 1400 }],
+  ];
+  for (const [count, weekSize] of cases) {
+    const weeks = [normal(1), normal(2), cancelled(3), normal(4)];
+    const layout = setCount(count);
+    const sizes = {
+      0: weekSize, 1: weekSize, 2: { width: 960, height: 96 }, 3: weekSize,
+    };
+    for (const page of paginate(weeks, layout)) {
+      const rects = placeCells(page, layout, sizes);
+      const widths = rects.map((r) => r.w);
+      assert.ok(
+        Math.max(...widths) - Math.min(...widths) < 0.01,
+        `count ${count}: widths differ — ${widths.map((w) => w.toFixed(1)).join(', ')}`,
+      );
+      // Left edges line up: every block starts at a column origin, and the
+      // notice always uses the first one.
+      const lefts = [...new Set(rects.map((r) => Math.round(r.x * 100) / 100))].sort((a, b) => a - b);
+      assert.ok(lefts.length <= layout.cols, `count ${count}: ${lefts.length} distinct left edges`);
+      const notice = rects.find((r) => r.kind === 'notice');
+      if (notice) assert.equal(Math.round(notice.x * 100) / 100, lefts[0]);
+    }
+  }
 });
 
 test('a week with no captured image still reserves its cell', () => {

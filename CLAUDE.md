@@ -148,12 +148,14 @@ app/
                          (`MAX_ROWS`/`MAX_COLS`), because a week card smaller than a quarter of
                          A4 is unreadable; stacked rows win while they fit, so only the third
                          box forces a second column. `paginate` (cancelled weeks become
-                         full-width notice bands that don't use a box) and `placeCells` (week
-                         bands sized to the cards' natural height and the block centred — equal
-                         bands left a 2×2 page mostly white; a notice band is THIN, its height
-                         following the collapsed strip's own aspect, capped at `NOTICE_H`, and
-                         spanning the page only in a ONE-column layout — at two columns it takes
-                         a single column's width so it doesn't cut the grid in half)
+                         full-width notice bands that don't use a box) and `placeCells`.
+                         **`placeCells` scales a whole page by ONE factor**: each band gets the
+                         height its content wants at full column width, then every band —
+                         cancelled weeks included — is multiplied by the same shrink, so every
+                         block ends up `cellW * shrink` wide and they share left and right
+                         edges. Shrinking only the week bands left a one-line notice WIDER than
+                         the cards above it. A notice is still THIN (capped at `NOTICE_H`) and
+                         spans the page only at ONE column; at two it is one column wide
     pdfWriter.mjs      — `writePdf(pages)`: pages of placed JPEGs, object numbers allocated as
                          written (the old fixed stride of 3 only worked at one image per page).
                          `singleImagePages()` keeps the original one-card-per-page behaviour
@@ -997,6 +999,10 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   as its notice band — a block-sized version put a pink slab in the middle of the page and
   looked like a broken card. The band spans the page only at ONE column; with two columns it
   takes one column's width, or it cuts the grid in half and reads as a section divider
+- Do not scale a PDF page's week bands without scaling its notice bands by the SAME factor.
+  `placeCells` applies one shrink to every band precisely so all blocks come out `cellW * shrink`
+  wide and line up; shrinking only the weeks (to fit the page height) left the one-line
+  cancelled-week band wider than the week cards above it, which looked absurd
 - Do not reintroduce a "one week on this page" fallback for a tall pair in the Excel export.
   TWO MEANS TWO: the answer to a pair that will not fit is to squeeze the row heights further
   (`rowScaleFor`), not to reprint the month at one week a sheet. Packing does not look at

@@ -96,67 +96,67 @@ export function paginate(weeks, layout, isSuspended = isMidweekSuspended) {
 
 // Lays a page's bands out in PDF points, origin BOTTOM-LEFT (PDF's convention).
 //
-// `sizes` maps a week index to its captured image's { width, height } in pixels;
-// each card is scaled to fit its cell without distortion (contain) and centred.
-// A week with no captured image still reserves its cell, so one failed capture
-// cannot shuffle every later card into the wrong box.
+// `sizes` maps a week index to its captured image's { width, height } in pixels.
+//
+// EVERYTHING ON A PAGE SCALES AS ONE BLOCK. Each band is first given the height
+// its content naturally wants at the full column width; if the stack is taller
+// than the page, every band — cancelled weeks included — is multiplied by the
+// SAME factor. That single factor is what gives the page visual unity: because
+// each element then contain-fits a cell of `cellW × natural × shrink`, they all
+// come out exactly `cellW * shrink` wide and share the same left and right
+// edges.
+//
+// An earlier version shrank only the week bands and left the notice at the full
+// page width, so on a crowded page the one-line cancelled-week band was WIDER
+// than the week cards above it.
 export function placeCells(page, layout, sizes = {}) {
   const { cols } = normalizeLayout(layout);
   const bands = page?.bands ?? [];
   const innerW = A4_PT.w - 2 * MARGIN;
   const innerH = A4_PT.h - 2 * MARGIN;
+  // With one column a cell is the whole text width, so a notice does span the
+  // page. With two, it is one column wide and cannot cut the grid in half.
   const cellW = (innerW - (cols - 1) * GAP) / cols;
-
-  // A cancelled week is a THIN rule between the real weeks, never a card-sized
-  // block: it carries one line of text, and a block-sized slab in the middle of
-  // the page looked like a broken card.
-  //
-  // It spans the full page only in a SINGLE-column layout. With two columns the
-  // cards are half-width, so a notice stretching the whole way across cuts the
-  // grid in half and reads as a divider between sections rather than as one of
-  // the weeks. There it takes one column's width instead.
-  const noticeW = cols > 1 ? cellW : innerW;
-  const noticeH = (band) => {
-    const size = sizes[band.item];
-    if (!(size?.width > 0 && size?.height > 0)) return NOTICE_H;
-    return Math.min(NOTICE_H, (noticeW * size.height) / size.width);
-  };
-
-  const weekBandCount = bands.filter((b) => b.kind === 'weeks').length;
-  const noticeBudget = bands.reduce((t, b) => t + (b.kind === 'notice' ? noticeH(b) : 0), 0);
   const gaps = Math.max(0, bands.length - 1) * GAP;
-  const available = Math.max(1, innerH - gaps - noticeBudget);
-  const equalShare = weekBandCount ? available / weekBandCount : 0;
 
-  // A week band is only as tall as its cards NEED to be at this column width.
-  // Splitting the page into equal bands instead left a 2×2 page mostly white,
-  // because a week card is much wider than it is tall and is therefore
-  // width-constrained in a two-column cell.
-  const naturalH = (band) => {
-    const heights = band.items
-      .map((i) => sizes[i])
-      .filter((s) => s?.width > 0 && s?.height > 0)
-      .map((s) => (cellW * s.height) / s.width);
-    return heights.length ? Math.max(...heights) : equalShare;
+  // The height this item wants at full cell width, or null if we never captured
+  // it (a failed capture must still reserve its place, or every later card
+  // shifts into the wrong box).
+  const wantedH = (item) => {
+    const size = sizes[item];
+    if (!(size?.width > 0 && size?.height > 0)) return null;
+    return (cellW * size.height) / size.width;
   };
 
-  const natural = bands.map((b) => (b.kind === 'notice' ? noticeH(b) : naturalH(b)));
-  const isBlock = (b) => b.kind === 'weeks';
-  const naturalWeekTotal = natural.reduce((t, h, i) => t + (isBlock(bands[i]) ? h : 0), 0);
-  // Shrink proportionally when the cards want more room than the page has;
-  // otherwise keep their natural size and centre the block vertically.
-  const shrink = naturalWeekTotal > available ? available / naturalWeekTotal : 1;
-  const bandH = natural.map((h, i) => (isBlock(bands[i]) ? h * shrink : h));
+  const natural = bands.map((band) => {
+    if (band.kind === 'notice') {
+      // A cancelled week is a thin rule between the real weeks, never a
+      // card-sized block: it carries one line of text.
+      const h = wantedH(band.item);
+      return h === null ? NOTICE_H : Math.min(NOTICE_H, h);
+    }
+    const heights = band.items.map(wantedH).filter((h) => h !== null);
+    return heights.length ? Math.max(...heights) : null;
+  });
+
+  // Bands whose size we don't know share out whatever the known ones leave.
+  const knownTotal = natural.reduce((t, h) => t + (h ?? 0), 0);
+  const unknown = natural.filter((h) => h === null).length;
+  const share = unknown ? Math.max(1, (innerH - gaps - knownTotal) / unknown) : 0;
+  const wanted = natural.map((h) => (h === null ? share : h));
+
+  const total = wanted.reduce((t, h) => t + h, 0);
+  const shrink = total > innerH - gaps ? Math.max(0, (innerH - gaps) / total) : 1;
+  const bandH = wanted.map((h) => h * shrink);
   const used = bandH.reduce((t, h) => t + h, 0) + gaps;
 
   const out = [];
-  // PDF's y grows upwards, so walk from the top of the page downwards.
+  // PDF's y grows upwards, so walk from the top of the page downwards, with the
+  // whole block centred in whatever room it does not use.
   let top = A4_PT.h - MARGIN - Math.max(0, (innerH - used) / 2);
 
-  // Scale an image to fit its cell without distortion, centred. A week with no
-  // captured image still reserves its cell, so one failed capture cannot shuffle
-  // every later card into the wrong box.
-  const fit = (kind, item, cellX, cellTop, cellW, cellH) => {
+  // Contain-fit, centred in the cell.
+  const fit = (kind, item, cellX, cellTop, cellH) => {
     const size = sizes[item];
     let w = cellW;
     let h = cellH;
@@ -178,10 +178,10 @@ export function placeCells(page, layout, sizes = {}) {
   bands.forEach((band, b) => {
     const h = bandH[b];
     if (band.kind === 'notice') {
-      fit('notice', band.item, MARGIN, top, noticeW, h);
+      fit('notice', band.item, MARGIN, top, h);
     } else {
       band.items.forEach((weekIndex, i) => {
-        fit('week', weekIndex, MARGIN + i * (cellW + GAP), top, cellW, h);
+        fit('week', weekIndex, MARGIN + i * (cellW + GAP), top, h);
       });
     }
     top -= h + GAP;
