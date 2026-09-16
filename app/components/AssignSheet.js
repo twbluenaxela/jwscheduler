@@ -3,13 +3,18 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { CATS } from '../data/index';
 import { buildCandidates } from '../lib/candidates.mjs';
 
+// The exponent `buildCandidates` raises the fairness gap to. This used to be a
+// 公平強度 slider in the sheet; nobody moved it off the default, so it was noise
+// above the candidate list. Fixed at the value it always shipped with, so the
+// ranking is unchanged.
+const SPREAD = 2;
+
 // pair = { index, with: name, ref: Date } — the 學生／助手 counterpart for this
 // slot, so a candidate who was recently paired with them can be flagged and
 // pushed down the list (repeats are allowed, just not back-to-back).
 export default function AssignSheet({ sheet, assignments, getAssign, onPick, onClose, people, pastHistory, pairIndex, pairWith, refDate }) {
   const [query, setQuery] = useState('');
   const [jitter, setJitter] = useState(false);
-  const [spread, setSpread] = useState(2);
   const [list, setList] = useState([]);
   const [manual, setManual] = useState('');
   const inputRef = useRef(null);
@@ -27,16 +32,15 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
   const pair = pairWith ? { index: pairIndex, with: pairWith, ref: refDate } : null;
 
   const rebuild = useCallback((j) => {
-    setList(buildCandidates(people, sheet.catKey, j, spread, pastHistory, pair));
+    setList(buildCandidates(people, sheet.catKey, j, SPREAD, pastHistory, pair));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people, sheet.catKey, spread, pastHistory, pairIndex, pairWith, refDate]);
+  }, [people, sheet.catKey, pastHistory, pairIndex, pairWith, refDate]);
 
   useEffect(() => {
     setQuery('');
     setManual('');
     setJitter(false);
-    setSpread(2);
-    setList(buildCandidates(people, sheet.catKey, false, 2, pastHistory, pair));
+    setList(buildCandidates(people, sheet.catKey, false, SPREAD, pastHistory, pair));
     setTimeout(() => inputRef.current?.focus(), 120);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheet, people, pastHistory, pairIndex, pairWith, refDate]);
@@ -44,7 +48,7 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
   useEffect(() => {
     if (!sheet) return;
     rebuild(jitter);
-  }, [spread, jitter, rebuild, sheet]);
+  }, [jitter, rebuild, sheet]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -106,22 +110,6 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
           >
             <span className="rs-ic">↻</span> 重新推薦
           </button>
-        </div>
-
-        <div className="sheet__spread">
-          <div className="sheet__spread-row">
-            <span className="sheet__spread-label">公平強度</span>
-            <span className="sheet__spread-value">{spread.toFixed(1)}</span>
-          </div>
-          <input
-            type="range"
-            min="1"
-            max="3"
-            step="0.1"
-            value={spread}
-            onChange={(e) => setSpread(Number(e.target.value))}
-          />
-          <div className="sheet__spread-hint">低 = 較平均 · 高 = 更偏向久未擔任的人選</div>
         </div>
 
         <button type="button" className="sheet__clear" onClick={clearAssign}>

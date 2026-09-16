@@ -7,6 +7,8 @@ import {
   GAP,
   MARGIN,
   MAX_BOXES,
+  MAX_COLS,
+  MAX_ROWS,
   NOTICE_H,
   addBox,
   normalizeLayout,
@@ -14,6 +16,7 @@ import {
   paginate,
   placeCells,
   removeBox,
+  setCount,
 } from './pdfLayout.mjs';
 
 const normal = (id) => ({ id, date: `9月 ${id}日` });
@@ -41,26 +44,33 @@ test('normalizeLayout copes with junk', () => {
   assert.deepEqual(normalizeLayout({ rows: -3, cols: NaN, count: 2.6 }), { rows: 1, cols: 1, count: 1 });
 });
 
-test('the + button grows along the long axis, not into a ragged grid', () => {
-  // From two stacked, a third box should be a third full-width row — not a 2×2
-  // with an empty corner, which on A4 portrait makes each card uselessly small.
-  assert.deepEqual(addBox({ rows: 2, cols: 1, count: 2 }), { rows: 3, cols: 1, count: 3 });
-  assert.deepEqual(addBox({ rows: 3, cols: 1, count: 3 }), { rows: 4, cols: 1, count: 4 });
-  assert.deepEqual(addBox({ rows: 1, cols: 2, count: 2 }), { rows: 1, cols: 3, count: 3 });
-  // A 2×2 already has room for the fourth.
+test('the + button prefers stacked rows until a second column is forced', () => {
+  // A full-width card is far more readable than a half-width one on A4 portrait,
+  // so two weeks stack; only the third box needs the second column.
+  assert.deepEqual(addBox({ rows: 1, cols: 1, count: 1 }), { rows: 2, cols: 1, count: 2 });
+  assert.deepEqual(addBox({ rows: 2, cols: 1, count: 2 }), { rows: 2, cols: 2, count: 3 });
   assert.deepEqual(addBox({ rows: 2, cols: 2, count: 3 }), { rows: 2, cols: 2, count: 4 });
 });
 
 test('the + button stops at four', () => {
-  const full = { rows: 4, cols: 1, count: 4 };
+  const full = { rows: 2, cols: 2, count: 4 };
   assert.deepEqual(addBox(full), full);
-  assert.deepEqual(addBox({ rows: 2, cols: 2, count: 4 }), { rows: 2, cols: 2, count: 4 });
 });
 
 test('the − button shrinks the grid with the count', () => {
-  assert.deepEqual(removeBox({ rows: 3, cols: 1, count: 3 }), { rows: 2, cols: 1, count: 2 });
-  assert.deepEqual(removeBox({ rows: 1, cols: 3, count: 3 }), { rows: 1, cols: 2, count: 2 });
   assert.deepEqual(removeBox({ rows: 2, cols: 2, count: 4 }), { rows: 2, cols: 2, count: 3 });
+  assert.deepEqual(removeBox({ rows: 2, cols: 2, count: 3 }), { rows: 2, cols: 1, count: 2 });
+  assert.deepEqual(removeBox({ rows: 2, cols: 1, count: 2 }), { rows: 1, cols: 1, count: 1 });
+});
+
+test('2x2 is the ceiling — the picker never offers a third row or column', () => {
+  // A week card any smaller than a quarter page is unreadable, so the picker is
+  // a 2×2 grid rather than a bigger one with most cells greyed out.
+  assert.equal(MAX_ROWS, 2);
+  assert.equal(MAX_COLS, 2);
+  assert.equal(MAX_BOXES, 4);
+  assert.deepEqual(normalizeLayout({ rows: 4, cols: 1, count: 4 }), { rows: 2, cols: 1, count: 2 });
+  assert.deepEqual(normalizeLayout({ rows: 1, cols: 3, count: 3 }), { rows: 1, cols: 2, count: 2 });
 });
 
 test('the − button stops at one', () => {
@@ -72,9 +82,9 @@ test('the − button stops at one', () => {
 
 test('N weeks per page, for every N up to four', () => {
   const weeks = Array.from({ length: 9 }, (_, i) => normal(i + 1));
-  for (const layout of [{ rows: 1, cols: 1, count: 1 }, { rows: 2, cols: 1, count: 2 },
-    { rows: 3, cols: 1, count: 3 }, { rows: 2, cols: 2, count: 4 }]) {
-    assert.equal(pageCount(weeks, layout), Math.ceil(9 / layout.count), `count ${layout.count}`);
+  for (let n = 1; n <= 4; n += 1) {
+    const layout = setCount(n);
+    assert.equal(pageCount(weeks, layout), Math.ceil(9 / n), `count ${n}`);
   }
 });
 
@@ -129,8 +139,7 @@ const overlaps = (a, b) => (
 test('cells stay inside the margins and never overlap', () => {
   const weeks = Array.from({ length: 6 }, (_, i) => (i === 2 ? cancelled(i + 1) : normal(i + 1)));
   const sizes = Object.fromEntries(weeks.map((_, i) => [i, { width: 960, height: 1400 }]));
-  for (const layout of [{ rows: 1, cols: 1, count: 1 }, { rows: 2, cols: 1, count: 2 },
-    { rows: 3, cols: 1, count: 3 }, { rows: 2, cols: 2, count: 4 }, { rows: 1, cols: 2, count: 2 }]) {
+  for (const layout of [setCount(1), setCount(2), setCount(3), setCount(4), { rows: 1, cols: 2, count: 2 }]) {
     for (const page of paginate(weeks, layout)) {
       const rects = placeCells(page, layout, sizes);
       rects.forEach((r) => assert.ok(within(r), `count ${layout.count}: ${JSON.stringify(r)} escapes the page`));
@@ -177,6 +186,28 @@ test('a notice image is fitted inside its band, not stretched to it', () => {
   assert.ok(notice.x >= MARGIN - 0.01);
 });
 
+test('the notice stays a THIN band, never a card-sized block', () => {
+  // A cancelled week carries one line of text. Giving it a block the size of a
+  // week card put a pink slab in the middle of the page — the thing that made
+  // the first version of this layout unusable.
+  const weeks = [normal(1), cancelled(2), normal(3)];
+  const layout = setCount(2);
+  const sizes = {
+    0: { width: 960, height: 1400 },
+    1: { width: 960, height: 96 }, // the collapsed one-line strip
+    2: { width: 960, height: 1400 },
+  };
+  const [page] = paginate(weeks, layout);
+  const rects = placeCells(page, layout, sizes);
+  const notice = rects.find((r) => r.kind === 'notice');
+  const week = rects.find((r) => r.kind === 'week');
+
+  assert.ok(notice.h <= NOTICE_H + 0.01, `notice is ${notice.h}pt`);
+  assert.ok(notice.h < week.h / 3, `notice (${notice.h}pt) is not thin beside a week (${week.h}pt)`);
+  // Full bleed across the text column, so it reads as a rule between the weeks.
+  assert.ok(Math.abs(notice.w - (A4_PT.w - 2 * MARGIN)) < 0.01);
+});
+
 test('a week with no captured image still reserves its cell', () => {
   // Otherwise one failed capture shuffles every later card into the wrong box.
   const weeks = [normal(1), normal(2)];
@@ -209,7 +240,7 @@ test('bands are sized to the cards, not split into equal slabs', () => {
 
 test('cards too tall for the page are shrunk to fit, still in aspect', () => {
   const weeks = Array.from({ length: 4 }, (_, i) => normal(i + 1));
-  const layout = { rows: 4, cols: 1, count: 4 };
+  const layout = setCount(2);
   const sizes = Object.fromEntries(weeks.map((_, i) => [i, { width: 400, height: 2000 }]));
   const [page] = paginate(weeks, layout);
   const rects = placeCells(page, layout, sizes);

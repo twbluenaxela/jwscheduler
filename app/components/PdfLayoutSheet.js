@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   MAX_BOXES,
+  MAX_COLS,
+  MAX_ROWS,
   addBox,
   normalizeLayout,
   paginate,
@@ -17,10 +19,9 @@ import { isMidweekSuspended } from '../lib/weekType.mjs';
 // second modal primitive, so it is a bottom sheet on a phone and a centred
 // dialog from 721px up, with the same backdrop-tap and Escape behaviour.
 
-// A Word-style rows × cols picker. Combinations above MAX_BOXES are shown but
-// disabled, so the four-box cap is visible rather than a surprise.
-const PICKER_MAX = 4;
-
+// A Word-style rows × cols picker, 2×2 because that IS the ceiling — a week card
+// smaller than a quarter of A4 is unreadable. A bigger grid with most of its
+// cells greyed out just looked broken.
 function GridPicker({ layout, onPick }) {
   const [hover, setHover] = useState(null);
   const shown = hover ?? layout;
@@ -32,32 +33,30 @@ function GridPicker({ layout, onPick }) {
       role="group"
       aria-label="選擇每頁的列數與欄數"
     >
-      {Array.from({ length: PICKER_MAX }, (_, r) => (
+      {Array.from({ length: MAX_ROWS }, (_, r) => (
         <div className="pdflay-picker__row" key={r}>
-          {Array.from({ length: PICKER_MAX }, (_, c) => {
+          {Array.from({ length: MAX_COLS }, (_, c) => {
             const rows = r + 1;
             const cols = c + 1;
-            const allowed = rows * cols <= MAX_BOXES;
-            const on = allowed && rows <= shown.rows && cols <= shown.cols;
+            const on = rows <= shown.rows && cols <= shown.cols;
             return (
               <button
                 key={c}
                 type="button"
                 className={`pdflay-picker__cell${on ? ' is-on' : ''}`}
-                disabled={!allowed}
                 aria-label={`${rows} 列 ${cols} 欄`}
                 aria-pressed={rows === layout.rows && cols === layout.cols ? 'true' : 'false'}
                 // Hover only previews; the tap that fires both on a touchscreen
                 // simply previews then commits the same cell, so no gating.
-                onPointerEnter={() => allowed && setHover({ rows, cols })}
-                onClick={() => allowed && onPick(normalizeLayout({ rows, cols, count: rows * cols }))}
+                onPointerEnter={() => setHover({ rows, cols })}
+                onClick={() => onPick(normalizeLayout({ rows, cols, count: rows * cols }))}
               />
             );
           })}
         </div>
       ))}
       <div className="pdflay-picker__cap" aria-live="polite">
-        {shown.rows} × {shown.cols}
+        {shown.rows} × {shown.cols}　·　最多 {MAX_BOXES} 格
       </div>
     </div>
   );

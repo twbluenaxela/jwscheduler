@@ -18,45 +18,48 @@ export const GAP = 14;
 // giving it an equal share of the page would waste most of a sheet.
 export const NOTICE_H = 64;
 
-export const MAX_BOXES = 4;
+// 2×2 is the ceiling: a week card on A4 portrait is unreadable any smaller, so
+// the picker is a 2×2 grid rather than a bigger one with most cells greyed out.
+export const MAX_ROWS = 2;
+export const MAX_COLS = 2;
+export const MAX_BOXES = MAX_ROWS * MAX_COLS;
 export const DEFAULT_LAYOUT = { rows: 2, cols: 1, count: 2 };
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
 
-// Enforces 1 ≤ count ≤ rows*cols and rows*cols ≤ MAX_BOXES.
+// Enforces 1 <= count <= rows*cols, with rows and cols each at most 2.
 export function normalizeLayout(layout) {
-  let rows = clamp(Math.round(layout?.rows ?? DEFAULT_LAYOUT.rows) || 1, 1, MAX_BOXES);
-  let cols = clamp(Math.round(layout?.cols ?? DEFAULT_LAYOUT.cols) || 1, 1, MAX_BOXES);
-  // Shrink the longer side until the grid holds at most MAX_BOXES.
-  while (rows * cols > MAX_BOXES) {
-    if (rows >= cols) rows -= 1; else cols -= 1;
-  }
+  const rows = clamp(Math.round(layout?.rows ?? DEFAULT_LAYOUT.rows) || 1, 1, MAX_ROWS);
+  const cols = clamp(Math.round(layout?.cols ?? DEFAULT_LAYOUT.cols) || 1, 1, MAX_COLS);
   const count = clamp(Math.round(layout?.count ?? rows * cols) || 1, 1, rows * cols);
   return { rows, cols, count };
 }
 
-// The ＋ button: one more week per page, growing the grid along whichever axis is
-// already the long one so 2-stacked becomes 3-stacked rather than a 2×2 with a
-// hole in it. Returns the same layout once MAX_BOXES is reached.
-export function addBox(layout) {
-  const { rows, cols, count } = normalizeLayout(layout);
-  const next = count + 1;
-  if (next > MAX_BOXES) return { rows, cols, count };
-  if (next <= rows * cols) return { rows, cols, count: next };
-  if (cols === 1) return normalizeLayout({ rows: next, cols: 1, count: next });
-  if (rows === 1) return normalizeLayout({ rows: 1, cols: next, count: next });
-  return normalizeLayout({ rows, cols, count: next });
+// The grid that holds `count` boxes. Stacked rows win while they fit, because a
+// full-width card is far more readable than a half-width one; only the fourth
+// box forces a second column.
+function gridFor(count) {
+  if (count <= 1) return { rows: 1, cols: 1 };
+  if (count === 2) return { rows: 2, cols: 1 };
+  return { rows: 2, cols: 2 };
 }
 
-// The − button. Never goes below a single box; shrinks the grid to match so the
-// preview never shows a trailing empty row.
+export function setCount(count) {
+  const n = clamp(Math.round(count) || 1, 1, MAX_BOXES);
+  return { ...gridFor(n), count: n };
+}
+
+// The + button: one more week per page, growing the grid only when it must.
+// Returns the layout unchanged once MAX_BOXES is reached.
+export function addBox(layout) {
+  const { count } = normalizeLayout(layout);
+  return count >= MAX_BOXES ? normalizeLayout(layout) : setCount(count + 1);
+}
+
+// The - button. Never goes below a single box.
 export function removeBox(layout) {
-  const { rows, cols, count } = normalizeLayout(layout);
-  const next = count - 1;
-  if (next < 1) return { rows, cols, count };
-  if (cols === 1) return normalizeLayout({ rows: next, cols: 1, count: next });
-  if (rows === 1) return normalizeLayout({ rows: 1, cols: next, count: next });
-  return normalizeLayout({ rows, cols, count: next });
+  const { count } = normalizeLayout(layout);
+  return count <= 1 ? normalizeLayout(layout) : setCount(count - 1);
 }
 
 /* ===================== Page packing ===================== */
@@ -104,13 +107,24 @@ export function placeCells(page, layout, sizes = {}) {
   const innerH = A4_PT.h - 2 * MARGIN;
   const cellW = (innerW - (cols - 1) * GAP) / cols;
 
+  // A cancelled week is a THIN full-width rule between the real weeks, never a
+  // card-sized block: it carries one line of text, and a block-sized pink slab
+  // in the middle of the page looked like a broken card. Its height follows the
+  // strip's own aspect at full width, capped so an unexpectedly tall capture can
+  // never turn back into a slab.
+  const noticeH = (band) => {
+    const size = sizes[band.item];
+    if (!(size?.width > 0 && size?.height > 0)) return NOTICE_H;
+    return Math.min(NOTICE_H, (innerW * size.height) / size.width);
+  };
+
   const weekBandCount = bands.filter((b) => b.kind === 'weeks').length;
-  const noticeCount = bands.length - weekBandCount;
+  const noticeBudget = bands.reduce((t, b) => t + (b.kind === 'notice' ? noticeH(b) : 0), 0);
   const gaps = Math.max(0, bands.length - 1) * GAP;
-  const available = Math.max(1, innerH - gaps - noticeCount * NOTICE_H);
+  const available = Math.max(1, innerH - gaps - noticeBudget);
   const equalShare = weekBandCount ? available / weekBandCount : 0;
 
-  // A band is only as tall as the cards in it NEED to be at this column width.
+  // A week band is only as tall as its cards NEED to be at this column width.
   // Splitting the page into equal bands instead left a 2×2 page mostly white,
   // because a week card is much wider than it is tall and is therefore
   // width-constrained in a two-column cell.
@@ -122,12 +136,13 @@ export function placeCells(page, layout, sizes = {}) {
     return heights.length ? Math.max(...heights) : equalShare;
   };
 
-  const natural = bands.map((b) => (b.kind === 'notice' ? NOTICE_H : naturalH(b)));
-  const naturalWeekTotal = natural.reduce((t, h, i) => t + (bands[i].kind === 'weeks' ? h : 0), 0);
+  const natural = bands.map((b) => (b.kind === 'notice' ? noticeH(b) : naturalH(b)));
+  const isBlock = (b) => b.kind === 'weeks';
+  const naturalWeekTotal = natural.reduce((t, h, i) => t + (isBlock(bands[i]) ? h : 0), 0);
   // Shrink proportionally when the cards want more room than the page has;
   // otherwise keep their natural size and centre the block vertically.
   const shrink = naturalWeekTotal > available ? available / naturalWeekTotal : 1;
-  const bandH = natural.map((h, i) => (bands[i].kind === 'weeks' ? h * shrink : h));
+  const bandH = natural.map((h, i) => (isBlock(bands[i]) ? h * shrink : h));
   const used = bandH.reduce((t, h) => t + h, 0) + gaps;
 
   const out = [];

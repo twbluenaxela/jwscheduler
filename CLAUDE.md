@@ -143,11 +143,14 @@ app/
                          `fitToWidth="1" fitToHeight="0"` — see "What NOT to do"
     pdfLayout.mjs      — geometry for the N-weeks-per-page PDF, shared by the picker's ghost
                          preview and the emitted PDF so they cannot disagree.
-                         `normalizeLayout/addBox/removeBox` (1 ≤ count ≤ rows*cols ≤ 4; ＋ grows
-                         along the long axis, so 2-stacked becomes 3-stacked not a ragged 2×2),
-                         `paginate` (cancelled weeks become full-width notice bands that don't
-                         use a box) and `placeCells` (bands sized to the cards' natural height
-                         and the block centred — equal bands left a 2×2 page mostly white)
+                         `normalizeLayout/setCount/addBox/removeBox` — **2×2 is the ceiling**
+                         (`MAX_ROWS`/`MAX_COLS`), because a week card smaller than a quarter of
+                         A4 is unreadable; stacked rows win while they fit, so only the third
+                         box forces a second column. `paginate` (cancelled weeks become
+                         full-width notice bands that don't use a box) and `placeCells` (week
+                         bands sized to the cards' natural height and the block centred — equal
+                         bands left a 2×2 page mostly white; a notice band is THIN, its height
+                         following the collapsed strip's own aspect, capped at `NOTICE_H`)
     pdfWriter.mjs      — `writePdf(pages)`: pages of placed JPEGs, object numbers allocated as
                          written (the old fixed stride of 3 only worked at one image per page).
                          `singleImagePages()` keeps the original one-card-per-page behaviour
@@ -225,7 +228,9 @@ app/
                          pair)`: the manual picker's ranking, extracted from AssignSheet so
                          it is unit-testable ALONGSIDE the ✦ engine it must agree with.
                          Uses `familyCats` for recency (so 研經班朗讀 counts toward
-                         經文朗讀) and flags `viaFamily` + `paired`
+                         經文朗讀) and flags `viaFamily` + `paired`. `spread` is the exponent
+                         the fairness gap is raised to; AssignSheet passes a fixed `SPREAD = 2`
+                         (it used to be a 公平強度 slider nobody moved off the default)
     partTypes.mjs      — pure slot/cat classifiers shared by suggest, the suggest route,
                          pastHistory and MidweekWeek: partTypeOf(title) (初次交談/再次交談/
                          教導人成為門徒/解釋自己的信仰/演講), effectiveCat(part)
@@ -407,13 +412,14 @@ app/
                          output matches the live card (Excel uses the styled data path in
                          `buildMidweekXlsxBlob` — two weeks per printed A4 page). A fifth card,
                          **PDF 版面**, opens `PdfLayoutSheet` instead of exporting directly
-    PdfLayoutSheet.js  — the 版面 picker (匯入/匯出 only): a Word-style rows × cols grid (combos
-                         past 4 boxes shown but disabled), an A4-proportioned ghost skeleton
-                         preview with the first `count` boxes filled, and a ＋/− stepper capped
-                         at 4. Mobile first — bottom sheet with 44px tap targets, two columns
-                         from 721px up; reuses the `.sheet-backdrop`/`.sheet` pattern rather
-                         than adding a second modal primitive. The choice persists in
-                         localStorage (`mwPdfLayout`), default 2 stacked
+    PdfLayoutSheet.js  — the 版面 picker (匯入/匯出 only): a Word-style rows × cols grid that is
+                         2×2 — the real ceiling, so there are no greyed-out cells — an
+                         A4-proportioned ghost skeleton preview with the first `count` boxes
+                         filled, and a ＋/− stepper capped at 4. Mobile first — bottom sheet with
+                         generous tap targets, two columns from 721px up; reuses the
+                         `.sheet-backdrop`/`.sheet` pattern rather than adding a second modal
+                         primitive. The choice persists in localStorage (`mwPdfLayout`),
+                         default 2 stacked
     SettingsPage.js    — ⚙ settings. Admins: 我的資訊 + 會眾資訊 + 邀請檢視者 (share the
                          congregation CODE, not an invite link) in the left grid column, 聚會排程
                          settings top-right, 成員列表 (2-col card grid, role <select> per member)
@@ -428,7 +434,9 @@ app/
                          Candidate weight uses the bidirectional gap from pastHistory.mjs
                          (min of daysSince/daysUntil) and warns "N 天後已排此項" /
                          "前後一週內另有安排", so manual reassignment can't silently
-                         double-book someone already scheduled in an upcoming week
+                         double-book someone already scheduled in an upcoming week.
+                         There is NO 公平強度 slider — it was removed; `SPREAD` is fixed at the
+                         value it always shipped with, so the ranking is unchanged
     PWARegister.js     — 'use client' component; registers /sw.js on window load
     Toast.js           — undo toast notification
 prisma/
@@ -980,6 +988,14 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   spread or the PDF grid — otherwise one 大會 week knocks every following spread out of phase
   and the rest of the month prints one week per page. `isMidweekSuspended` in `weekType.mjs` is
   the only definition; do not re-test `type === ...` inline
+- Do not let the cancelled-week card grow back into a card-shaped block. It is ONE thin strip
+  (`.mw-susp`: date, rule, notice, on a single line), and the PDF grid captures that same node
+  as its full-width notice band — a block-sized version put a pink slab in the middle of the
+  page and looked like a broken card
+- Do not raise the 版面 picker above 2×2. Four boxes is the ceiling: a week card smaller than a
+  quarter of A4 is unreadable, and a larger picker grid is mostly greyed-out cells. Stacked rows
+  are preferred while they fit (2 weeks stack full-width; only the third box needs a second
+  column)
 - Do not let `pdfLayout.mjs` and the 版面 picker's preview drift apart. The picker shows the
   grid shape and the export places the cards; both go through `normalizeLayout`, and the page
   count in the picker comes from the same `paginate` the exporter uses

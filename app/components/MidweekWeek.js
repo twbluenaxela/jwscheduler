@@ -276,34 +276,24 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
                   : suspended ? 'card card--assembly'
                   : 'card';
 
+  // One thin strip, not a card with a header and a body: there is no programme
+  // to show, and in the PDF grid this capture becomes the full-width notice band
+  // between the real weeks. A tall slab there looked like a broken card.
   if (suspended) {
     return (
       <article className={`${cardClass} card--suspended`} ref={cardRef}>
-        <div className="mw-head mw-head--suspended">
-          <div className="mw-head__date">
-            <TextField
-              editMode={editMode}
-              value={shownWeek.date}
-              onChange={(value) => updateDraftWeek({ date: value })}
-              className="mw-head__date-value"
-              inputClassName="week-edit__input week-edit__input--date"
-              ariaLabel="聚會日期"
-            />
-          </div>
-          <div className="mw-head__main">
-            <div className="mw-head__sub">
-              <TextField
-                editMode={editMode}
-                value={shownWeek.weekdayPill}
-                onChange={(value) => updateDraftWeek({ weekdayPill: value })}
-                className="weekday-pill"
-                inputClassName="week-edit__input week-edit__input--pill"
-                ariaLabel="星期與時間"
-              />
-            </div>
-          </div>
+        <div className="mw-susp">
+          <TextField
+            editMode={editMode}
+            value={shownWeek.date}
+            onChange={(value) => updateDraftWeek({ date: value })}
+            className="mw-susp__date"
+            inputClassName="week-edit__input week-edit__input--date"
+            ariaLabel="聚會日期"
+          />
+          <span className="mw-susp__sep" aria-hidden="true" />
+          <span className="mw-susp__text">{suspendedNotice(week)}</span>
         </div>
-        <div className="mw-suspended">{suspendedNotice(week)}</div>
       </article>
     );
   }
