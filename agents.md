@@ -280,7 +280,27 @@ correctly in the AssignSheet context label. In edit mode, `PartRow` shows a `pai
 | `event` | Beige full-width banner — for conventions, special events (no speaker fields) |
 | `suspended` | Red full-width banner — for 本週聚會暫停, cancelled meetings |
 
-Type is toggled via a chip button in weekend edit mode. Persists to DB via `persistWeekendField`.
+Type is toggled via a chip button in weekend edit mode. Persists to DB via `persistWeekendField`
+(`type` is in `ALLOWED_WEEKEND_FIELDS`; it was missing once, and the toggle silently 400'd and
+lost the change on reload).
+
+### MidweekWeek `type` values
+
+| type | Meaning | Card |
+|---|---|---|
+| `normal` | Ordinary week (default) | Normal card |
+| `special` | Meeting happens, programme differs (分區監督探訪, 特別演講) | Amber label |
+| `assembly` | 大會 — **no midweek meeting** | Collapsed to a one-line notice |
+| `suspended` | 暫停 — **no midweek meeting** | Collapsed to a one-line notice |
+
+`assembly` and `suspended` are equivalent; `isMidweekSuspended(week)` in `app/lib/weekType.mjs`
+is the ONE predicate, shared by the card, the Excel exporter and the PDF grid. `suggestTypeFromLabel`
+derives a default type from the free-text label's keywords, but only while the week is still
+`normal` — an explicit chip always wins.
+
+A cancelled week never consumes a layout slot: in Excel it collapses to a two-row notice, and in
+the PDF grid it becomes a thin band. Either way the remaining weeks keep the chosen
+weeks-per-page, so one 大會 week cannot knock the rest of the month out of phase.
 
 ### Suggestion engine (`app/lib/suggest.js`)
 
