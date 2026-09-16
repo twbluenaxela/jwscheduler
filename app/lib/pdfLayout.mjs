@@ -107,15 +107,19 @@ export function placeCells(page, layout, sizes = {}) {
   const innerH = A4_PT.h - 2 * MARGIN;
   const cellW = (innerW - (cols - 1) * GAP) / cols;
 
-  // A cancelled week is a THIN full-width rule between the real weeks, never a
-  // card-sized block: it carries one line of text, and a block-sized pink slab
-  // in the middle of the page looked like a broken card. Its height follows the
-  // strip's own aspect at full width, capped so an unexpectedly tall capture can
-  // never turn back into a slab.
+  // A cancelled week is a THIN rule between the real weeks, never a card-sized
+  // block: it carries one line of text, and a block-sized slab in the middle of
+  // the page looked like a broken card.
+  //
+  // It spans the full page only in a SINGLE-column layout. With two columns the
+  // cards are half-width, so a notice stretching the whole way across cuts the
+  // grid in half and reads as a divider between sections rather than as one of
+  // the weeks. There it takes one column's width instead.
+  const noticeW = cols > 1 ? cellW : innerW;
   const noticeH = (band) => {
     const size = sizes[band.item];
     if (!(size?.width > 0 && size?.height > 0)) return NOTICE_H;
-    return Math.min(NOTICE_H, (innerW * size.height) / size.width);
+    return Math.min(NOTICE_H, (noticeW * size.height) / size.width);
   };
 
   const weekBandCount = bands.filter((b) => b.kind === 'weeks').length;
@@ -174,7 +178,7 @@ export function placeCells(page, layout, sizes = {}) {
   bands.forEach((band, b) => {
     const h = bandH[b];
     if (band.kind === 'notice') {
-      fit('notice', band.item, MARGIN, top, innerW, h);
+      fit('notice', band.item, MARGIN, top, noticeW, h);
     } else {
       band.items.forEach((weekIndex, i) => {
         fit('week', weekIndex, MARGIN + i * (cellW + GAP), top, cellW, h);

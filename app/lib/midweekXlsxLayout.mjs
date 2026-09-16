@@ -107,30 +107,27 @@ export function sumHeights(rows) {
 // does NOT consume one of the two slots, so the real weeks still pair up —
 // otherwise a single 大會 week would knock every following spread out of phase.
 //
-// `heightOf` (optional) lets the packer refuse a pair that could not be squeezed
-// onto one page even at MIN_ROW_SCALE. That page then takes a single week — an
-// honest degradation, and far better than the renderer breaking a week in half.
+// TWO MEANS TWO: a page always carries `perPage` scheduled weeks. An earlier
+// version dropped to one week when a pair could not fit at the row-height floor,
+// which is not what "two weeks per page" means — the answer to a tall pair is to
+// squeeze the rows further (see rowScaleFor), not to reprint the month at one
+// week a sheet. Height therefore plays no part in packing.
+//
 // Returns [{ indexes: number[], scheduled: number }] over the input array.
-export function paginateWeeks(weeks, { perPage = 2, isSuspended = () => false, heightOf = null } = {}) {
+export function paginateWeeks(weeks, { perPage = 2, isSuspended = () => false } = {}) {
   const list = weeks ?? [];
-  const cap = maxPageHeightPt();
   const pages = [];
   let page = null;
-  let height = 0;
 
-  const open = () => { page = { indexes: [], scheduled: 0 }; height = 0; pages.push(page); };
+  const open = () => { page = { indexes: [], scheduled: 0 }; pages.push(page); };
 
   list.forEach((week, index) => {
     if (!page) open();
     const suspended = isSuspended(week);
-    const cost = heightOf ? heightOf(week) + (page.indexes.length ? ROW_HT.spacer : 0) : 0;
-    const full = !suspended && page.scheduled >= perPage;
     // Never open a page just for a cancelled week: its notice is two rows, and
     // stranding it alone would waste a whole sheet of paper.
-    const tooTall = heightOf && !suspended && page.scheduled > 0 && height + cost > cap;
-    if (full || tooTall) open();
+    if (!suspended && page.scheduled >= perPage) open();
     page.indexes.push(index);
-    height += heightOf ? heightOf(week) + (page.indexes.length > 1 ? ROW_HT.spacer : 0) : 0;
     if (!suspended) page.scheduled += 1;
   });
 
@@ -140,9 +137,10 @@ export function paginateWeeks(weeks, { perPage = 2, isSuspended = () => false, h
 
 export const PAGE_BUDGET_PT = A4_PRINTABLE_PT * SAFETY;
 
-// How far row heights may be squeezed before the text starts to clip. Body text
-// is 10–11pt in a 17pt row, so 0.82 still leaves ~14pt — tight but legible.
-export const MIN_ROW_SCALE = 0.82;
+// An absolute backstop, not a preference: whatever a month throws at us, two
+// weeks share the page, so the squeeze goes as far as it has to. This only stops
+// a corrupt week (hundreds of parts) producing a degenerate sheet.
+export const MIN_ROW_SCALE = 0.35;
 
 // One workbook-wide row-height factor, derived from the TALLEST page, so every
 // spread is compressed by the same amount and the workbook stays visually
@@ -156,11 +154,6 @@ export function rowScaleFor(pageHeights) {
   const tallest = Math.max(0, ...(pageHeights ?? [0]));
   if (tallest <= PAGE_BUDGET_PT) return 1;
   return Math.max(MIN_ROW_SCALE, PAGE_BUDGET_PT / tallest);
-}
-
-// The tallest a page may be and still be squeezable into the budget.
-export function maxPageHeightPt() {
-  return PAGE_BUDGET_PT / MIN_ROW_SCALE;
 }
 
 /* ===================== Cell styles and colours ===================== */
@@ -295,8 +288,7 @@ export function weekRows(week, getAssign, { isSuspended = () => false } = {}) {
 // into XML.
 export function buildSheetPlan(weeks, getAssign, { perPage = 2, isSuspended = () => false } = {}) {
   const opts = { isSuspended };
-  const measure = (week) => sumHeights(weekRows(week, getAssign, opts));
-  const pages = paginateWeeks(weeks, { perPage, isSuspended, heightOf: measure });
+  const pages = paginateWeeks(weeks, { perPage, isSuspended });
 
   // Measure every page before emitting anything: the compression factor is
   // workbook-wide and depends on the tallest page.

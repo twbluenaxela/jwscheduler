@@ -7,7 +7,6 @@ import {
   PAGE_BUDGET_PT,
   ROW_HT,
   buildSheetPlan,
-  maxPageHeightPt,
   paginateWeeks,
   partRowHeight,
   partTitleText,
@@ -231,16 +230,28 @@ test('rowScaleFor never squeezes past the legibility floor', () => {
   assert.equal(rowScaleFor([PAGE_BUDGET_PT * 10]), MIN_ROW_SCALE);
 });
 
-test('a pair too tall even at the floor falls back to one week per page', () => {
-  // An honest degradation. Better a single week on a page than a week split in
-  // half across two, which is the failure the user reported.
+test('TWO MEANS TWO — even an absurdly tall pair shares one page', () => {
+  // The answer to a pair that will not fit is to squeeze the rows further, not
+  // to reprint the month at one week a sheet.
   const monster = () => ({
     ...septemberWeek(1),
     ministry: Array.from({ length: 30 }, (_, i) => part(`很長的傳道訓練項目 ${i}`)),
   });
   const weeks = [monster(), monster()];
-  assert.ok(heightOf(weeks[0]) * 2 > maxPageHeightPt());
+  assert.ok(heightOf(weeks[0]) * 2 > PAGE_BUDGET_PT, 'fixture must actually overflow');
   const plan = buildSheetPlan(weeks, null, opts);
-  assert.equal(plan.pages.length, 2);
-  assert.deepEqual(plan.pages.map((p) => p.scheduled), [1, 1]);
+  assert.equal(plan.pages.length, 1);
+  assert.deepEqual(plan.pages.map((p) => p.scheduled), [2]);
+  assert.ok(plan.rowScale < 1);
+});
+
+test('page count is always ceil(scheduled / 2), however tall the weeks are', () => {
+  const tall = (id) => ({
+    ...octoberWeek(id),
+    ministry: Array.from({ length: 12 }, (_, i) => part(`很長的傳道訓練項目名稱 ${i}`)),
+  });
+  for (let count = 1; count <= 6; count += 1) {
+    const plan = buildSheetPlan(Array.from({ length: count }, (_, i) => tall(i + 1)), null, opts);
+    assert.equal(plan.pages.length, Math.ceil(count / 2), `${count} very tall weeks`);
+  }
 });

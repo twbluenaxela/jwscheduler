@@ -166,12 +166,24 @@ test('a card keeps its aspect ratio', () => {
   });
 });
 
-test('a notice band spans the full width at a fixed height', () => {
+test('a notice spans the page only in a single-column layout', () => {
   const weeks = [normal(1), cancelled(2)];
   const [page] = paginate(weeks, DEFAULT_LAYOUT);
   const notice = placeCells(page, DEFAULT_LAYOUT, {}).find((r) => r.kind === 'notice');
   assert.equal(notice.w, A4_PT.w - 2 * MARGIN);
   assert.equal(notice.h, NOTICE_H);
+  assert.equal(notice.x, MARGIN);
+});
+
+test('with two columns the notice is one column wide, not the whole page', () => {
+  // Stretched across a two-column grid it cut the page in half and read as a
+  // section divider rather than as one of the weeks.
+  const weeks = [normal(1), normal(2), cancelled(3), normal(4)];
+  const layout = setCount(4);
+  const [page] = paginate(weeks, layout);
+  const notice = placeCells(page, layout, {}).find((r) => r.kind === 'notice');
+  const cellW = (A4_PT.w - 2 * MARGIN - GAP) / 2;
+  assert.ok(Math.abs(notice.w - cellW) < 0.01, `notice is ${notice.w}pt, a column is ${cellW}pt`);
   assert.equal(notice.x, MARGIN);
 });
 

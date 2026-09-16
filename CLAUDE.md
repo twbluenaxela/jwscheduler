@@ -136,10 +136,11 @@ app/
                          HEIGHT model, page packing and the OOXML. Pure + `.mjs`, so
                          `node --test` pins the pagination and
                          `scripts/check-xlsx-pagination.mjs` prints it through LibreOffice.
-                         `buildSheetPlan` packs TWO SCHEDULED weeks per page (a cancelled week
-                         collapses to a 2-row notice and does NOT consume a slot), measures
-                         every page, and applies one workbook-wide `rowScaleFor` squeeze so a
-                         pair of long weeks still fits. `<pageSetup>` uses
+                         `buildSheetPlan` packs TWO SCHEDULED weeks per page — always, whatever
+                         the heights; a cancelled week collapses to a 2-row notice and does NOT
+                         consume a slot. It measures every page and applies one workbook-wide
+                         `rowScaleFor` squeeze so even a very long pair still shares the sheet
+                         (`MIN_ROW_SCALE` is a backstop against corrupt data, not a preference). `<pageSetup>` uses
                          `fitToWidth="1" fitToHeight="0"` — see "What NOT to do"
     pdfLayout.mjs      — geometry for the N-weeks-per-page PDF, shared by the picker's ghost
                          preview and the emitted PDF so they cannot disagree.
@@ -150,7 +151,9 @@ app/
                          full-width notice bands that don't use a box) and `placeCells` (week
                          bands sized to the cards' natural height and the block centred — equal
                          bands left a 2×2 page mostly white; a notice band is THIN, its height
-                         following the collapsed strip's own aspect, capped at `NOTICE_H`)
+                         following the collapsed strip's own aspect, capped at `NOTICE_H`, and
+                         spanning the page only in a ONE-column layout — at two columns it takes
+                         a single column's width so it doesn't cut the grid in half)
     pdfWriter.mjs      — `writePdf(pages)`: pages of placed JPEGs, object numbers allocated as
                          written (the old fixed stride of 3 only worked at one image per page).
                          `singleImagePages()` keeps the original one-card-per-page behaviour
@@ -435,8 +438,9 @@ app/
                          (min of daysSince/daysUntil) and warns "N 天後已排此項" /
                          "前後一週內另有安排", so manual reassignment can't silently
                          double-book someone already scheduled in an upcoming week.
-                         There is NO 公平強度 slider — it was removed; `SPREAD` is fixed at the
-                         value it always shipped with, so the ranking is unchanged
+                         There is NO 公平強度 slider and NO 重新推薦 button — both were removed
+                         as noise. `SPREAD` is fixed at the value it always shipped with, and
+                         `jitter` is always false, so the ranking is deterministic and unchanged
     PWARegister.js     — 'use client' component; registers /sw.js on window load
     Toast.js           — undo toast notification
 prisma/
@@ -990,8 +994,13 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   the only definition; do not re-test `type === ...` inline
 - Do not let the cancelled-week card grow back into a card-shaped block. It is ONE thin strip
   (`.mw-susp`: date, rule, notice, on a single line), and the PDF grid captures that same node
-  as its full-width notice band — a block-sized version put a pink slab in the middle of the
-  page and looked like a broken card
+  as its notice band — a block-sized version put a pink slab in the middle of the page and
+  looked like a broken card. The band spans the page only at ONE column; with two columns it
+  takes one column's width, or it cuts the grid in half and reads as a section divider
+- Do not reintroduce a "one week on this page" fallback for a tall pair in the Excel export.
+  TWO MEANS TWO: the answer to a pair that will not fit is to squeeze the row heights further
+  (`rowScaleFor`), not to reprint the month at one week a sheet. Packing does not look at
+  heights at all
 - Do not raise the 版面 picker above 2×2. Four boxes is the ceiling: a week card smaller than a
   quarter of A4 is unreadable, and a larger picker grid is mostly greyed-out cells. Stacked rows
   are preferred while they fit (2 weeks stack full-width; only the third box needs a second

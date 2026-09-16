@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CATS } from '../data/index';
 import { buildCandidates } from '../lib/candidates.mjs';
 
@@ -14,7 +14,6 @@ const SPREAD = 2;
 // pushed down the list (repeats are allowed, just not back-to-back).
 export default function AssignSheet({ sheet, assignments, getAssign, onPick, onClose, people, pastHistory, pairIndex, pairWith, refDate }) {
   const [query, setQuery] = useState('');
-  const [jitter, setJitter] = useState(false);
   const [list, setList] = useState([]);
   const [manual, setManual] = useState('');
   const inputRef = useRef(null);
@@ -31,24 +30,15 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
 
   const pair = pairWith ? { index: pairIndex, with: pairWith, ref: refDate } : null;
 
-  const rebuild = useCallback((j) => {
-    setList(buildCandidates(people, sheet.catKey, j, SPREAD, pastHistory, pair));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [people, sheet.catKey, pastHistory, pairIndex, pairWith, refDate]);
-
+  // `jitter` is always false: it only ever came from the 重新推薦 button, which was
+  // removed. The ranking is deterministic, so re-rolling it was noise.
   useEffect(() => {
     setQuery('');
     setManual('');
-    setJitter(false);
     setList(buildCandidates(people, sheet.catKey, false, SPREAD, pastHistory, pair));
     setTimeout(() => inputRef.current?.focus(), 120);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheet, people, pastHistory, pairIndex, pairWith, refDate]);
-
-  useEffect(() => {
-    if (!sheet) return;
-    rebuild(jitter);
-  }, [jitter, rebuild, sheet]);
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -104,12 +94,6 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <button
-            className="btn reshuffle"
-            onClick={() => { setJitter(true); rebuild(true); }}
-          >
-            <span className="rs-ic">↻</span> 重新推薦
-          </button>
         </div>
 
         <button type="button" className="sheet__clear" onClick={clearAssign}>
