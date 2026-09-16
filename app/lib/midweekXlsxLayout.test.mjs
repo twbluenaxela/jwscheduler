@@ -3,17 +3,15 @@ import assert from 'node:assert/strict';
 
 import {
   A4_PRINTABLE_PT,
-  MIN_ROW_SCALE,
-  PAGE_BUDGET_PT,
-  PAGE_FILL_PT,
+  MAX_ROW_PT,
   ROW_HT,
   TITLE_COL_UNITS,
   buildSheetPlan,
   padRows,
+  pageHeightFor,
   paginateWeeks,
   partRowHeight,
   partTitleText,
-  rowScaleFor,
   sumHeights,
   titleLineCount,
   weekRows,
@@ -139,29 +137,21 @@ test('empty input produces no pages', () => {
 
 /* ===================== the regression this change exists for ===================== */
 
-test('September-shaped weeks are left uncompressed', () => {
-  const plan = buildSheetPlan([1, 2, 3, 4].map(septemberWeek), null, opts);
-  assert.equal(plan.rowScale, 1, 'a month that printed fine must not start shrinking');
-});
+// Measures the emitted sheet the way a renderer does: the rows between two
+// manual breaks are one page.
+function emittedPages(plan) {
+  const bounds = [...plan.breaks, plan.rows.length];
+  const out = [];
+  let start = 0;
+  for (const end of bounds) { out.push(plan.rows.slice(start, end)); start = end; }
+  return out;
+}
 
-test('October-shaped weeks overflow a page and are compressed', () => {
-  const pair = heightOf(octoberWeek(1)) * 2 + ROW_HT.spacer;
-  assert.ok(
-    pair > A4_PRINTABLE_PT,
-    `the fixture must actually overflow, else this test proves nothing (got ${pair.toFixed(1)}pt vs ${A4_PRINTABLE_PT.toFixed(1)}pt)`,
-  );
-  const plan = buildSheetPlan([1, 2, 3, 4, 5].map(octoberWeek), null, opts);
-  assert.ok(plan.rowScale < 1, 'expected a squeeze');
-  assert.ok(plan.rowScale >= MIN_ROW_SCALE);
-  // Two weeks per page survives the squeeze — that is the whole point.
-  assert.deepEqual(plan.pages.map((p) => p.scheduled), [2, 2, 1]);
-});
-
-// NOTE ON WHAT THIS PROVES: the budget is derived from the same height model the
-// rows are built with, so this test pins the PACKER, not the model. Whether our
-// row heights match what a spreadsheet actually prints can only be checked by a
-// real renderer — that is what scripts/check-xlsx-pagination.mjs is for.
-test('EVERY page fits its budget, across a matrix of month shapes', () => {
+test('EVERY page ends up exactly the same height', () => {
+  // This is the whole mechanism. Equal pages + fitToHeight=pageCount means the
+  // renderer picks scale = itsUsableHeight / pageHeight, so one page holds
+  // exactly one spread — whatever margins it actually applies. Unequal pages
+  // break that: the scale comes out wrong and weeks split.
   const shapes = {
     september: septemberWeek,
     october: octoberWeek,
@@ -172,120 +162,43 @@ test('EVERY page fits its budget, across a matrix of month shapes', () => {
     for (let count = 1; count <= 7; count += 1) {
       const weeks = Array.from({ length: count }, (_, i) => make(i + 1));
       const plan = buildSheetPlan(weeks, null, opts);
-      plan.pageHeights.forEach((height, i) => {
-        assert.ok(
-          height <= PAGE_BUDGET_PT + 0.01,
-          `${name} × ${count}: page ${i + 1} is ${height.toFixed(1)}pt but the budget is ${PAGE_BUDGET_PT.toFixed(1)}pt`,
-        );
-      });
-    }
-  }
-});
-
-test('page count is ceil(scheduled weeks / 2)', () => {
-  for (let count = 1; count <= 9; count += 1) {
-    const weeks = Array.from({ length: count }, (_, i) => octoberWeek(i + 1));
-    const plan = buildSheetPlan(weeks, null, opts);
-    assert.equal(plan.pages.length, Math.ceil(count / 2), `${count} weeks`);
-    assert.equal(plan.breaks.length, plan.pages.length - 1);
-  }
-});
-
-test('breaks land exactly on a week header row', () => {
-  // An off-by-one here is the difference between a clean spread and half a week
-  // stranded on the next page.
-  const plan = buildSheetPlan([1, 2, 3, 4, 5, 6].map(octoberWeek), null, opts);
-  for (const index of plan.breaks) {
-    const expected = Math.round(ROW_HT.head * plan.rowScale * 100) / 100;
-    assert.equal(plan.rows[index].ht, expected, `row ${index} should start a week`);
-    assert.ok(plan.rows[index].cells[0].rich, 'a week header carries rich text');
-  }
-});
-
-test('every emitted page is padded to just short of the page height', () => {
-  // THE BUG THIS PINS: readers that drop <rowBreaks> (phone print dialogs,
-  // Google Sheets) paginate automatically. Without filler the spread left ~140pt
-  // of slack and the next week's header crept into it, stranding four rows at
-  // the foot of the page. Each page but the last must therefore fill the sheet
-  // to within less than one header row.
-  const plan = buildSheetPlan([1, 2, 3, 4, 5, 6].map(octoberWeek), null, opts);
-  const bounds = [...plan.breaks, plan.rows.length];
-  const headerH = ROW_HT.head * plan.rowScale;
-  let start = 0;
-  bounds.forEach((end, i) => {
-    const height = sumHeights(plan.rows.slice(start, end));
-    const last = i === bounds.length - 1;
-    assert.ok(
-      height <= PAGE_FILL_PT + 0.01,
-      `page ${i + 1} overflows the sheet: ${height.toFixed(1)} > ${PAGE_FILL_PT.toFixed(1)}`,
-    );
-    if (!last) {
-      const slack = PAGE_FILL_PT - height;
+      const heights = emittedPages(plan).map(sumHeights);
       assert.ok(
-        slack < headerH,
-        `page ${i + 1} leaves ${slack.toFixed(1)}pt — a ${headerH.toFixed(1)}pt week header fits in it`,
+        Math.max(...heights) - Math.min(...heights) < 0.02,
+        `${name} × ${count}: pages differ — ${heights.map((h) => h.toFixed(2)).join(', ')}`,
+      );
+      assert.ok(
+        Math.abs(heights[0] - plan.pageHeight) < 0.02,
+        `${name} × ${count}: page is ${heights[0]} but pageHeight is ${plan.pageHeight}`,
       );
     }
-    start = end;
-  });
-});
-
-test('padding never overshoots the page, and always leaves less than a header', () => {
-  for (const height of [0, 100, 500, 700, 770]) {
-    for (const scale of [1, 0.8, 0.5]) {
-      const pad = padRows(height, scale);
-      const total = height + pad.reduce((a, b) => a + b, 0);
-      // Overshooting would push the filler itself onto the next page, and with a
-      // manual break right behind it that costs a near-blank sheet.
-      assert.ok(total <= PAGE_FILL_PT + 0.01, `${height}pt @ ${scale} padded to ${total}`);
-      // Undershooting lets the next week's header start on this page.
-      const slack = PAGE_FILL_PT - total;
-      assert.ok(
-        slack < ROW_HT.head * scale,
-        `${height}pt @ ${scale} leaves ${slack.toFixed(1)}pt for a ${(ROW_HT.head * scale).toFixed(1)}pt header`,
-      );
-      assert.ok(pad.every((ht) => ht <= 409), 'a filler row exceeds Excel\'s row cap');
-    }
   }
 });
 
-test('an already-full page gets no filler', () => {
-  assert.deepEqual(padRows(PAGE_FILL_PT, 1), []);
-  assert.deepEqual(padRows(PAGE_FILL_PT + 50, 1), []);
+test('the LAST page is padded too, and its filler is anchored by a cell', () => {
+  // Trailing blank rows are not part of a sheet's used range. Unanchored, the
+  // last page's padding is discarded, the sheet comes out shorter than
+  // pageCount × pageHeight, and the fit-to-height scale is too large — which
+  // split a week at every margin setting when rendered.
+  const plan = buildSheetPlan([1, 2, 3, 4, 5].map(octoberWeek), null, opts);
+  const pages = emittedPages(plan);
+  const last = pages[pages.length - 1];
+  assert.ok(Math.abs(sumHeights(last) - plan.pageHeight) < 0.02, 'last page not padded');
+  const finalRow = plan.rows[plan.rows.length - 1];
+  assert.ok(finalRow.cells.length > 0, 'the sheet must not end on a cell-less filler row');
 });
 
-/* ===================== the primitives ===================== */
+test('page height is the tallest spread, never below the nominal A4 page', () => {
+  const short = buildSheetPlan([1, 2].map(septemberWeek), null, opts);
+  assert.equal(short.pageHeight, A4_PRINTABLE_PT, 'a short month must not be blown up past 100%');
 
-test('rowScaleFor leaves a fitting workbook alone', () => {
-  assert.equal(rowScaleFor([100, 200]), 1);
-  assert.equal(rowScaleFor([]), 1);
-  assert.equal(rowScaleFor([PAGE_BUDGET_PT]), 1);
-});
-
-test('rowScaleFor squeezes just enough to fit the tallest page', () => {
-  const tall = PAGE_BUDGET_PT * 1.1;
-  const scale = rowScaleFor([tall, 100]);
-  assert.ok(scale < 1);
-  assert.ok(tall * scale <= PAGE_BUDGET_PT + 0.01);
-});
-
-test('rowScaleFor never squeezes past the legibility floor', () => {
-  assert.equal(rowScaleFor([PAGE_BUDGET_PT * 10]), MIN_ROW_SCALE);
-});
-
-test('TWO MEANS TWO — even an absurdly tall pair shares one page', () => {
-  // The answer to a pair that will not fit is to squeeze the rows further, not
-  // to reprint the month at one week a sheet.
-  const monster = () => ({
-    ...septemberWeek(1),
-    ministry: Array.from({ length: 30 }, (_, i) => part(`很長的傳道訓練項目 ${i}`)),
+  const tall = (id) => ({
+    ...octoberWeek(id),
+    ministry: Array.from({ length: 12 }, (_, i) => part(`很長的傳道訓練項目名稱 ${i}`)),
   });
-  const weeks = [monster(), monster()];
-  assert.ok(heightOf(weeks[0]) * 2 > PAGE_BUDGET_PT, 'fixture must actually overflow');
-  const plan = buildSheetPlan(weeks, null, opts);
-  assert.equal(plan.pages.length, 1);
-  assert.deepEqual(plan.pages.map((p) => p.scheduled), [2]);
-  assert.ok(plan.rowScale < 1);
+  const plan = buildSheetPlan([1, 2].map(tall), null, opts);
+  assert.ok(plan.pageHeight > A4_PRINTABLE_PT, 'a tall spread must raise the page height');
+  assert.equal(plan.pageHeight, Math.max(...plan.rawHeights));
 });
 
 test('page count is always ceil(scheduled / 2), however tall the weeks are', () => {
@@ -293,8 +206,56 @@ test('page count is always ceil(scheduled / 2), however tall the weeks are', () 
     ...octoberWeek(id),
     ministry: Array.from({ length: 12 }, (_, i) => part(`很長的傳道訓練項目名稱 ${i}`)),
   });
-  for (let count = 1; count <= 6; count += 1) {
-    const plan = buildSheetPlan(Array.from({ length: count }, (_, i) => tall(i + 1)), null, opts);
-    assert.equal(plan.pages.length, Math.ceil(count / 2), `${count} very tall weeks`);
+  for (let count = 1; count <= 9; count += 1) {
+    for (const make of [septemberWeek, octoberWeek, tall]) {
+      const plan = buildSheetPlan(Array.from({ length: count }, (_, i) => make(i + 1)), null, opts);
+      assert.equal(plan.pageCount, Math.ceil(count / 2), `${count} weeks`);
+      assert.equal(plan.breaks.length, plan.pageCount - 1);
+      assert.equal(emittedPages(plan).length, plan.pageCount);
+    }
   }
+});
+
+test('TWO MEANS TWO — even an absurdly tall pair shares one page', () => {
+  const monster = () => ({
+    ...septemberWeek(1),
+    ministry: Array.from({ length: 30 }, (_, i) => part(`很長的傳道訓練項目 ${i}`)),
+  });
+  const plan = buildSheetPlan([monster(), monster()], null, opts);
+  assert.equal(plan.pageCount, 1);
+  assert.deepEqual(plan.pages.map((p) => p.scheduled), [2]);
+});
+
+test('breaks land exactly on a week header row', () => {
+  // An off-by-one here is the difference between a clean spread and half a week
+  // stranded on the next page.
+  const plan = buildSheetPlan([1, 2, 3, 4, 5, 6].map(octoberWeek), null, opts);
+  for (const index of plan.breaks) {
+    assert.equal(plan.rows[index].ht, ROW_HT.head, `row ${index} should start a week`);
+    assert.ok(plan.rows[index].cells[0].rich, 'a week header carries rich text');
+  }
+});
+
+/* ===================== padding ===================== */
+
+test('padRows fills exactly to the target and anchors only its final row', () => {
+  for (const [from, target] of [[0, 800], [100, 800], [700, 791.5], [791.49, 791.5]]) {
+    const pad = padRows(from, target);
+    const total = from + pad.reduce((t, r) => t + r.ht, 0);
+    assert.ok(Math.abs(total - target) < 0.02, `${from}→${target} landed at ${total}`);
+    assert.ok(pad.every((r) => r.ht <= MAX_ROW_PT), 'a filler row exceeds Excel\'s row cap');
+    assert.equal(pad.filter((r) => r.anchor).length, 1, 'exactly one anchored filler');
+    assert.ok(pad[pad.length - 1].anchor, 'the anchor must be the last filler');
+  }
+});
+
+test('padRows adds nothing when the page is already at the target', () => {
+  assert.deepEqual(padRows(800, 800), []);
+  assert.deepEqual(padRows(850, 800), []);
+});
+
+test('pageHeightFor floors at the nominal A4 printable height', () => {
+  assert.equal(pageHeightFor([100, 200]), A4_PRINTABLE_PT);
+  assert.equal(pageHeightFor([]), A4_PRINTABLE_PT);
+  assert.equal(pageHeightFor([900, 400]), 900);
 });

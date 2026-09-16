@@ -4,12 +4,20 @@
 //
 //   node scripts/check-xlsx-pagination.mjs
 //
-// WHY THIS EXISTS: midweekXlsxLayout.test.mjs derives the page budget from the
-// same height model it builds rows with, so it can only prove the PACKER is
-// self-consistent — it cannot prove our row heights match what a spreadsheet
-// actually prints. That is the half of the October bug (two weeks plus half a
-// week on page one) that only a renderer can catch. Needs `soffice` on PATH; it
-// skips with a clear message when there isn't one.
+// WHY THIS EXISTS: midweekXlsxLayout.test.mjs measures the sheet with the same
+// height model that built it, so it can only prove the PACKER is
+// self-consistent. Only a renderer can show what a spreadsheet really does.
+//
+// Each case is rendered EIGHT ways: four page margins × (manual breaks present,
+// manual breaks stripped).
+//   - Stripping <rowBreaks> imitates the readers that ignore them — phone print
+//     dialogs, Google Sheets.
+//   - Sweeping the margins imitates a print path that overrides the margins the
+//     file asks for. A phone's print dialog demonstrably does: it applied about
+//     0.75in where the file asked for 0.35in, which is why a 752pt spread lost
+//     its last row. Passing at 0.35in ONLY is how that shipped twice.
+//
+// Needs `soffice` (with libreoffice-calc) and `pdftotext` on PATH.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -75,6 +83,10 @@ function longWeek(id) {
 
 const suspended = (id) => ({ ...shortWeek(id), type: 'suspended', label: '國際大會' });
 
+// The margins a print path might impose, whatever the file asks for. 1in is well
+// past anything seen in the wild and is here as headroom.
+const MARGINS = [0.35, 0.6, 0.85, 1.0];
+
 const CASES = [];
 for (const [name, make] of Object.entries({ short: shortWeek, long: longWeek })) {
   for (const count of [1, 2, 3, 4, 5, 7]) {
@@ -125,6 +137,7 @@ async function main() {
 
   const dir = mkdtempSync(join(tmpdir(), 'xlsxpage-'));
   let failures = 0;
+  let passes = 0;
 
   for (const { name, weeks } of CASES) {
     const expected = Math.ceil(countScheduledWeeks(weeks) / 2);
@@ -134,10 +147,18 @@ async function main() {
     // dialogs, Google Sheets — where only the filler rows keep the spreads
     // aligned. That is the case the user actually hit.
     const plan = buildSheetPlan(weeks, null, { perPage: 2, isSuspended: isMidweekSuspended });
-    const builds = [
-      ['breaks', () => buildMidweekXlsxBlob(weeks, null)],
-      ['no-breaks', () => zipXlsx(buildStyledSheetXml(plan.rows, []), buildMidweekStylesXml())],
-    ];
+    const builds = [];
+    for (const marginIn of MARGINS) {
+      for (const breaks of [plan.breaks, []]) {
+        builds.push([
+          `${marginIn}in ${breaks.length ? 'breaks' : 'no-breaks'}`,
+          () => zipXlsx(
+            buildStyledSheetXml(plan.rows, breaks, plan.pageCount, marginIn),
+            buildMidweekStylesXml(),
+          ),
+        ]);
+      }
+    }
 
     for (const [variant, build] of builds) {
       const blob = await build();
@@ -156,16 +177,18 @@ async function main() {
       const detail = pages !== expected
         ? `${pages} page(s), expected ${expected}`
         : (split && split.length ? `split week — ${split.join('; ')}` : `${pages} page(s)`);
-      console.log(`${ok ? 'ok  ' : 'FAIL'}  ${`${name} [${variant}]`.padEnd(52)} ${detail}`);
+      if (ok) passes += 1;
+      else console.log(`FAIL  ${`${name} [${variant}]`.padEnd(52)} ${detail}`);
     }
   }
 
   rmSync(dir, { recursive: true, force: true });
   if (failures) {
-    console.error(`\n${failures} case(s) did not paginate to two weeks per page.`);
+    console.error(`\n${failures} of ${failures + passes} renders did not paginate to two weeks per page.`);
     process.exitCode = 1;
   } else {
-    console.log('\nAll cases print exactly two weeks per page.');
+    console.log(`\nAll ${passes} renders print exactly two weeks per page `
+      + `(${CASES.length} cases × ${MARGINS.length} margins × breaks/no-breaks).`);
   }
 }
 
