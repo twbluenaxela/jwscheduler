@@ -13,6 +13,12 @@ import {
 } from '../lib/midweekExport';
 import { buildWeekendText, downloadWeekendXlsx, getWeekendExportFilename } from '../lib/weekendExport';
 import { getToken } from '../lib/auth-context';
+import {
+  MIDWEEK_TYPES,
+  MIDWEEK_TYPE_LABELS,
+  isMidweekSuspended,
+  suggestTypeFromLabel,
+} from '../lib/weekType.mjs';
 
 const EXPORT_ITEMS = [
   { ic: '▦', label: '匯出 JPG', sub: '貼到 LINE 群組', action: 'jpg' },
@@ -437,23 +443,32 @@ export default function MeetingsPage({
                 const w = midweekWeeks[week];
                 const wType = w.type ?? 'normal';
                 const setType = (t) => updateMidweekWeek(w.id, (cur) => ({ ...cur, type: t, label: t === 'normal' ? '' : (cur.label ?? '') }));
-                const setLabel = (v) => updateMidweekWeek(w.id, (cur) => ({ ...cur, label: v }));
+                // Typing a label suggests a type, but only while the week is
+                // still 一般 — once the admin has picked a chip, that choice is
+                // authoritative and the keyword must never override it.
+                const setLabel = (v) => updateMidweekWeek(w.id, (cur) => {
+                  const suggested = (cur.type ?? 'normal') === 'normal' ? suggestTypeFromLabel(v) : null;
+                  return { ...cur, label: v, ...(suggested ? { type: suggested } : {}) };
+                });
+                const placeholder = isMidweekSuspended(w)
+                  ? '國際大會、區域大會、總部代表…'
+                  : '分區監督探訪、特別演講…';
                 return (
                   <div className="mw-type-bar">
                     <div className="mw-type-chips">
-                      {[['normal','一般'],['special','特別'],['assembly','大會']].map(([val, lbl]) => (
+                      {MIDWEEK_TYPES.map((val) => (
                         <button
                           key={val}
                           className={`mw-type-chip${wType === val ? ' mw-type-chip--active' : ''}`}
                           onClick={() => setType(val)}
-                        >{lbl}</button>
+                        >{MIDWEEK_TYPE_LABELS[val]}</button>
                       ))}
                     </div>
                     {wType !== 'normal' && (
                       <input
                         className="week-edit__input mw-type-label-input"
                         type="text"
-                        placeholder={wType === 'assembly' ? '區域大會、分區大會…' : '分區監督探訪、總部代表…'}
+                        placeholder={placeholder}
                         value={w.label ?? ''}
                         onChange={(e) => setLabel(e.target.value)}
                         aria-label="週次標籤"

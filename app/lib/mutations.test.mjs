@@ -105,6 +105,17 @@ test('週末改派主席：保留前任名字', async () => {
   assert.equal(log.action, 'reassign');
 });
 
+test('週末列類型（type）可以儲存', async () => {
+  // Regression: `type` was missing from ALLOWED_WEEKEND_FIELDS, so the
+  // 正常/特別/暫停 toggle answered 400 and the change was lost on reload.
+  const db = makeFakeDb(seed());
+  const existing = { ...db.__stores.weekendRows[0] };
+  const res = await applyWeekendPatch(db, user, existing, { type: 'suspended' });
+  assert.equal(res.status, 200);
+  assert.equal(db.__stores.weekendRows[0].type, 'suspended');
+  assert.equal(db.__stores.changeLogs.length, 0, '類型不是姓名欄位，不寫變更記錄');
+});
+
 test('週末非姓名欄位（topic）不寫入變更記錄', async () => {
   const db = makeFakeDb(seed());
   const existing = { ...db.__stores.weekendRows[0] };

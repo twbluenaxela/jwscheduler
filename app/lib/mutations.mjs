@@ -6,8 +6,12 @@
 import { describeMidweekSlot, weekendFieldLabel, logChange, WEEKEND_NAME_FIELDS } from './changelog.mjs';
 import { parseCnDate, parseIsoDate, toIsoDate } from './cnDate.mjs';
 
+// `type` is here because the 正常/特別/暫停 toggle in WeekendView PATCHes it like
+// any other field. Without it the route answered 400 「沒有可更新的欄位」, so the
+// change was optimistic-only and vanished on reload.
 export const ALLOWED_WEEKEND_FIELDS = new Set([
   'speaker', 'chair', 'wt', 'read', 'host', 'away', 'topic', 'no', 'cong', 'note', 'label', 'date',
+  'type',
 ]);
 
 // Upsert/clear a single midweek assignment by slotId and log the change.

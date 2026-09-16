@@ -269,8 +269,24 @@ html, body {
 .mw-type-badge { font-size: 12px; font-weight: 800; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
 .mw-type-badge--special { background: var(--ministry-soft); color: #7a5900; border: 1.5px solid var(--ministry); }
 .mw-type-badge--assembly { background: var(--surface-2); color: var(--ink-2); border: 1.5px solid var(--line-2); }
+.mw-type-badge--suspended { background: var(--living-soft); color: var(--special); border: 1.5px solid var(--special); }
 .mw-body { }
 .mw-body--faint { opacity: 0.55; pointer-events: none; }
+
+/* A 大會 / 暫停 week: no midweek meeting, so the card is a header and a notice
+   rather than a programme. Mobile first — the notice wraps and stays readable at
+   phone widths, and grows a little from 721px up. */
+.card--suspended .mw-head { border-left: 4px solid var(--special); background: var(--living-soft); }
+.mw-head--suspended { align-items: center; }
+.mw-suspended {
+  padding: 18px 16px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--special);
+  letter-spacing: .01em;
+}
+@media (min-width: 721px) { .mw-suspended { padding: 26px 20px; font-size: 16.5px; } }
 
 /* ── Navstrip type selector (edit mode) ── */
 .mw-type-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--line); flex-wrap: wrap; }
@@ -957,7 +973,9 @@ html, body {
 }
 .rev-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 .exp-block { margin-top: 30px; }
-.exp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+/* auto-fit, not a fixed count: the card list has grown to five and a hard
+   repeat(4) left the fifth stranded alone on its own row. */
+.exp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .exp-card { appearance: none; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 13px; padding: 16px; text-align: left; transition: all .14s ease; }
 .exp-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
 .exp-card b { font-size: 15px; }
@@ -967,6 +985,88 @@ html, body {
 .exp-range { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
 .exp-range__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .exp-range__count { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
+
+/* ===================== PDF 版面 picker (mobile first) =====================
+   Base rules are the phone layout: the page preview and the controls stack in a
+   single column and every tap target clears 44px. The 721px block below turns it
+   into two columns for the desktop dialog. */
+.sheet--pdflay { max-width: 520px; }
+.pdflay-body {
+  overflow-y: auto;
+  padding: 16px 20px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.pdflay-controls { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+
+/* The A4-proportioned skeleton page. */
+.pdflay-page {
+  width: 148px;
+  aspect-ratio: 595 / 842;
+  flex-shrink: 0;
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  box-shadow: var(--shadow);
+}
+.pdflay-box {
+  border: 1px dashed var(--line-2);
+  border-radius: 4px;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 5px;
+  overflow: hidden;
+}
+.pdflay-box.is-on {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+.pdflay-box__head { height: 6px; border-radius: 2px; background: var(--accent); opacity: .85; }
+.pdflay-box__line { height: 3px; border-radius: 2px; background: var(--accent); opacity: .3; }
+.pdflay-box__line--short { width: 55%; }
+
+/* Word-style rows × cols picker. */
+.pdflay-picker { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pdflay-picker__row { display: flex; gap: 4px; }
+.pdflay-picker__cell {
+  appearance: none;
+  /* 44px tall on a phone so each cell is a real tap target; a 4×4 grid at this
+     size is 188px wide, which still clears a 320px screen. */
+  width: 44px; height: 44px;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: background .1s ease, border-color .1s ease;
+}
+.pdflay-picker__cell.is-on { background: var(--accent); border-color: var(--accent); }
+/* Combinations past the four-box cap stay visible but inert, so the limit reads
+   as part of the grid rather than as a button that silently does nothing. */
+.pdflay-picker__cell:disabled { opacity: .3; cursor: default; background: transparent; }
+.pdflay-picker__cap { font-size: 12px; font-weight: 700; color: var(--ink-3); margin-top: 2px; }
+
+.pdflay-steps { display: flex; align-items: center; gap: 14px; }
+.pdflay-step { min-width: 44px; min-height: 44px; font-size: 20px; line-height: 1; }
+.pdflay-steps__count { font-size: 15px; font-weight: 800; min-width: 92px; text-align: center; }
+.pdflay-note { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--ink-3); text-align: center; }
+.pdflay-error { margin: 0; }
+.pdflay-foot { display: flex; justify-content: flex-end; gap: 10px; }
+
+@media (min-width: 721px) {
+  .pdflay-body { flex-direction: row; align-items: flex-start; gap: 22px; padding: 20px 22px 8px; }
+  .pdflay-page { width: 164px; }
+  .pdflay-controls { align-items: flex-start; }
+  .pdflay-picker__cell { width: 40px; height: 34px; }
+  .pdflay-note { text-align: left; }
+}
 
 /* ============================= Bottom sheet ============================= */
 .sheet-backdrop {

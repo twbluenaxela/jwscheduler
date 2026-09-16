@@ -103,22 +103,55 @@ app/
                          `triggerDownload()` = blob → download anchor; `captureBox(node)` =
                          html-to-image size opts pinned to the node's real box (shared with
                          MeetingsPage and AssignmentHeatmap so captures don't drift); `downloadWeekXlsx` /
-                         `exportWeeksXlsx` = Excel via `buildMidweekXlsxBlob()` — a styled
-                         workbook mirroring the card (section-colour bands, grey time/role
-                         cols, bold names) with A4 portrait page setup + a manual page break
-                         after every 2nd week, so printing from Excel gives two weeks per
-                         page (for the bulletin board). `buildXlsxBuffer()` remains the
-                         plain builder used by weekendExport.js. Multi-week visual
-                         exports are DOM-screenshot based: `exportNodes{Jpeg,Pdf}` +
+                         `exportWeeksXlsx` = Excel — the workbook itself now lives in
+                         `midweekXlsxLayout.mjs` (re-exported here so import sites don't move).
+                         `buildXlsxBuffer()` (now in `xlsx.mjs`) remains the plain builder used
+                         by weekendExport.js. Multi-week visual
+                         exports are DOM-screenshot based: `exportNodes{Jpeg,Pdf,PdfGrid}` +
                          `openNodesPrintWindow` take rendered MidweekWeek card nodes and
                          capture them via html-to-image, so the output matches the live card
                          exactly. (The old hand-drawn `renderWeekToCanvas` exporters were
                          removed — they had drifted from the real card; see "What NOT to do".)
+                         `exportNodesPdfGrid(nodes, weeks, layout)` = the 版面 export: N week
+                         cards per A4 page, geometry from `pdfLayout.mjs`, bytes from
+                         `pdfWriter.mjs`
                          All download filenames carry the actual date range, not a generic
                          count: `getMidweekExportFilename(week, ext)` uses the week's label;
                          `getMultiWeekExportFilename(weeks, ext)` (xlsx/zip/pdf) joins the
                          first and last week's label with `~`, e.g.
                          `週中_9月7-13日~10月5-11日.xlsx`
+    weekType.mjs       — THE definition of "this week's midweek meeting is cancelled".
+                         `MIDWEEK_TYPES` (normal/special/assembly/suspended — `type` is a free
+                         String column, so 'suspended' needed no migration),
+                         `isMidweekSuspended(week)` (assembly OR suspended — 總覽 already
+                         treated assembly that way), `suggestTypeFromLabel(label)` (a DEFAULT
+                         for the chip, applied only while the week is still 一般; the admin's
+                         chip always wins) and `suspendedNotice(week)`. The card, the Excel
+                         exporter and the PDF exporter all import it, so a week that prints as
+                         a notice is also skipped by both page packers
+    xlsx.mjs           — low-level OOXML: `escapeXml`, `cellRef`, `zipXlsx`, `buildXlsxBuffer`
+                         (the plain builder weekendExport/heatmapExport use). `.mjs` so the
+                         styled workbook above it can be built and printed outside the browser
+    midweekXlsxLayout.mjs — the styled midweek workbook: row building (`weekRows`), the row
+                         HEIGHT model, page packing and the OOXML. Pure + `.mjs`, so
+                         `node --test` pins the pagination and
+                         `scripts/check-xlsx-pagination.mjs` prints it through LibreOffice.
+                         `buildSheetPlan` packs TWO SCHEDULED weeks per page (a cancelled week
+                         collapses to a 2-row notice and does NOT consume a slot), measures
+                         every page, and applies one workbook-wide `rowScaleFor` squeeze so a
+                         pair of long weeks still fits. `<pageSetup>` uses
+                         `fitToWidth="1" fitToHeight="0"` — see "What NOT to do"
+    pdfLayout.mjs      — geometry for the N-weeks-per-page PDF, shared by the picker's ghost
+                         preview and the emitted PDF so they cannot disagree.
+                         `normalizeLayout/addBox/removeBox` (1 ≤ count ≤ rows*cols ≤ 4; ＋ grows
+                         along the long axis, so 2-stacked becomes 3-stacked not a ragged 2×2),
+                         `paginate` (cancelled weeks become full-width notice bands that don't
+                         use a box) and `placeCells` (bands sized to the cards' natural height
+                         and the block centred — equal bands left a 2×2 page mostly white)
+    pdfWriter.mjs      — `writePdf(pages)`: pages of placed JPEGs, object numbers allocated as
+                         written (the old fixed stride of 3 only worked at one image per page).
+                         `singleImagePages()` keeps the original one-card-per-page behaviour
+                         that `jpegImagesToPdfBlob` and the 指派分布 PDF rely on
     weekendExport.js   — `getWeekendExportFilename(rows, ext, label)` mirrors the midweek
                          helper for weekend downloads: joins the first/last exported row's
                          `date` with `~` (e.g. `週末_7-12~9-14.xlsx`); `downloadWeekendXlsx`
@@ -372,7 +405,15 @@ app/
                          selected weeks as REAL MidweekWeek cards in an off-screen container
                          (cardRefs) and screenshot them via the `exportNodes*` helpers, so
                          output matches the live card (Excel uses the styled data path in
-                         `buildMidweekXlsxBlob` — two weeks per printed A4 page)
+                         `buildMidweekXlsxBlob` — two weeks per printed A4 page). A fifth card,
+                         **PDF 版面**, opens `PdfLayoutSheet` instead of exporting directly
+    PdfLayoutSheet.js  — the 版面 picker (匯入/匯出 only): a Word-style rows × cols grid (combos
+                         past 4 boxes shown but disabled), an A4-proportioned ghost skeleton
+                         preview with the first `count` boxes filled, and a ＋/− stepper capped
+                         at 4. Mobile first — bottom sheet with 44px tap targets, two columns
+                         from 721px up; reuses the `.sheet-backdrop`/`.sheet` pattern rather
+                         than adding a second modal primitive. The choice persists in
+                         localStorage (`mwPdfLayout`), default 2 stacked
     SettingsPage.js    — ⚙ settings. Admins: 我的資訊 + 會眾資訊 + 邀請檢視者 (share the
                          congregation CODE, not an invite link) in the left grid column, 聚會排程
                          settings top-right, 成員列表 (2-col card grid, role <select> per member)
@@ -427,6 +468,12 @@ scripts/
   sim-suggest.mjs      — diagnostic: simulates N weeks of auto-accepted ✦ suggestions
                          against real DB history and reports part-type/role distribution
                          per person (used to tune the rotation algorithm; read-only DB)
+  check-xlsx-pagination.mjs — verifies the midweek workbook really prints two weeks per A4
+                         page, by building it and converting it with LibreOffice
+                         (`node scripts/check-xlsx-pagination.mjs`). No DB, no network. Run it
+                         after changing row heights, column widths or the page setup — the unit
+                         tests are self-consistent with the height model and cannot catch a
+                         model that disagrees with a real renderer
 Dockerfile             — multi-stage build: deps → builder (prisma generate + next build) → runner
 fly.toml               — fly.io config: primary_region=ams, internal_port=3000,
                          NEXT_PUBLIC_* build args. NO release_command — `prisma
@@ -768,8 +815,25 @@ for the webhook, a `reply` spy + injectable `now`. Coverage:
 - `heatmap.test.mjs` — the 指派分布 derivation: agreement with the shared `cnDate` parser,
   centred windows, coverage/idle rules, the slot-ID guard (a live `getAssign` override must beat
   the `part.assign` snapshot), `windowLabel`, and the export row/text builders.
+- `weekType.test.mjs` — the cancelled-week predicate and the label→type keyword defaults
+  (including that 分區監督探訪 suggests 特別, NOT 暫停 — that meeting still happens).
+- `midweekXlsxLayout.test.mjs` — the print pagination: the wrapped-title height model, two
+  scheduled weeks per page with cancelled weeks riding along, `ceil(n/2)` pages, breaks landing
+  on a week header, and every page fitting `PAGE_BUDGET_PT` across a matrix of month shapes
+  (September-shaped weeks must stay uncompressed; October-shaped ones must squeeze).
+- `pdfLayout.test.mjs` — the 版面 grid: the ≤4-box invariants, ＋/− growth, cells staying inside
+  the margins without overlapping, aspect preserved, bands sized to the cards, and full-width
+  notice bands.
 
-Tests are non-vacuous (verified by mutation: breaking a label produced the expected failures).
+Tests are non-vacuous (verified by mutation: breaking a label produced the expected failures;
+reverting the row-height rule fails `midweekXlsxLayout.test.mjs`).
+
+`scripts/check-xlsx-pagination.mjs` is the renderer-level companion: it builds the workbook and
+converts it with LibreOffice, asserting the real page count. The unit tests derive the page
+budget from the same height model they build rows with, so only a real renderer can catch a
+height or WIDTH model that disagrees with what a spreadsheet actually prints — which is how the
+column-overflow half of the October bug was found. Needs `soffice` with `libreoffice-calc`; it
+skips with a message when that is missing.
 
 ### Publish diff logic
 
@@ -895,6 +959,34 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   page was just the name. Use the 匯出 menu (JPG / 複製圖片 / 複製文字 / PDF), which captures the
   card with `is-capturing` so the whole card is in the shot
 - Do not derive ministry-talk eligibility from the title alone — a `/` in `roleLabel` (admin added a 助手 via the edit-mode toggle) means it IS a demo and must use the mixed pool; `effectiveCat(part)` already encodes this precedence
+- Do not remove `fitToWidth="1"` (or turn `fitToPage` off) in the midweek workbook's
+  `<pageSetup>`. The five columns total 91 character units, which only fits A4 when the
+  workbook's Normal font really IS Calibri; wherever it is substituted (Linux, LibreOffice,
+  many Macs) the same widths come out ~28% wider, the 指派 column falls off the right edge and
+  EVERY page grows a second, near-empty column-page. That was half of the "October printed on
+  three pages" report, and a real renderer found it — the unit tests could not, because the
+  page budget is derived from the same height model the rows are built with. Also do not set a
+  `scale`: Excel ignores it whenever fitToPage is on. Height is controlled by compressing row
+  heights (`rowScaleFor`) instead. `scripts/check-xlsx-pagination.mjs` prints the workbook
+  through LibreOffice and asserts `ceil(scheduledWeeks / 2)` pages — run it after touching the
+  row heights, the column widths or the page setup
+- Do not assume a fixed number of spreadsheet rows per week, or go back to breaking after every
+  2nd week regardless of height. A week is `10 + parts` rows and every row's height is explicit,
+  so two long weeks really can exceed the 791pt printable height; the old builder had no budget
+  at all and let Excel resolve the overflow with an automatic break mid-week. `buildSheetPlan`
+  measures the real rows and packs against `PAGE_BUDGET_PT`
+- Do not give a cancelled week (`assembly`/`suspended`) a full programme in an export. It
+  collapses to a one-line notice and does NOT consume one of the N boxes in either the Excel
+  spread or the PDF grid — otherwise one 大會 week knocks every following spread out of phase
+  and the rest of the month prints one week per page. `isMidweekSuspended` in `weekType.mjs` is
+  the only definition; do not re-test `type === ...` inline
+- Do not let `pdfLayout.mjs` and the 版面 picker's preview drift apart. The picker shows the
+  grid shape and the export places the cards; both go through `normalizeLayout`, and the page
+  count in the picker comes from the same `paginate` the exporter uses
+- Do not `.filter(Boolean)` the ImportPage `cardRefs` into a shorter array before handing them
+  to the grid PDF. It places cards by week INDEX, so a dropped null shifts every later card into
+  the wrong box; keep `nodes[i]` aligned with `selectedWeeks[i]` (and truncate `cardRefs.current`
+  when the selection shrinks, or stale refs from a wider range linger)
 
 ---
 

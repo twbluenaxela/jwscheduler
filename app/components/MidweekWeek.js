@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { slotCat } from '../lib/partTypes.mjs';
+import { isMidweekSuspended, suspendedNotice } from '../lib/weekType.mjs';
 
 function TextField({ editMode, value, onChange, className, inputClassName, ariaLabel, placeholder }) {
   if (editMode) {
@@ -266,9 +267,46 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
   // so read them from `week` — draftWeek wouldn't see those edits live.
   const weekType = week.type ?? 'normal';
   const weekLabel = week.label ?? '';
+  // 大會 / 暫停 weeks have no midweek meeting, so the card collapses to a notice
+  // instead of listing a programme nobody will follow. 總覽 already renders these
+  // weeks as a suspended row; this keeps the card, 總覽 and every export saying
+  // the same thing — and the exports screenshot this card, so they cannot drift.
+  const suspended = isMidweekSuspended(week);
   const cardClass = weekType === 'special' ? 'card card--special'
-                  : weekType === 'assembly' ? 'card card--assembly'
+                  : suspended ? 'card card--assembly'
                   : 'card';
+
+  if (suspended) {
+    return (
+      <article className={`${cardClass} card--suspended`} ref={cardRef}>
+        <div className="mw-head mw-head--suspended">
+          <div className="mw-head__date">
+            <TextField
+              editMode={editMode}
+              value={shownWeek.date}
+              onChange={(value) => updateDraftWeek({ date: value })}
+              className="mw-head__date-value"
+              inputClassName="week-edit__input week-edit__input--date"
+              ariaLabel="聚會日期"
+            />
+          </div>
+          <div className="mw-head__main">
+            <div className="mw-head__sub">
+              <TextField
+                editMode={editMode}
+                value={shownWeek.weekdayPill}
+                onChange={(value) => updateDraftWeek({ weekdayPill: value })}
+                className="weekday-pill"
+                inputClassName="week-edit__input week-edit__input--pill"
+                ariaLabel="星期與時間"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="mw-suspended">{suspendedNotice(week)}</div>
+      </article>
+    );
+  }
 
   return (
     <article className={cardClass} ref={cardRef}>

@@ -6,9 +6,14 @@ import MidweekWeek from './MidweekWeek';
 import {
   exportNodesJpeg,
   exportNodesPdf,
+  exportNodesPdfGrid,
   exportWeeksXlsx,
   openNodesPrintWindow,
 } from '../lib/midweekExport';
+import PdfLayoutSheet from './PdfLayoutSheet';
+import { DEFAULT_LAYOUT, normalizeLayout } from '../lib/pdfLayout.mjs';
+
+const PDF_LAYOUT_KEY = 'mwPdfLayout';
 
 const SECTION_LABELS = {
   treasures: { label: '上帝話語的寶藏', color: 'treasures' },
@@ -24,7 +29,8 @@ const CAT_LABELS = {
 const EXPORT_CARDS = [
   { ic: '▦', label: '分享圖片', sub: 'JPG · 貼到 LINE 群組', action: 'jpg' },
   { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
-  { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
+  { ic: '▥', label: '下載 PDF', sub: '每頁一週', action: 'pdf' },
+  { ic: '⊞', label: 'PDF 版面', sub: '每頁 2–4 週', action: 'pdfgrid' },
   { ic: '⎙', label: '列印', sub: '直接送印表機', action: 'print' },
 ];
 
@@ -139,22 +145,66 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
     return existingWeeks;
   }, [range, existingWeeks, customFrom, customTo]);
 
+  // Drop refs left behind by a wider selection. Without this, shrinking the range
+  // leaves stale nodes past the end of the array; the grid PDF places cards by
+  // week INDEX, so a stale or missing ref would shift every later card into the
+  // wrong box on the page.
+  useEffect(() => { cardRefs.current.length = selectedWeeks.length; }, [selectedWeeks.length]);
+
+  // Keep nodes index-aligned with selectedWeeks — never .filter(Boolean) into a
+  // shorter array, or nodes[i] stops describing weeks[i].
+  const exportNodes = useCallback(
+    () => selectedWeeks.map((_, i) => cardRefs.current[i] ?? null),
+    [selectedWeeks],
+  );
+
+  const [pdfLayout, setPdfLayout] = useState(DEFAULT_LAYOUT);
+  const [layoutOpen, setLayoutOpen] = useState(false);
+
+  // Remember the chosen layout between visits, like congSettings does.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(PDF_LAYOUT_KEY);
+      if (saved) setPdfLayout(normalizeLayout(JSON.parse(saved)));
+    } catch { /* a blocked or corrupt store just means the default */ }
+  }, []);
+  const changeLayout = useCallback((next) => {
+    const safe = normalizeLayout(next);
+    setPdfLayout(safe);
+    try { window.localStorage.setItem(PDF_LAYOUT_KEY, JSON.stringify(safe)); } catch { /* non-fatal */ }
+  }, []);
+
   const runExport = useCallback(async (action) => {
     if (!selectedWeeks.length) { setExportError('所選範圍沒有可匯出的週次。'); return; }
     setExportError(null);
+    if (action === 'pdfgrid') { setLayoutOpen(true); return; }
     setExporting(true);
     try {
-      const nodes = cardRefs.current.slice(0, selectedWeeks.length).filter(Boolean);
-      if (action === 'jpg') await exportNodesJpeg(nodes, selectedWeeks);
+      const nodes = exportNodes();
+      const present = nodes.filter(Boolean);
+      if (action === 'jpg') await exportNodesJpeg(present, selectedWeeks);
       else if (action === 'xlsx') await exportWeeksXlsx(selectedWeeks, getAssign);
-      else if (action === 'pdf') await exportNodesPdf(nodes, selectedWeeks);
-      else if (action === 'print') await openNodesPrintWindow(nodes);
+      else if (action === 'pdf') await exportNodesPdf(present, selectedWeeks);
+      else if (action === 'print') await openNodesPrintWindow(present);
     } catch (err) {
       setExportError(err?.message || '匯出失敗');
     } finally {
       setExporting(false);
     }
-  }, [selectedWeeks, getAssign]);
+  }, [selectedWeeks, getAssign, exportNodes]);
+
+  const runGridExport = useCallback(async (layout) => {
+    setExportError(null);
+    setExporting(true);
+    try {
+      await exportNodesPdfGrid(exportNodes(), selectedWeeks, layout);
+      setLayoutOpen(false);
+    } catch (err) {
+      setExportError(err?.message || '匯出失敗');
+    } finally {
+      setExporting(false);
+    }
+  }, [selectedWeeks, exportNodes]);
 
   const existingDates = new Set(existingWeeks.map((w) => w.date));
   const mergeStats = {
@@ -468,6 +518,17 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
           />
         ))}
       </div>
+
+      <PdfLayoutSheet
+        open={layoutOpen}
+        onClose={() => setLayoutOpen(false)}
+        weeks={selectedWeeks}
+        layout={pdfLayout}
+        onChange={changeLayout}
+        onExport={runGridExport}
+        exporting={exporting}
+        error={exportError}
+      />
     </section>
   );
 }

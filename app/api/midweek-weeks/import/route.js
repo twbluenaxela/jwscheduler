@@ -115,6 +115,11 @@ function mapWeek(week) {
     closeSongTime: week.closeSongTime ?? '',
     closeSong: week.closeSong,
     closePrayer: assignmentMap.get(`mw${week.id}_closePrayer`) ?? '',
+    // The import PATCHes partially, so an existing week keeps its type/label in
+    // the DB — but omitting them here dropped them from the in-memory week until
+    // the next reload, and both the card and the export pagination read them.
+    type: week.type ?? 'normal',
+    label: week.label ?? '',
   };
 }
 

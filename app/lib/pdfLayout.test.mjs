@@ -1,0 +1,227 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  A4_PT,
+  DEFAULT_LAYOUT,
+  GAP,
+  MARGIN,
+  MAX_BOXES,
+  NOTICE_H,
+  addBox,
+  normalizeLayout,
+  pageCount,
+  paginate,
+  placeCells,
+  removeBox,
+} from './pdfLayout.mjs';
+
+const normal = (id) => ({ id, date: `9月 ${id}日` });
+const cancelled = (id) => ({ id, date: `9月 ${id}日`, type: 'suspended', label: '國際大會' });
+
+/* ===================== the layout invariants ===================== */
+
+test('the default is two stacked full-width boxes', () => {
+  assert.deepEqual(normalizeLayout(DEFAULT_LAYOUT), { rows: 2, cols: 1, count: 2 });
+});
+
+test('normalizeLayout never exceeds four boxes', () => {
+  for (let rows = 1; rows <= 6; rows += 1) {
+    for (let cols = 1; cols <= 6; cols += 1) {
+      const l = normalizeLayout({ rows, cols, count: 99 });
+      assert.ok(l.rows * l.cols <= MAX_BOXES, `${rows}×${cols} → ${l.rows}×${l.cols}`);
+      assert.ok(l.count >= 1 && l.count <= l.rows * l.cols);
+    }
+  }
+});
+
+test('normalizeLayout copes with junk', () => {
+  assert.deepEqual(normalizeLayout(undefined), { rows: 2, cols: 1, count: 2 });
+  assert.deepEqual(normalizeLayout({ rows: 0, cols: 0, count: 0 }), { rows: 1, cols: 1, count: 1 });
+  assert.deepEqual(normalizeLayout({ rows: -3, cols: NaN, count: 2.6 }), { rows: 1, cols: 1, count: 1 });
+});
+
+test('the + button grows along the long axis, not into a ragged grid', () => {
+  // From two stacked, a third box should be a third full-width row — not a 2×2
+  // with an empty corner, which on A4 portrait makes each card uselessly small.
+  assert.deepEqual(addBox({ rows: 2, cols: 1, count: 2 }), { rows: 3, cols: 1, count: 3 });
+  assert.deepEqual(addBox({ rows: 3, cols: 1, count: 3 }), { rows: 4, cols: 1, count: 4 });
+  assert.deepEqual(addBox({ rows: 1, cols: 2, count: 2 }), { rows: 1, cols: 3, count: 3 });
+  // A 2×2 already has room for the fourth.
+  assert.deepEqual(addBox({ rows: 2, cols: 2, count: 3 }), { rows: 2, cols: 2, count: 4 });
+});
+
+test('the + button stops at four', () => {
+  const full = { rows: 4, cols: 1, count: 4 };
+  assert.deepEqual(addBox(full), full);
+  assert.deepEqual(addBox({ rows: 2, cols: 2, count: 4 }), { rows: 2, cols: 2, count: 4 });
+});
+
+test('the − button shrinks the grid with the count', () => {
+  assert.deepEqual(removeBox({ rows: 3, cols: 1, count: 3 }), { rows: 2, cols: 1, count: 2 });
+  assert.deepEqual(removeBox({ rows: 1, cols: 3, count: 3 }), { rows: 1, cols: 2, count: 2 });
+  assert.deepEqual(removeBox({ rows: 2, cols: 2, count: 4 }), { rows: 2, cols: 2, count: 3 });
+});
+
+test('the − button stops at one', () => {
+  const one = { rows: 1, cols: 1, count: 1 };
+  assert.deepEqual(removeBox(one), one);
+});
+
+/* ===================== packing ===================== */
+
+test('N weeks per page, for every N up to four', () => {
+  const weeks = Array.from({ length: 9 }, (_, i) => normal(i + 1));
+  for (const layout of [{ rows: 1, cols: 1, count: 1 }, { rows: 2, cols: 1, count: 2 },
+    { rows: 3, cols: 1, count: 3 }, { rows: 2, cols: 2, count: 4 }]) {
+    assert.equal(pageCount(weeks, layout), Math.ceil(9 / layout.count), `count ${layout.count}`);
+  }
+});
+
+test('a cancelled week does not consume a box', () => {
+  // The exception the whole feature hinges on: two real weeks still share the
+  // page, and the notice rides along with them.
+  const weeks = [normal(1), cancelled(2), normal(3), normal(4)];
+  const pages = paginate(weeks, { rows: 2, cols: 1, count: 2 });
+  assert.equal(pages.length, 2);
+  assert.deepEqual(pages[0].bands, [
+    { kind: 'weeks', items: [0] },
+    { kind: 'notice', item: 1 },
+    { kind: 'weeks', items: [2] },
+  ]);
+  assert.deepEqual(pages[1].bands, [{ kind: 'weeks', items: [3] }]);
+});
+
+test('a run of only cancelled weeks still prints one page', () => {
+  const pages = paginate([cancelled(1), cancelled(2)], DEFAULT_LAYOUT);
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].bands.length, 2);
+});
+
+test('side-by-side columns fill a band before starting the next', () => {
+  const weeks = Array.from({ length: 4 }, (_, i) => normal(i + 1));
+  const [page] = paginate(weeks, { rows: 2, cols: 2, count: 4 });
+  assert.deepEqual(page.bands, [
+    { kind: 'weeks', items: [0, 1] },
+    { kind: 'weeks', items: [2, 3] },
+  ]);
+});
+
+test('no weeks, no pages', () => {
+  assert.deepEqual(paginate([], DEFAULT_LAYOUT), []);
+  assert.deepEqual(paginate(undefined, DEFAULT_LAYOUT), []);
+});
+
+/* ===================== placement ===================== */
+
+const within = (r) => (
+  r.x >= MARGIN - 0.01
+  && r.y >= MARGIN - 0.01
+  && r.x + r.w <= A4_PT.w - MARGIN + 0.01
+  && r.y + r.h <= A4_PT.h - MARGIN + 0.01
+);
+
+const overlaps = (a, b) => (
+  a.x < b.x + b.w - 0.01 && b.x < a.x + a.w - 0.01
+  && a.y < b.y + b.h - 0.01 && b.y < a.y + a.h - 0.01
+);
+
+test('cells stay inside the margins and never overlap', () => {
+  const weeks = Array.from({ length: 6 }, (_, i) => (i === 2 ? cancelled(i + 1) : normal(i + 1)));
+  const sizes = Object.fromEntries(weeks.map((_, i) => [i, { width: 960, height: 1400 }]));
+  for (const layout of [{ rows: 1, cols: 1, count: 1 }, { rows: 2, cols: 1, count: 2 },
+    { rows: 3, cols: 1, count: 3 }, { rows: 2, cols: 2, count: 4 }, { rows: 1, cols: 2, count: 2 }]) {
+    for (const page of paginate(weeks, layout)) {
+      const rects = placeCells(page, layout, sizes);
+      rects.forEach((r) => assert.ok(within(r), `count ${layout.count}: ${JSON.stringify(r)} escapes the page`));
+      for (let i = 0; i < rects.length; i += 1) {
+        for (let j = i + 1; j < rects.length; j += 1) {
+          assert.ok(!overlaps(rects[i], rects[j]), `count ${layout.count}: cells ${i} and ${j} overlap`);
+        }
+      }
+    }
+  }
+});
+
+test('a card keeps its aspect ratio', () => {
+  const weeks = [normal(1), normal(2)];
+  const sizes = { 0: { width: 800, height: 1200 }, 1: { width: 1600, height: 400 } };
+  const [page] = paginate(weeks, DEFAULT_LAYOUT);
+  const rects = placeCells(page, DEFAULT_LAYOUT, sizes);
+  rects.forEach((r) => {
+    const source = sizes[r.item];
+    assert.ok(
+      Math.abs((r.w / r.h) - (source.width / source.height)) < 0.001,
+      `week ${r.item} was distorted: ${r.w}×${r.h} from ${source.width}×${source.height}`,
+    );
+  });
+});
+
+test('a notice band spans the full width at a fixed height', () => {
+  const weeks = [normal(1), cancelled(2)];
+  const [page] = paginate(weeks, DEFAULT_LAYOUT);
+  const notice = placeCells(page, DEFAULT_LAYOUT, {}).find((r) => r.kind === 'notice');
+  assert.equal(notice.w, A4_PT.w - 2 * MARGIN);
+  assert.equal(notice.h, NOTICE_H);
+  assert.equal(notice.x, MARGIN);
+});
+
+test('a notice image is fitted inside its band, not stretched to it', () => {
+  // The notice is a capture of the collapsed card, so it must keep its shape.
+  const weeks = [normal(1), cancelled(2)];
+  const [page] = paginate(weeks, DEFAULT_LAYOUT);
+  const sizes = { 1: { width: 960, height: 200 } };
+  const notice = placeCells(page, DEFAULT_LAYOUT, sizes).find((r) => r.kind === 'notice');
+  assert.ok(Math.abs((notice.w / notice.h) - (960 / 200)) < 0.001);
+  assert.ok(notice.h <= NOTICE_H + 0.01);
+  assert.ok(notice.x >= MARGIN - 0.01);
+});
+
+test('a week with no captured image still reserves its cell', () => {
+  // Otherwise one failed capture shuffles every later card into the wrong box.
+  const weeks = [normal(1), normal(2)];
+  const [page] = paginate(weeks, DEFAULT_LAYOUT);
+  const rects = placeCells(page, DEFAULT_LAYOUT, { 0: { width: 960, height: 1400 } });
+  assert.equal(rects.length, 2);
+  assert.deepEqual(rects.map((r) => r.item), [0, 1]);
+  assert.ok(rects[1].w > 0 && rects[1].h > 0);
+});
+
+test('bands are sized to the cards, not split into equal slabs', () => {
+  // A week card is much wider than it is tall, so in a two-column cell it is
+  // width-constrained. Equal bands left a 2×2 page mostly white; bands should
+  // hug the cards and the block should sit centred.
+  const weeks = Array.from({ length: 4 }, (_, i) => normal(i + 1));
+  const layout = { rows: 2, cols: 2, count: 4 };
+  const sizes = Object.fromEntries(weeks.map((_, i) => [i, { width: 960, height: 370 }]));
+  const [page] = paginate(weeks, layout);
+  const rects = placeCells(page, layout, sizes);
+
+  const cellW = (A4_PT.w - 2 * MARGIN - GAP) / 2;
+  const expectedH = (cellW * 370) / 960;
+  rects.forEach((r) => assert.ok(Math.abs(r.h - expectedH) < 0.01, `card is ${r.h}pt, natural is ${expectedH}pt`));
+
+  // Centred: the gap above the first row equals the gap below the last.
+  const top = Math.max(...rects.map((r) => r.y + r.h));
+  const bottom = Math.min(...rects.map((r) => r.y));
+  assert.ok(Math.abs((A4_PT.h - top) - bottom) < 0.01, 'block is not vertically centred');
+});
+
+test('cards too tall for the page are shrunk to fit, still in aspect', () => {
+  const weeks = Array.from({ length: 4 }, (_, i) => normal(i + 1));
+  const layout = { rows: 4, cols: 1, count: 4 };
+  const sizes = Object.fromEntries(weeks.map((_, i) => [i, { width: 400, height: 2000 }]));
+  const [page] = paginate(weeks, layout);
+  const rects = placeCells(page, layout, sizes);
+  const used = rects.reduce((t, r) => t + r.h, 0) + (rects.length - 1) * GAP;
+  assert.ok(used <= A4_PT.h - 2 * MARGIN + 0.01, `content is ${used}pt tall`);
+  rects.forEach((r) => assert.ok(Math.abs((r.w / r.h) - (400 / 2000)) < 0.001));
+});
+
+test('notices shrink the week bands rather than pushing them off the page', () => {
+  const weeks = [normal(1), cancelled(2), normal(3)];
+  const [page] = paginate(weeks, DEFAULT_LAYOUT);
+  const rects = placeCells(page, DEFAULT_LAYOUT, {});
+  const used = rects.reduce((total, r) => total + r.h, 0) + (rects.length - 1) * GAP;
+  assert.ok(used <= A4_PT.h - 2 * MARGIN + 0.01, `content is ${used}pt tall`);
+});
