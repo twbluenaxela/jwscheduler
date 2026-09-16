@@ -16,8 +16,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { buildMidweekXlsxBlob } from '../app/lib/midweekXlsxLayout.mjs';
-import { countScheduledWeeks } from '../app/lib/weekType.mjs';
+import {
+  buildMidweekStylesXml,
+  buildMidweekXlsxBlob,
+  buildStyledSheetXml,
+  buildSheetPlan,
+} from '../app/lib/midweekXlsxLayout.mjs';
+import { zipXlsx } from '../app/lib/xlsx.mjs';
+import { countScheduledWeeks, isMidweekSuspended } from '../app/lib/weekType.mjs';
 
 let partSeq = 0;
 const part = (title, extra = {}) => ({
@@ -92,6 +98,23 @@ function pdfPageCount(bytes) {
   return declared.length ? Math.max(...declared, counts) : counts;
 }
 
+// Every page must OPEN with a week header (a 「N月 …日」 date). A page that starts
+// mid-programme is the split-week bug: the previous page ended part-way through.
+function splitPages(pdfPath) {
+  let text = '';
+  try {
+    text = execFileSync('pdftotext', ['-layout', pdfPath, '-'], { encoding: 'utf8' });
+  } catch {
+    return null; // pdftotext not installed — skip this half of the check
+  }
+  const bad = [];
+  text.split('\f').forEach((page, i) => {
+    const first = page.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+    if (first && !/\d+月/.test(first)) bad.push(`p${i + 1} starts with 「${first.slice(0, 24)}」`);
+  });
+  return bad;
+}
+
 async function main() {
   try {
     execFileSync('soffice', ['--version'], { stdio: 'ignore' });
@@ -104,19 +127,37 @@ async function main() {
   let failures = 0;
 
   for (const { name, weeks } of CASES) {
-    const blob = await buildMidweekXlsxBlob(weeks, null);
-    const xlsx = join(dir, `${name.replace(/[^\w]+/g, '_')}.xlsx`);
-    writeFileSync(xlsx, Buffer.from(await blob.arrayBuffer()));
-
-    execFileSync('soffice', [
-      '--headless', '--norestore', '--convert-to', 'pdf', '--outdir', dir, xlsx,
-    ], { stdio: 'ignore', timeout: 120000 });
-
-    const pages = pdfPageCount(readFileSync(xlsx.replace(/\.xlsx$/, '.pdf')));
     const expected = Math.ceil(countScheduledWeeks(weeks) / 2);
-    const ok = pages === expected;
-    if (!ok) failures += 1;
-    console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(42)} ${pages} page(s), expected ${expected}`);
+
+    // Two builds per case. "breaks" is what we ship. "no-breaks" strips the
+    // manual <rowBreaks> to imitate the readers that drop them — phone print
+    // dialogs, Google Sheets — where only the filler rows keep the spreads
+    // aligned. That is the case the user actually hit.
+    const plan = buildSheetPlan(weeks, null, { perPage: 2, isSuspended: isMidweekSuspended });
+    const builds = [
+      ['breaks', () => buildMidweekXlsxBlob(weeks, null)],
+      ['no-breaks', () => zipXlsx(buildStyledSheetXml(plan.rows, []), buildMidweekStylesXml())],
+    ];
+
+    for (const [variant, build] of builds) {
+      const blob = await build();
+      const xlsx = join(dir, `${name.replace(/[^\w]+/g, '_')}__${variant}.xlsx`);
+      writeFileSync(xlsx, Buffer.from(await blob.arrayBuffer()));
+
+      execFileSync('soffice', [
+        '--headless', '--norestore', '--convert-to', 'pdf', '--outdir', dir, xlsx,
+      ], { stdio: 'ignore', timeout: 120000 });
+
+      const pdf = xlsx.replace(/\.xlsx$/, '.pdf');
+      const pages = pdfPageCount(readFileSync(pdf));
+      const split = splitPages(pdf);
+      const ok = pages === expected && (split === null || split.length === 0);
+      if (!ok) failures += 1;
+      const detail = pages !== expected
+        ? `${pages} page(s), expected ${expected}`
+        : (split && split.length ? `split week — ${split.join('; ')}` : `${pages} page(s)`);
+      console.log(`${ok ? 'ok  ' : 'FAIL'}  ${`${name} [${variant}]`.padEnd(52)} ${detail}`);
+    }
   }
 
   rmSync(dir, { recursive: true, force: true });

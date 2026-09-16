@@ -416,6 +416,35 @@ export default function App() {
     setWeekendRows(prev => prev.map(r => r._id === rowId ? { ...r, [field]: value } : r));
   }, []);
 
+  // 會眾聚會設定 (meeting day/time + 例外期間) live in BOTH localStorage and the
+  // Congregation row, and the DB is authoritative — the mount load overwrites
+  // local state from it. So an edit that only touches local state survives until
+  // the next refresh and then silently reverts. The 匯入 panel had no save at
+  // all, which is why deleting an 例外期間 there "kept coming back".
+  //
+  // Only ever called from a user edit: persisting on every congSettings change
+  // would PATCH the localStorage value over the DB during hydration, before the
+  // DB load has come back.
+  const persistCongSettings = useCallback(async (next) => {
+    if (!canEdit) return;
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/congregations/settings', {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meetingDayOffset: next.dayOffset,
+          meetingTime: next.time,
+          exceptions: next.exceptions ?? [],
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+    } catch (err) {
+      setToast({ msg: `聚會設定儲存失敗：${err.message}` });
+      throw err;
+    }
+  }, [canEdit]);
+
   const saveImportedWeeks = useCallback(async (weeks) => {
     const token = await getToken();
     const res = await fetch('/api/midweek-weeks/import', {
@@ -700,6 +729,7 @@ export default function App() {
               getAssign={getAssign}
               congSettings={congSettings}
               setCongSettings={setCongSettings}
+              onPersistCongSettings={persistCongSettings}
               onReapplySchedule={() => {
                 setMidweekWeeks(prev => prev.map(w => {
                   if (!w.weekStart) return w;

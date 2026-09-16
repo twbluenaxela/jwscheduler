@@ -100,7 +100,7 @@ function removeException(settings, id) {
   return { ...settings, exceptions: settings.exceptions.filter(e => e.id !== id) };
 }
 
-export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySchedule, existingWeeks = [], getAssign, congSettings = { dayOffset: 2, time: '19:30', exceptions: [] }, setCongSettings }) {
+export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySchedule, existingWeeks = [], getAssign, congSettings = { dayOffset: 2, time: '19:30', exceptions: [] }, setCongSettings, onPersistCongSettings }) {
   const [stage, setStage] = useState('upload'); // upload | parsing | review | done
   const [parsedWeeks, setParsedWeeks] = useState([]);
   const [error, setError] = useState(null);
@@ -157,6 +157,37 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
     () => selectedWeeks.map((_, i) => cardRefs.current[i] ?? null),
     [selectedWeeks],
   );
+
+  // 會眾聚會設定 edits go straight to the DB. This panel had NO save control, so
+  // every change here — including deleting an 例外期間 — lived only in local
+  // state and was overwritten by the DB on the next page load. Debounced,
+  // because the day/time/number inputs fire on every keystroke.
+  const [schedStatus, setSchedStatus] = useState('');
+  const schedTimer = useRef(null);
+  // Mirrors congSettings so two edits in one tick chain correctly. Updated
+  // eagerly in editSchedule as well, because the effect has not run yet then.
+  const schedRef = useRef(congSettings);
+  useEffect(() => { schedRef.current = congSettings; }, [congSettings]);
+  useEffect(() => () => clearTimeout(schedTimer.current), []);
+
+  const editSchedule = useCallback((updater) => {
+    // Deliberately NOT a functional setState: scheduling the save is a side
+    // effect, and React may call an updater twice.
+    const next = updater(schedRef.current);
+    schedRef.current = next;
+    setCongSettings(next);
+    if (!onPersistCongSettings) return;
+    setSchedStatus('saving');
+    clearTimeout(schedTimer.current);
+    schedTimer.current = setTimeout(() => {
+      onPersistCongSettings(next)
+        .then(() => {
+          setSchedStatus('ok');
+          setTimeout(() => setSchedStatus((s) => (s === 'ok' ? '' : s)), 2500);
+        })
+        .catch(() => setSchedStatus('err'));
+    }, 600);
+  }, [setCongSettings, onPersistCongSettings]);
 
   const [pdfLayout, setPdfLayout] = useState(DEFAULT_LAYOUT);
   const [layoutOpen, setLayoutOpen] = useState(false);
@@ -330,14 +361,14 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
                   {DAY_SHORT.map((name, i) => (
                     <button key={i}
                       className={`cong-day-btn${congSettings.dayOffset === i ? ' is-active' : ''}`}
-                      onClick={() => setCongSettings(s => ({ ...s, dayOffset: i }))}>
+                      onClick={() => editSchedule(s => ({ ...s, dayOffset: i }))}>
                       {name}
                     </button>
                   ))}
                 </div>
                 <input className="cong-settings__time" type="time"
                   value={congSettings.time}
-                  onChange={e => setCongSettings(s => ({ ...s, time: e.target.value }))} />
+                  onChange={e => editSchedule(s => ({ ...s, time: e.target.value }))} />
               </div>
 
               {/* Exception periods */}
@@ -347,42 +378,47 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
                     <div key={exc.id} className="cong-exc">
                       <span className="cong-exc__label">從</span>
                       <input className="cong-exc__num" type="number" min="1" max="12" value={exc.fromMonth}
-                        onChange={e => setCongSettings(s => updateException(s, exc.id, { fromMonth: +e.target.value }))} />
+                        onChange={e => editSchedule(s => updateException(s, exc.id, { fromMonth: +e.target.value }))} />
                       <span className="cong-exc__label">月</span>
                       <input className="cong-exc__num" type="number" min="1" max="31" value={exc.fromDay}
-                        onChange={e => setCongSettings(s => updateException(s, exc.id, { fromDay: +e.target.value }))} />
+                        onChange={e => editSchedule(s => updateException(s, exc.id, { fromDay: +e.target.value }))} />
                       <span className="cong-exc__label">日 至</span>
                       <input className="cong-exc__num" type="number" min="1" max="12" value={exc.toMonth}
-                        onChange={e => setCongSettings(s => updateException(s, exc.id, { toMonth: +e.target.value }))} />
+                        onChange={e => editSchedule(s => updateException(s, exc.id, { toMonth: +e.target.value }))} />
                       <span className="cong-exc__label">月</span>
                       <input className="cong-exc__num" type="number" min="1" max="31" value={exc.toDay}
-                        onChange={e => setCongSettings(s => updateException(s, exc.id, { toDay: +e.target.value }))} />
+                        onChange={e => editSchedule(s => updateException(s, exc.id, { toDay: +e.target.value }))} />
                       <span className="cong-exc__label">日 改為</span>
                       <div className="cong-settings__days cong-settings__days--sm">
                         {DAY_SHORT.map((name, i) => (
                           <button key={i}
                             className={`cong-day-btn cong-day-btn--sm${exc.dayOffset === i ? ' is-active' : ''}`}
-                            onClick={() => setCongSettings(s => updateException(s, exc.id, { dayOffset: i }))}>
+                            onClick={() => editSchedule(s => updateException(s, exc.id, { dayOffset: i }))}>
                             {name}
                           </button>
                         ))}
                       </div>
                       <input className="cong-settings__time" type="time" value={exc.time}
-                        onChange={e => setCongSettings(s => updateException(s, exc.id, { time: e.target.value }))} />
-                      <button className="cong-exc__del" onClick={() => setCongSettings(s => removeException(s, exc.id))}>✕</button>
+                        onChange={e => editSchedule(s => updateException(s, exc.id, { time: e.target.value }))} />
+                      <button className="cong-exc__del" onClick={() => editSchedule(s => removeException(s, exc.id))}>✕</button>
                     </div>
                   ))}
                 </div>
               )}
 
               <div className="cong-settings__actions">
-                <button className="btn btn--ghost" onClick={() => setCongSettings(s => addException(s))}>
+                <button className="btn btn--ghost" onClick={() => editSchedule(s => addException(s))}>
                   + 新增例外期間
                 </button>
                 {onReapplySchedule && existingWeeks.some(w => w.weekStart) && (
                   <button className="btn btn--ghost" onClick={onReapplySchedule}>
                     重新套用至所有週次
                   </button>
+                )}
+                {schedStatus && (
+                  <span className={`cong-settings__status${schedStatus === 'err' ? ' is-err' : ''}`}>
+                    {schedStatus === 'saving' ? '儲存中…' : schedStatus === 'ok' ? '✓ 已儲存' : '儲存失敗'}
+                  </span>
                 )}
               </div>
             </div>

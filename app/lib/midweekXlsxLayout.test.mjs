@@ -5,8 +5,11 @@ import {
   A4_PRINTABLE_PT,
   MIN_ROW_SCALE,
   PAGE_BUDGET_PT,
+  PAGE_FILL_PT,
   ROW_HT,
+  TITLE_COL_UNITS,
   buildSheetPlan,
+  padRows,
   paginateWeeks,
   partRowHeight,
   partTitleText,
@@ -73,11 +76,12 @@ const heightOf = (week) => sumHeights(weekRows(week, null, opts));
 /* ===================== the height model ===================== */
 
 test('titleLineCount grows past two lines', () => {
-  assert.equal(titleLineCount('屬靈寶石（10 分鐘）'), 1);
-  // 44 units is the column width; a CJK glyph is two units, so ~22 chars a line.
-  assert.equal(titleLineCount('十'.repeat(22)), 1);
-  assert.equal(titleLineCount('十'.repeat(23)), 2);
-  assert.equal(titleLineCount('十'.repeat(45)), 3);
+  // TITLE_COL_UNITS is the 項目 column's width; a CJK glyph is two units, so a
+  // line holds half that many characters.
+  const perLine = Math.floor(TITLE_COL_UNITS / 2);
+  assert.equal(titleLineCount('十'.repeat(perLine)), 1);
+  assert.equal(titleLineCount('十'.repeat(perLine + 1)), 2);
+  assert.equal(titleLineCount('十'.repeat(perLine * 2 + 1)), 3);
 });
 
 test('a three-line title reserves three lines, not two', () => {
@@ -198,17 +202,56 @@ test('breaks land exactly on a week header row', () => {
   }
 });
 
-test('the EMITTED rows between breaks also fit the budget', () => {
-  // pageHeights is computed; this walks what actually lands in the sheet, so a
-  // bug in the emit loop (a spacer on the wrong side of a break, say) shows up.
+test('every emitted page is padded to just short of the page height', () => {
+  // THE BUG THIS PINS: readers that drop <rowBreaks> (phone print dialogs,
+  // Google Sheets) paginate automatically. Without filler the spread left ~140pt
+  // of slack and the next week's header crept into it, stranding four rows at
+  // the foot of the page. Each page but the last must therefore fill the sheet
+  // to within less than one header row.
   const plan = buildSheetPlan([1, 2, 3, 4, 5, 6].map(octoberWeek), null, opts);
   const bounds = [...plan.breaks, plan.rows.length];
+  const headerH = ROW_HT.head * plan.rowScale;
   let start = 0;
   bounds.forEach((end, i) => {
     const height = sumHeights(plan.rows.slice(start, end));
-    assert.ok(height <= PAGE_BUDGET_PT + 0.01, `page ${i + 1} overflows: ${height} > ${PAGE_BUDGET_PT}`);
+    const last = i === bounds.length - 1;
+    assert.ok(
+      height <= PAGE_FILL_PT + 0.01,
+      `page ${i + 1} overflows the sheet: ${height.toFixed(1)} > ${PAGE_FILL_PT.toFixed(1)}`,
+    );
+    if (!last) {
+      const slack = PAGE_FILL_PT - height;
+      assert.ok(
+        slack < headerH,
+        `page ${i + 1} leaves ${slack.toFixed(1)}pt — a ${headerH.toFixed(1)}pt week header fits in it`,
+      );
+    }
     start = end;
   });
+});
+
+test('padding never overshoots the page, and always leaves less than a header', () => {
+  for (const height of [0, 100, 500, 700, 770]) {
+    for (const scale of [1, 0.8, 0.5]) {
+      const pad = padRows(height, scale);
+      const total = height + pad.reduce((a, b) => a + b, 0);
+      // Overshooting would push the filler itself onto the next page, and with a
+      // manual break right behind it that costs a near-blank sheet.
+      assert.ok(total <= PAGE_FILL_PT + 0.01, `${height}pt @ ${scale} padded to ${total}`);
+      // Undershooting lets the next week's header start on this page.
+      const slack = PAGE_FILL_PT - total;
+      assert.ok(
+        slack < ROW_HT.head * scale,
+        `${height}pt @ ${scale} leaves ${slack.toFixed(1)}pt for a ${(ROW_HT.head * scale).toFixed(1)}pt header`,
+      );
+      assert.ok(pad.every((ht) => ht <= 409), 'a filler row exceeds Excel\'s row cap');
+    }
+  }
+});
+
+test('an already-full page gets no filler', () => {
+  assert.deepEqual(padRows(PAGE_FILL_PT, 1), []);
+  assert.deepEqual(padRows(PAGE_FILL_PT + 50, 1), []);
 });
 
 /* ===================== the primitives ===================== */

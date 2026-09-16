@@ -25,18 +25,28 @@
 // the workbook's Normal font really is Calibri; wherever Calibri is substituted
 // (Linux, LibreOffice, many Macs) the same column widths come out ~28% wider.
 //
-// THE FIX, in two parts:
-//   1. `fitToWidth="1" fitToHeight="0"` — the renderer guarantees one page wide
-//      whatever font it substitutes, and leaves the page count vertical, so our
-//      manual row breaks still decide where a spread ends. This is what actually
-//      removed the stray pages in the renderer check.
+// AND A THIRD CAUSE: MANY PRINT PATHS IGNORE <rowBreaks> ENTIRELY. Phone print
+// dialogs and Google Sheets paginate automatically and silently drop the manual
+// breaks, so relying on them alone left ~140pt of slack at the bottom of each
+// spread and the next week crept up into it — a week header plus three rows
+// stranded at the foot of the page. Manual breaks fix Excel and nothing else.
+//
+// THE FIX, in three parts:
+//   1. COLUMNS NARROW ENOUGH TO FIT A4 AT 100%. The old 91-character total only
+//      fitted when the Normal font really was Calibri; substituted (Linux,
+//      Android, many Macs) it overflowed and every page grew a second,
+//      near-empty column-page. Measured against a real renderer, 76 units is the
+//      limit and 72 is what we use. Fitting at 100% also means NO fit-to-page
+//      scaling, so the page's usable height is a known 791.5pt rather than
+//      whatever a fit-to-width scale happened to make it.
 //   2. an honest height model plus a row-height compression factor, so a pair of
 //      long weeks fits the page's vertical budget instead of forcing the
 //      renderer to insert an automatic break in the middle of a week.
-//
-// Note `scale` is NOT used: Excel ignores it whenever fitToPage is on, and the
-// width guarantee is worth more than a scale we would have to guess a font
-// metric to compute.
+//   3. FILLER ROWS padding every page but the last to just short of the page
+//      height, so a renderer that ignores <rowBreaks> paginates automatically
+//      onto exactly the same boundaries. The leftover slack is deliberately
+//      smaller than a week-header row, so the next week cannot start on this
+//      page even in a reader that never saw our breaks.
 
 import { isMidweekSuspended, suspendedNotice } from './weekType.mjs';
 import { cellRef, escapeXml, zipXlsx } from './xlsx.mjs';
@@ -49,9 +59,9 @@ export const A4_PRINTABLE_PT = A4_HEIGHT_PT - 2 * PAGE_MARGIN_IN * 72; // ≈791
 // Renderers disagree by a point or two on row rounding; never fill the last 3%.
 export const SAFETY = 0.97;
 
-// Width (in `textUnits`) of the 項目 column — MW_XLSX_COLS[2] is 46. A CJK glyph
-// is two units, so ~22 characters per line.
-export const TITLE_COL_UNITS = 44;
+// Width (in `textUnits`) of the 項目 column — MW_XLSX_COLS[2] is 36, and a CJK
+// glyph is two units, so ~17 characters per line.
+export const TITLE_COL_UNITS = 34;
 
 export const ROW_HT = {
   head: 26,
@@ -142,14 +152,36 @@ export const PAGE_BUDGET_PT = A4_PRINTABLE_PT * SAFETY;
 // a corrupt week (hundreds of parts) producing a degenerate sheet.
 export const MIN_ROW_SCALE = 0.35;
 
+// How much of the page a spread's CONTENT may use. The rest is filler (see
+// padRows), which is what makes auto-pagination land on our boundaries.
+export const PAGE_FILL_PT = A4_PRINTABLE_PT;
+
+// The gap deliberately left at the foot of a padded page. It must be smaller
+// than a week-header row — that is the whole point, since a reader that ignores
+// <rowBreaks> will start the next week here if it fits — but large enough to
+// absorb a renderer whose margins are slightly bigger than the ones we ask for.
+// 70% of a header row satisfies both, and scales with the row compression.
+export const SLACK_FRACTION = 0.7;
+
+// Filler row heights that pad a page out so automatic pagination breaks in the
+// same place our manual <rowBreaks> do. Returns [] when there is nothing to pad.
+// Rounds DOWN: overshooting would push the filler itself onto the next page,
+// and with a manual break right behind it that costs a near-blank sheet.
+export function padRows(pageHeight, rowScale = 1) {
+  const target = PAGE_FILL_PT - ROW_HT.head * rowScale * SLACK_FRACTION;
+  let remaining = Math.floor((target - pageHeight) * 100) / 100;
+  if (!(remaining > 1)) return [];
+  const out = [];
+  const MAX_ROW_PT = 409; // Excel's hard cap on one row
+  while (remaining > MAX_ROW_PT) { out.push(MAX_ROW_PT); remaining -= MAX_ROW_PT; }
+  if (remaining > 0) out.push(Math.floor(remaining * 100) / 100);
+  return out;
+}
+
 // One workbook-wide row-height factor, derived from the TALLEST page, so every
 // spread is compressed by the same amount and the workbook stays visually
 // consistent. Returns 1 whenever everything already fits, so a month that
 // printed correctly before (September) is untouched.
-//
-// This compresses the ROWS rather than setting a print scale, because `scale` is
-// ignored once fitToPage is on — and fitToPage is what guarantees the sheet is
-// one page wide.
 export function rowScaleFor(pageHeights) {
   const tallest = Math.max(0, ...(pageHeights ?? [0]));
   if (tallest <= PAGE_BUDGET_PT) return 1;
@@ -308,6 +340,11 @@ export function buildSheetPlan(weeks, getAssign, { perPage = 2, isSuspended = ()
       if (blockIndex > 0) rows.push({ ht: squeeze(ROW_HT.spacer), cells: [] });
       block.forEach((row) => rows.push(rowScale === 1 ? row : { ...row, ht: squeeze(row.ht) }));
     });
+    // Fill the rest of the page, so a reader that drops <rowBreaks> still ends
+    // the page here. The last page needs no filler — nothing follows it.
+    if (pageIndex < pageBlocks.length - 1) {
+      padRows(squeeze(rawHeights[pageIndex]), rowScale).forEach((ht) => rows.push({ ht, cells: [] }));
+    }
   });
 
   const pageHeights = rawHeights.map(squeeze);
@@ -316,7 +353,12 @@ export function buildSheetPlan(weeks, getAssign, { perPage = 2, isSuspended = ()
 
 /* ===================== OOXML writing ===================== */
 
-const MW_XLSX_COLS = [7, 4, 46, 12, 22]; // 時間 / 編號 / 項目 / 角色 / 指派
+// 時間 / 編號 / 項目 / 角色 / 指派, in Excel character units. The total (72) is
+// what lets the sheet print one page wide at 100% even where Calibri is
+// substituted by a wider font — measured, not guessed: 76 is the limit in a real
+// renderer and 80 already spills. Do not widen these without re-running
+// scripts/check-xlsx-pagination.mjs.
+const MW_XLSX_COLS = [6, 3, 36, 9, 18];
 
 export function buildMidweekStylesXml() {
   const font = (sz, color, bold, italic = false) =>
@@ -401,10 +443,11 @@ export function buildStyledSheetXml(rows, breaks) {
   // sheetFormatPr, cols, sheetData, mergeCells, printOptions, pageMargins,
   // pageSetup, rowBreaks. Reordering makes Excel reject the file.
   //
-  // fitToPage is ON so the fitToWidth below takes effect. See this file's header:
-  // without it the 指派 column fell off the right edge of A4 and every page grew
-  // a second, near-empty column-page.
-  xml += '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>';
+  // fitToPage stays OFF. The columns are narrow enough to fit A4 at 100% (see
+  // MW_XLSX_COLS), and printing at a known 100% is what lets padRows fill each
+  // page to a known height — under fit-to-width the renderer picks its own scale
+  // and the padding would no longer line up with the page edge.
+  xml += '<sheetPr><pageSetUpPr fitToPage="0"/></sheetPr>';
   xml += '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>';
   xml += '<sheetFormatPr defaultRowHeight="17"/>';
   xml += '<cols>';
@@ -440,12 +483,9 @@ export function buildStyledSheetXml(rows, breaks) {
   }
   xml += '<printOptions horizontalCentered="1"/>';
   xml += '<pageMargins left="0.3" right="0.3" top="0.35" bottom="0.35" header="0.2" footer="0.2"/>';
-  // paperSize 9 = A4. fitToWidth="1" pins the sheet to one page WIDE whatever
-  // font the reader substitutes for Calibri; fitToHeight="0" leaves the page
-  // count vertical, so the manual rowBreaks below still decide where a spread
-  // ends. Setting fitToHeight="1" instead would cram the whole month onto one
-  // unreadable page.
-  xml += '<pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/>';
+  // paperSize 9 = A4, printed at 100%. The rowBreaks below are honoured by Excel;
+  // everywhere else the filler rows do the work.
+  xml += '<pageSetup paperSize="9" orientation="portrait"/>';
   if (breaks.length) {
     xml += `<rowBreaks count="${breaks.length}" manualBreakCount="${breaks.length}">`;
     breaks.forEach((b) => { xml += `<brk id="${b}" max="16383" man="1"/>`; });
