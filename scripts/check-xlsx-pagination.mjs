@@ -12,10 +12,18 @@
 // manual breaks stripped).
 //   - Stripping <rowBreaks> imitates the readers that ignore them — phone print
 //     dialogs, Google Sheets.
-//   - Sweeping the margins imitates a print path that overrides the margins the
-//     file asks for. A phone's print dialog demonstrably does: it applied about
-//     0.75in where the file asked for 0.35in, which is why a 752pt spread lost
-//     its last row. Passing at 0.35in ONLY is how that shipped twice.
+//   - Sweeping the margins imitates a print path that applies its own margins
+//     rather than the ones the file asks for. The scheme is supposed to be
+//     independent of the page's usable height; this is what proves it.
+//
+// WHAT THIS CANNOT CHECK: whether a renderer sizes a row differently from the
+// `ht` we ask for. LibreOffice honours `customHeight` and does not auto-fit a
+// row when it is stripped — it falls back to the default row height and clips —
+// so a probe built on that comparison passes whatever heights we reserve, even
+// absurdly short ones. It was written, measured, found vacuous, and removed;
+// do not add it back. (It does not matter much either: fit-to-height absorbs
+// UNIFORM row growth. What it cannot absorb is a blank row being discarded,
+// which is why every filler row carries a cell — see midweekXlsxLayout.mjs.)
 //
 // Needs `soffice` (with libreoffice-calc) and `pdftotext` on PATH.
 

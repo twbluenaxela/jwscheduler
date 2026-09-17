@@ -29,11 +29,33 @@
 // dialogs and Google Sheets paginate automatically and drop the manual breaks.
 //
 // AND A FOURTH: THE USABLE PAGE HEIGHT IS NOT KNOWABLE. Padding each page to
-// "A4 minus the margins we ask for" (791.5pt) still split a week on a phone,
-// because the print dialog applied its own, larger margins — about 0.75in,
-// leaving ~734pt, so a 752pt spread lost its last row. No assumed figure works.
+// "A4 minus the margins we ask for" (791.5pt) still split a week on a phone.
+// No assumed figure works, so the scheme below removes the assumption.
 //
-// THE FIX, in three parts:
+// WHAT THE SCHEME BELOW CAN AND CANNOT ABSORB — worth knowing before "fixing" it
+// again. fit-to-height is SCALE-INVARIANT: if every row comes out k× taller than
+// we asked (a substituted font, a different DPI), the whole sheet is k× taller,
+// the fitter picks a scale k× smaller, and each page still holds exactly one
+// spread. UNIFORM error costs nothing. What breaks it is NON-UNIFORM error — some
+// rows rendering at a different ratio than others — because then the pages stop
+// being equal, and equal pages are the entire mechanism.
+//
+// There is exactly one source of non-uniform error we control: A BLANK ROW IS
+// NOT CONTENT. Trailing blanks fall outside the used range, and a reader that
+// sizes rows itself can collapse a blank row while it can never collapse a row
+// with text in it. The padding is what makes the pages equal, so padding built
+// from blank rows can silently evaporate — reproduced locally by stripping
+// ht/customHeight, which moved the boundary into the middle of a week in 8 of 9
+// cases. Hence: every filler row carries a cell.
+//
+// TWO THEORIES THAT WERE TESTED AND ARE WRONG, so nobody re-derives them: (a)
+// the phone applies its own ~0.75in margins — the user's print preview measures
+// 0.7034 aspect, i.e. genuine A4, and the scheme is margin-independent anyway;
+// (b) the substituted CJK face wraps titles onto more lines than reserved —
+// measured at 11pt in a real CJK face, the wrap counts match TITLE_COL_UNITS
+// exactly on every long title in the October shape.
+//
+// THE FIX, in four parts:
 //   1. COLUMNS NARROW ENOUGH TO FIT A4. The old 91-character total only fitted
 //      when the Normal font really was Calibri; substituted (Linux, Android,
 //      many Macs) it overflowed and every page grew a second, near-empty
@@ -47,6 +69,8 @@
 //      spread whatever its margins are. This is scale-invariant: verified by
 //      rendering at 0.35in, 0.6in, 0.85in and 1.0in margins, with the manual
 //      breaks present AND stripped — 16 combinations, all correct.
+//   4. NO BLANK ROWS. Every filler row carries a cell. See below — this is the
+//      one kind of error the scheme above cannot absorb.
 //
 // Manual <rowBreaks> are still emitted: Excel honours them, and they agree with
 // the fit-to-height boundaries rather than fighting them.
@@ -61,15 +85,33 @@ export const A4_PRINTABLE_PT = A4_HEIGHT_PT - 2 * PAGE_MARGIN_IN * 72; // ≈791
 
 // Width (in `textUnits`) of the 項目 column — MW_XLSX_COLS[2] is 36, and a CJK
 // glyph is two units, so ~17 characters per line.
+//
+// MEASURED, not guessed: rendering these titles at 11pt in a real CJK face
+// (WenQuanYi Zen Hei — the kind of face substituted for the absent Microsoft
+// JhengHei) needs exactly the line count this figure predicts, on every long
+// title in the October shape. Reserving more was tried and reverted: it buys no
+// safety and costs print scale, because a taller sheet is simply shrunk more.
 export const TITLE_COL_UNITS = 34;
 
+// The vertical box one line of text needs, as a multiple of its point size.
+// 1.2–1.4 is typical for Latin faces; CJK fallbacks run taller, so reserve 1.5.
+export const LINE_BOX = 1.5;
+export const MIN_ROW_FOR = (ptSize) => Math.ceil(ptSize * LINE_BOX);
+
+// Height reserved per wrapped line, and the padding around them.
+export const WRAP_LINE_PT = 15;
+export const WRAP_PAD_PT = 4;
+
+// Fixed-height rows. Each is floored at the line box of the font it carries, so
+// a font-size change can never silently make a row that has to grow:
+//   head 14pt · item/part/notice 11pt · band 12pt bold
 export const ROW_HT = {
-  head: 26,
-  item: 17,
-  band: 18,
-  part: 17,
+  head: Math.max(26, MIN_ROW_FOR(14)),
+  item: Math.max(17, MIN_ROW_FOR(11)),
+  band: Math.max(18, MIN_ROW_FOR(12)),
+  part: Math.max(17, MIN_ROW_FOR(11)),
   spacer: 14,
-  notice: 22,
+  notice: Math.max(22, MIN_ROW_FOR(11)),
 };
 
 // Approximate printed width: CJK glyphs count double.
@@ -99,11 +141,12 @@ export function partTitleText(part) {
   return title;
 }
 
-// Single-line rows keep the compact 17pt; wrapped rows get 15pt per line plus a
-// little padding, so the text actually fits the box we reserve for it.
+// Single-line rows keep the compact single-line height; wrapped rows get a full
+// CJK line box per line plus padding, so the text fits the box we reserve even
+// where the font is substituted and the row would otherwise have to grow.
 export function partRowHeight(part) {
   const lines = titleLineCount(partTitleText(part));
-  return lines <= 1 ? ROW_HT.part : 15 * lines + 4;
+  return lines <= 1 ? ROW_HT.part : WRAP_LINE_PT * lines + WRAP_PAD_PT;
 }
 
 export function sumHeights(rows) {
@@ -167,11 +210,13 @@ export const MAX_ROW_PT = 409;
 
 // Filler row heights that bring a page up to exactly `target`.
 //
-// The final filler carries a cell (a single space) because TRAILING BLANK ROWS
-// ARE NOT PART OF A SHEET'S USED RANGE: without it the last page's padding is
-// discarded, the sheet is shorter than pageCount × PAGE_H, and the fit-to-height
-// scale comes out too large — every page then takes more than one spread. Proven
-// by rendering: unanchored, the 5-week case split at every margin setting.
+// Every filler emitted from these carries a cell (a single space), and `anchor`
+// marks the last one — the load-bearing one, because TRAILING BLANK ROWS ARE NOT
+// PART OF A SHEET'S USED RANGE: with a blank final filler the last page's
+// padding is discarded, the sheet is shorter than pageCount × PAGE_H, the
+// fit-to-height scale comes out too large and every page takes more than one
+// spread. Proven by rendering: unanchored, the 5-week case split at every margin
+// setting.
 export function padRows(pageHeight, target) {
   let remaining = Math.round((target - pageHeight) * 100) / 100;
   if (!(remaining > 0)) return [];
@@ -337,8 +382,14 @@ export function buildSheetPlan(weeks, getAssign, { perPage = 2, isSuspended = ()
     });
     // EVERY page, the last one included — equal page heights are what make the
     // fit-to-height scale land one spread per page.
-    padRows(rawHeights[pageIndex], pageHeight).forEach(({ ht, anchor }) => {
-      rows.push({ ht, cells: anchor ? [{ v: ' ', s: 0 }] : [] });
+    //
+    // EVERY filler row carries a cell, not just the anchoring one. A blank row
+    // is outside the sheet's used range, so a renderer is free to discard it —
+    // which is exactly what happens on a reader that sizes rows itself, taking
+    // the padding (and with it the equal pages) away. A row holding a space is
+    // real content at a pinned height.
+    padRows(rawHeights[pageIndex], pageHeight).forEach(({ ht }) => {
+      rows.push({ ht, cells: [{ v: ' ', s: 0 }] });
     });
   });
 

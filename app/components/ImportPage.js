@@ -26,11 +26,15 @@ const CAT_LABELS = {
   ministry: '傳道示範', assistant:'助手', living: '生活演講', cbs: '研經班',
 };
 
+// PDF 版面 is the print route: it composes real A4 pages from card captures, so
+// what you see is what prints. The spreadsheet is for editing the data — how it
+// paginates depends on whatever app opens it, which is a negotiation we do not
+// control (see app/lib/midweekXlsxLayout.mjs).
 const EXPORT_CARDS = [
   { ic: '▦', label: '分享圖片', sub: 'JPG · 貼到 LINE 群組', action: 'jpg' },
-  { ic: '▤', label: '匯出 Excel', sub: '沿用原本表格格式', action: 'xlsx' },
+  { ic: '⊞', label: 'PDF 版面', sub: '列印用 · 每頁 2–4 週', action: 'pdfgrid' },
   { ic: '▥', label: '下載 PDF', sub: '每頁一週', action: 'pdf' },
-  { ic: '⊞', label: 'PDF 版面', sub: '每頁 2–4 週', action: 'pdfgrid' },
+  { ic: '▤', label: '匯出 Excel', sub: '可編輯表格', action: 'xlsx' },
   { ic: '⎙', label: '列印', sub: '直接送印表機', action: 'print' },
 ];
 

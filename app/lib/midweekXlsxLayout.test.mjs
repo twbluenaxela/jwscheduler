@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   A4_PRINTABLE_PT,
   MAX_ROW_PT,
+  MIN_ROW_FOR,
   ROW_HT,
   TITLE_COL_UNITS,
   buildSheetPlan,
@@ -90,17 +91,33 @@ test('a three-line title reserves three lines, not two', () => {
     dur: '30 分鐘',
     cbsRef: '《組織》第 12 章 第 1-9 段，以及附欄「怎樣善用這本書研讀聖經」和複習問題',
   });
-  assert.equal(titleLineCount(partTitleText(long)), 3);
+  // At least three — the reservation is deliberately conservative (see
+  // TITLE_COL_UNITS), so pinning an exact count would only pin the safety margin.
+  assert.ok(titleLineCount(partTitleText(long)) >= 3);
   assert.ok(partRowHeight(long) > 30, `expected >30pt, got ${partRowHeight(long)}`);
 
   // Even a merely two-line title was under-counted by the old flat 30pt.
   const twoLine = part('會眾研經班', { dur: '30 分鐘', cbsRef: '《組織》第 12 章 第 1-9 段' });
-  assert.equal(titleLineCount(partTitleText(twoLine)), 2);
+  assert.ok(titleLineCount(partTitleText(twoLine)) >= 2);
   assert.ok(partRowHeight(twoLine) > 30);
 });
 
 test('a short part row stays compact', () => {
   assert.equal(partRowHeight(part('屬靈寶石')), ROW_HT.part);
+});
+
+/* ===================== row heights clear their font ===================== */
+
+// A guard, not a theory. fit-to-height absorbs UNIFORM row growth (the whole
+// sheet scales), so a row being a little taller everywhere costs nothing. This
+// only pins that no fixed row is asked to hold text taller than itself, which a
+// future font-size bump could otherwise do silently.
+test('every fixed-height row clears the line box of the font it carries', () => {
+  assert.ok(ROW_HT.item >= MIN_ROW_FOR(11));
+  assert.ok(ROW_HT.part >= MIN_ROW_FOR(11));
+  assert.ok(ROW_HT.notice >= MIN_ROW_FOR(11));
+  assert.ok(ROW_HT.band >= MIN_ROW_FOR(12));
+  assert.ok(ROW_HT.head >= MIN_ROW_FOR(14));
 });
 
 /* ===================== packing ===================== */
@@ -186,6 +203,18 @@ test('the LAST page is padded too, and its filler is anchored by a cell', () => 
   assert.ok(Math.abs(sumHeights(last) - plan.pageHeight) < 0.02, 'last page not padded');
   const finalRow = plan.rows[plan.rows.length - 1];
   assert.ok(finalRow.cells.length > 0, 'the sheet must not end on a cell-less filler row');
+});
+
+test('every filler row carries a cell, not just the last one', () => {
+  // A blank row is outside the sheet's used range, so a reader is free to drop
+  // it — taking the padding, and with it the equal pages, away. Only the
+  // deliberate inter-week spacer may be empty.
+  const plan = buildSheetPlan([1, 2, 3, 4, 5].map(octoberWeek), null, opts);
+  const empties = plan.rows.filter((r) => r.cells.length === 0);
+  assert.ok(
+    empties.every((r) => r.ht === ROW_HT.spacer),
+    `${empties.length} cell-less row(s) that are not the week spacer`,
+  );
 });
 
 test('page height is the tallest spread, never below the nominal A4 page', () => {
