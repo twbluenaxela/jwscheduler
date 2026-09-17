@@ -4,13 +4,14 @@ import assert from 'node:assert/strict';
 import {
   A4_PRINTABLE_PT,
   MAX_ROW_PT,
-  PAGE_SLACK,
+  PRINT_TARGET_PT,
   MIN_ROW_FOR,
   ROW_HT,
   TITLE_COL_UNITS,
   buildSheetPlan,
   padRows,
   pageHeightFor,
+  sheetScale,
   paginateWeeks,
   partRowHeight,
   partTitleText,
@@ -218,40 +219,47 @@ test('every filler row carries a cell, not just the last one', () => {
   );
 });
 
-test('page height is the tallest spread plus slack, never below the nominal A4 page', () => {
+test('a spread is scaled to fit the MEASURED usable height, never the requested one', () => {
+  // 690pt is not a guess. The failing print preview (Excel for Android, ISO A4)
+  // measures 0.83in top and 0.97in bottom margins — its own defaults, not the
+  // 0.35in the file asks for — leaving 712.4pt usable, against a 752pt October
+  // spread. That 40pt was the row that kept falling onto the next page.
+  assert.ok(PRINT_TARGET_PT <= 712, 'target must fit the measured usable height');
+
+  const tall = (id) => ({
+    ...octoberWeek(id),
+    ministry: Array.from({ length: 12 }, (_, i) => part(`很長的傳道訓練項目名稱 ${i}`)),
+  });
+  for (const make of [septemberWeek, octoberWeek, tall]) {
+    for (let count = 1; count <= 7; count += 1) {
+      const plan = buildSheetPlan(Array.from({ length: count }, (_, i) => make(i + 1)), null, opts);
+      const printed = (pt) => (pt * plan.scale) / 100;
+      assert.ok(plan.scale <= 100, 'never blow the sheet up past 100%');
+      assert.ok(plan.scale >= 10, `scale collapsed to ${plan.scale}%`);
+      // Every page, padding included, renders to exactly the target height.
+      assert.ok(Math.abs(printed(plan.pageHeight) - PRINT_TARGET_PT) < 1);
+      // And no spread's CONTENT can exceed it.
+      for (const raw of plan.rawHeights) {
+        assert.ok(
+          printed(raw) <= PRINT_TARGET_PT + 0.5,
+          `a spread prints at ${printed(raw).toFixed(1)}pt, past the ${PRINT_TARGET_PT}pt page`,
+        );
+      }
+    }
+  }
+});
+
+test('a short month prints at 100%, a tall one is scaled down', () => {
   const short = buildSheetPlan([1, 2].map(septemberWeek), null, opts);
-  assert.ok(short.pageHeight >= A4_PRINTABLE_PT, 'a short month must not be blown up past 100%');
+  assert.equal(short.scale, 100, 'a month that already fits must not be shrunk');
 
   const tall = (id) => ({
     ...octoberWeek(id),
     ministry: Array.from({ length: 12 }, (_, i) => part(`很長的傳道訓練項目名稱 ${i}`)),
   });
   const plan = buildSheetPlan([1, 2].map(tall), null, opts);
-  assert.ok(plan.pageHeight > A4_PRINTABLE_PT, 'a tall spread must raise the page height');
-  assert.equal(plan.pageHeight, Math.max(...plan.rawHeights) * (1 + PAGE_SLACK));
-});
-
-test('NO page ever fills itself to the edge', () => {
-  // THE OCTOBER BUG. pageHeight used to be the tallest spread exactly, so that
-  // page got zero padding and its content was precisely one page tall. With
-  // fitToHeight the renderer scales it to precisely the usable height — content
-  // ending on the last point of the paper — and a few points of accumulated
-  // row-height rounding pushed the final row onto the next page. The printed
-  // result: page 1 held both weeks except 10月8日's closing 唱詩 row.
-  //
-  // The gap cannot be crept into: it is filler rows carrying a cell, so it is
-  // occupied. The only requirement is that it exceeds the accumulated rounding.
-  const shapes = [septemberWeek, octoberWeek, (id) => (id % 2 ? septemberWeek(id) : octoberWeek(id))];
-  for (const make of shapes) {
-    for (let count = 1; count <= 7; count += 1) {
-      const plan = buildSheetPlan(Array.from({ length: count }, (_, i) => make(i + 1)), null, opts);
-      const tightest = plan.pageHeight - Math.max(...plan.rawHeights);
-      assert.ok(tightest > 0, `${count} weeks: a page fills itself exactly`);
-      // The observed overflow was a single 17pt row, so the gap must clear that.
-      const rendered = (tightest / plan.pageHeight) * A4_PRINTABLE_PT;
-      assert.ok(rendered > ROW_HT.item, `${count} weeks: only ${rendered.toFixed(1)}pt of slack — one row can overflow`);
-    }
-  }
+  assert.ok(plan.scale < 100, 'a spread taller than the page must be scaled down');
+  assert.equal(plan.scale, sheetScale(Math.max(...plan.rawHeights)));
 });
 
 test('page count is always ceil(scheduled / 2), however tall the weeks are', () => {
@@ -307,8 +315,12 @@ test('padRows adds nothing when the page is already at the target', () => {
   assert.deepEqual(padRows(850, 800), []);
 });
 
-test('pageHeightFor floors at the nominal A4 printable height and adds slack', () => {
-  assert.equal(pageHeightFor([100, 200]), A4_PRINTABLE_PT * (1 + PAGE_SLACK));
-  assert.equal(pageHeightFor([]), A4_PRINTABLE_PT * (1 + PAGE_SLACK));
-  assert.equal(pageHeightFor([900, 400]), 900 * (1 + PAGE_SLACK));
+test('pageHeightFor is whatever renders to one target page at the chosen scale', () => {
+  for (const heights of [[100, 200], [], [900, 400], [752, 700]]) {
+    const h = pageHeightFor(heights);
+    const printed = (h * sheetScale(Math.max(...heights, 0))) / 100;
+    assert.ok(Math.abs(printed - PRINT_TARGET_PT) < 1, `${heights} -> printed ${printed}`);
+  }
+  // A sheet that already fits is left at 100%, so the page is the target itself.
+  assert.equal(pageHeightFor([100, 200]), PRINT_TARGET_PT);
 });

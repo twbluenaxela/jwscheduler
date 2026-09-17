@@ -985,52 +985,36 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
   really WAS Calibri, and wherever it is substituted (Linux, Android, many Macs) the same widths
   come out ~28% wider, the 指派 column falls off the right edge and EVERY page grows a second,
   near-empty column-page. 76 units is the measured limit; 72 leaves headroom
-- **Never assume the printed page's usable height.** Two shipped fixes failed because both
-  padded to "A4 minus the 0.35in margins the file asks for" (791.5pt), which no print path
-  guarantees. Instead `buildSheetPlan` pads EVERY page to the same height and `<pageSetup>`
-  carries `fitToHeight="<pageCount>"`, letting the renderer derive
-  scale = itsUsableHeight ÷ pageHeight. Do not reintroduce a `PAGE_FILL_PT`-style constant, and
-  do not skip padding the LAST page — equal pages are the whole mechanism
-- **Do not let `pageHeightFor` return the tallest spread exactly.** It multiplies by
-  `1 + PAGE_SLACK` (3%) and that is load-bearing. Without it the tallest spread's page gets ZERO
-  padding, so its content is exactly `pageHeight` tall; `fitToHeight` then scales it to exactly
-  the usable height and the last row sits on the paper's edge. A spread is ~35 rows, each scaled
-  and snapped to device units on the way to the printer, and a few points of accumulated rounding
-  is all it takes to push the final row onto the next page — which is exactly what October did
-  (page 1 printed both weeks except 10月8日's closing 唱詩/結束禱告 row, and the page count was
-  otherwise correct). The slack must exceed that rounding (the observed overflow was one 17pt
-  row); it cannot be crept into, because the gap is filler rows carrying a cell.
-  `midweekXlsxLayout.test.mjs` pins it — setting `PAGE_SLACK = 0` fails "NO page ever fills
-  itself to the edge"
-- **Know what that mechanism can and cannot absorb before "fixing" it again.** fit-to-height is
-  SCALE-INVARIANT: if every row renders k× taller than specified (substituted font, different
-  DPI), the sheet is k× taller, the fitter picks a k× smaller scale, and each page still holds
-  exactly one spread. UNIFORM error is free. Only NON-UNIFORM error breaks it, because then the
-  pages stop being equal. **Two theories about this were tested and are WRONG — do not
-  re-derive them:** (a) *the phone applies its own ~0.75in margins* — the user's print preview
-  measures 0.7034 aspect, i.e. genuine A4, and the scheme is margin-independent anyway; (b) *the
-  substituted CJK face wraps titles onto more lines than reserved* — measured at 11pt in a real
-  CJK face, the wrap counts match `TITLE_COL_UNITS = 34` exactly on every long title in the
-  October shape. Widening the reservations was tried and reverted: no safety, less print scale
-- Do not emit a filler row with no cells. A blank row is outside the sheet's used range, so a
-  reader may discard it — and the padding built from those rows is what makes the pages equal.
-  This is the one non-uniform error we control, so EVERY filler carries a space, not just the
-  anchoring last one
-- Do not add a "does the renderer grow a row past its `ht`?" probe to
-  `scripts/check-xlsx-pagination.mjs`. It was written and found VACUOUS: LibreOffice honours
-  `customHeight`, and with the heights stripped it falls back to the default row height and clips
-  rather than auto-fitting — so the comparison passes whatever heights are reserved, including
-  absurdly short ones
+- **Do not turn `fitToPage` back on in the midweek workbook.** Microsoft KB 89311 — *"Manual
+  Page Breaks Ignored with Fit To Page/Adjust To"* — Excel ignores EVERY manual page break on a
+  sheet that uses Fit To. We shipped `fitToPage="1"` alongside `<rowBreaks>` for four releases,
+  so the breaks were dead and the layout rested entirely on a fit-to-height calculation. The
+  documented workaround is an explicit `scale` percentage, which keeps the breaks live — that is
+  what `sheetScale()` computes and `<pageSetup scale="N">` carries
+- **The print path does not use the margins the file asks for, and does not fit-to-page.** Both
+  measured off the real failing preview (Excel for Android, ISO A4): (a) adding 3% padding to
+  every page took the print from 3 pages to 4 with the break on *exactly* the same row — had
+  fit-to-height been applied, the scale would have absorbed it; (b) the paper is genuine A4
+  (aspect 0.7077 vs 0.7071) but the margins come out 0.83in top / 0.97in bottom, Excel's own
+  defaults, not the 0.35in requested. Usable height **712.4pt** against a **752pt** spread —
+  that 40pt was the missing row. Hence `PRINT_TARGET_PT = 690`: under the measured 712.4 and
+  under a 1.0in-margin path (697.9). Do not raise it without re-measuring
+- **Do not ask the renderer to compute anything.** We know our own row heights, so we compute the
+  scale. Three schemes that delegated it (automatic breaks, fit-to-width, fit-to-height) each
+  shipped broken. `scripts/check-xlsx-pagination.mjs` now sweeps five margins including **0.90in,
+  which reproduces the measured 712.4pt geometry**
+- **Break-ignoring readers cannot be made exact, and the check says so.** Google Sheets drops
+  `<rowBreaks>`; we pad every page to `PRINT_TARGET_PT` so it lands correctly when its page is
+  near that height, but any extra usable height is slack it pulls the next week's rows into, and
+  the file cannot know that height. Those renders are **advisory** in the check. Do not tune a
+  threshold until they go green — that is how the old build showed 112/112 while the real print
+  was broken, because it was passing via a mechanism the device never runs
 - Do not drop the anchor cell from the final filler row (`padRows` marks it `anchor`). Trailing
   blank rows are NOT part of a sheet's used range, so without it the last page's padding is
   discarded, the sheet is shorter than `pageCount × pageHeight`, the fit-to-height scale comes
   out too large and pages take more than one spread. Removing it fails 44 of the 112 renders
-- Do not remove `fitToHeight` or turn `fitToPage` off in the midweek workbook. It is the whole
-  mechanism, not an optimisation — without it 80 of the 112 renders fail. Manual `<rowBreaks>`
-  are still emitted because Excel honours them, but they are a bonus: phone print dialogs and
-  Google Sheets ignore them entirely
 - Do not run `scripts/check-xlsx-pagination.mjs` at one margin setting only. It sweeps 0.35in /
-  0.6in / 0.85in / 1.0in × (breaks, no-breaks) precisely because passing at 0.35in alone is how
+  0.6in / 0.85in / 0.90in / 1.0in × (breaks, no-breaks) precisely because passing at 0.35in alone is how
   this shipped broken twice. Run it after touching row heights, column widths, padding or the
   page setup
 - Do not give a cancelled week (`assembly`/`suspended`) a full programme in an export. It
@@ -1078,4 +1062,4 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 | **Phase 5 — iCal Export** | Done — `app/lib/icalExport.js` generates RFC-5545 `.ics` (Taiwan UTC+8, stable UIDs, 1h45m events). "↓ iCal (N)" button in PeoplePage 未來安排 section downloads `{name}-schedule.ics` for import into Outlook/Google Calendar/Apple Calendar. |
 | **Phase 6 — PWA + UX polish** | Done — installable PWA (`app/manifest.js` + `public/sw.js` network-first worker + `PWARegister`, themeColor/apple-web-app meta in `layout.js`). Plus: clear/留空 button in AssignSheet; serialized people writes (quals no longer self-deselect); mobile people detail renders inline under the tapped card; mobile row dot+partnum no longer squished; silent client-side PDF + 複製文字 in meetings export menu; wired ImportPage 匯出 cards with 全部/本月/自訂 range. Ministry/CBS parts always show two assignment slots (student + helper) with correct role labels; edit-mode ＋/− toggle to add/remove helper slot per part; LINE notifications include role labels (學生/助手/主持/朗讀) and CBS textbook references. 匯出 page JPG/PDF/列印 now screenshot real off-screen MidweekWeek cards (`exportNodes*`) instead of the removed hand-drawn canvas; PDF pages sized to the card; PeoplePage cards toggle-to-deselect with an animated recenter when nothing is selected. 總覽 has a 最近變更 tab backed by a `ChangeLog` table written best-effort on every assignment edit (assignments + weekend-rows routes) — decoupled from 發佈通知 (which is unchanged). |
 | **Phase 7 — Assignment heatmap** | Done — 總覽 ▸ 指派分布 (canEdit-only): a contributions-style grid (`AssignmentHeatmap.js` + `lib/heatmap.mjs`), one row per person, one cell per month (or per week at 3 個月), shaded by assignment count. Range chips 3/6/12 個月 + 本服務年度; rolling windows are **centred on the current month** because schedule dates carry no year and the shared `cnDate` parser resolves ~5 months back but ~7 forward — so half past / half upcoming is both what the data supports and what a scheduler needs (mirrors the ✦ engine's bidirectional fairness gap). Months with no imported meetings render as 無資料 and are excluded from idle detection. Gender filter, attention-first sort (same-month doubles, then idle runs). Tapping a row opens 個人檢視 over the same window: week grid, monthly bars, dated record list with year dividers, 助手搭配 tally, plain-language summary, and the meetings-page export set (JPG / 複製圖片 / 複製文字 / PDF). Squares are fit-to-width; names are never truncated. Read-only by design. Encodes the member-feedback rules: 姊妹 flag on any two parts in a month, 弟兄 only within the 用心準備傳道工作 bucket. Exports (JPG / 複製圖片 / 複製文字 / Excel / PDF) are available on BOTH the grid and the person view via one shared `HeatmapExportMenu`; the month header stays pinned while the roster scrolls, so a screenshot of any part of the list carries its labels. |
-| **Phase 8 — Print layout** | Done — the Excel export prints exactly two weeks per A4 page for every month, on every print path. It had FOUR independent faults, each of which only showed up once the previous one was fixed. (1) It broke after every 2nd week without measuring the printed height, so a pair of long weeks overflowed and the renderer broke mid-week. (2) The columns totalled 91 character units, which only fits A4 when the Normal font really is Calibri — substituted, the 指派 column fell off the right edge and every page grew a second, near-empty column-page. (3) **Manual `<rowBreaks>` are honoured by Excel and almost nothing else**: phone print dialogs and Google Sheets drop them and paginate automatically. (4) **The usable page height is not knowable** — padding to "A4 minus the margins the file asks for" (791.5pt) still split a week, because no print path guarantees the margins the file requests. The fix: columns narrowed to 72 units so fitToWidth never has to shrink anything; `buildSheetPlan` pads EVERY page — the last included, its filler anchored by a cell because trailing blanks fall outside the used range — to the SAME height; and `fitToHeight="<pageCount>"` lets the renderer pick scale = itsUsableHeight ÷ pageHeight, putting exactly one spread on each page **without any assumption about that height**. `scripts/check-xlsx-pagination.mjs` renders each case at four margin settings × breaks/no-breaks — 112 renders — and asserts both the page count and that no page starts mid-programme; dropping the anchor or `fitToHeight` fails 44 and 80 of them. Every filler row (not just the anchoring one) carries a cell, because a blank row falls outside the used range and may be discarded. **(5) The page filled itself to the edge** — `pageHeight` was the tallest spread EXACTLY, so that page had zero padding, `fitToHeight` scaled its content to exactly the usable height, and a few points of accumulated row-height rounding pushed the last row over: October printed both weeks on page 1 except 10月8日's closing 唱詩 row. `pageHeightFor` now multiplies by `1 + PAGE_SLACK` (3%), so every page ends in a strip of blank padding instead of on a cliff edge. 匯入/匯出 now presents **PDF 版面** as the print route (列印用) and Excel as the editable data export: the PDF composes real A4 pages from card captures, so it cannot be re-paginated by whatever app opens it. Plus **PDF 版面** in 匯入/匯出: a mobile-first slide-out with a 2×2 Word-style picker (4 boxes is the ceiling) and an A4 ghost-skeleton preview, exporting 1–4 real MidweekWeek card captures per A4 page via `lib/pdfLayout.mjs` + `lib/pdfWriter.mjs`. A cancelled week (new 暫停 type alongside 大會; `lib/weekType.mjs` is the one predicate) collapses to a one-line strip in the card AND every export, and never consumes a layout slot. `placeCells` scales a whole page by ONE factor so every card and band shares the same width and edges. Also removed the 公平強度 slider and 重新推薦 button from AssignSheet (both noise; ranking unchanged), fixed `ALLOWED_WEEKEND_FIELDS` missing `type` (the weekend 正常/特別/暫停 toggle was 400ing and losing the change on reload), made the EPUB import's `mapWeek` return `type`/`label`, and made the 匯入 page's 會眾聚會設定 panel auto-save (it had no save control at all, so deleting an 例外期間 there silently reverted on reload). |
+| **Phase 8 — Print layout** | Done — the midweek Excel export prints two weeks per A4 page, and **PDF 版面** is the recommended print route (it composes real A4 pages from card captures, so nothing downstream can re-paginate it). The Excel path took six rounds because each fix uncovered the next: (1) it broke after every 2nd week without measuring the printed height; (2) the columns totalled 91 character units, which only fits A4 when the Normal font really is Calibri; (3) manual `<rowBreaks>` were assumed to be honoured everywhere; (4) padding to "A4 minus the requested margins" assumed a usable height no print path guarantees; (5) `pageHeight` equalled the tallest spread exactly, so that page filled itself to the paper's edge. **(6) The actual cause** — measured off the failing print preview (Excel for Android, ISO A4): the path **ignores `fitToPage` entirely** (3% more padding took it from 3 pages to 4 with the break on the identical row — a fitter would have rescaled) and **ignores the requested margins** (0.83in/0.97in, its own defaults, = **712.4pt usable** against a **752pt** spread). And per **Microsoft KB 89311**, `fitToPage` makes Excel ignore every manual page break — so our `<rowBreaks>` had been dead the whole time. The fix is the documented one: compute the scale ourselves (`sheetScale` against `PRINT_TARGET_PT = 690`, measured), emit `<pageSetup scale="N">` with `fitToPage` **off**, and let the now-live manual breaks place each spread. October: 752pt spread → 91% → 684pt printed, 28pt clear of the phone's 712.4pt page. `scripts/check-xlsx-pagination.mjs` sweeps five margins — including **0.90in, which reproduces the measured geometry** — and all 70 break-honouring renders pass; break-ignoring readers (Google Sheets) are inherently uncontrollable and are reported as advisory rather than threshold-tuned. Plus **PDF 版面**: a mobile-first 2×2 picker with an A4 ghost preview, exporting 1–4 real MidweekWeek captures per page via `lib/pdfLayout.mjs` + `lib/pdfWriter.mjs`. A cancelled week (暫停/大會; `lib/weekType.mjs` is the one predicate) collapses to a one-line strip everywhere and never consumes a layout slot. Also removed the 公平強度 slider and 重新推薦 button, fixed `ALLOWED_WEEKEND_FIELDS` missing `type`, made `mapWeek` return `type`/`label`, and made the 匯入 page's 會眾聚會設定 panel auto-save. |
