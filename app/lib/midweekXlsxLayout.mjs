@@ -200,9 +200,30 @@ export function paginateWeeks(weeks, { perPage = 2, isSuspended = () => false } 
 // is no margin figure we can assume; this scheme removes the assumption.
 //
 // PAGE_H is the tallest spread, floored at the nominal A4 printable height so a
-// short month is never blown up past 100%.
+// short month is never blown up past 100% — PLUS A SLACK MARGIN, which is not
+// decoration. Without it PAGE_H equals the tallest spread exactly, so THAT page
+// gets zero padding and its content is exactly PAGE_H tall. fitToHeight then
+// makes the renderer scale it to exactly the usable height: the content ends on
+// the very last point of the paper. ~35 row heights are scaled and snapped to
+// device units on the way there, and a few points of accumulated rounding is all
+// it takes to push the final row onto the next page — which is precisely what
+// October did (page 1 held both weeks except 10月8日's closing 唱詩 row).
+//
+// The slack has to sit between those two bounds:
+//   - ABOVE the accumulated rounding. Every row height is scaled and snapped on
+//     the way to the device, and a spread is ~35 rows, so the worst case is well
+//     over a point per row. The observed overflow was one row — 17pt.
+//   - Small enough not to waste paper or shrink the print needlessly.
+// 3% of a page is ~24pt: clear of the 17pt that actually went wrong, and a 3%
+// smaller print nobody will notice. Every page now ends in a strip of blank
+// padding instead of on a cliff edge.
+//
+// Note this cannot let the NEXT week's rows creep up into the gap: the gap is
+// made of filler rows that carry a cell, so it is occupied, not empty.
+export const PAGE_SLACK = 0.03;
+
 export function pageHeightFor(pageHeights) {
-  return Math.max(A4_PRINTABLE_PT, ...(pageHeights ?? [0]));
+  return Math.max(A4_PRINTABLE_PT, ...(pageHeights ?? [0])) * (1 + PAGE_SLACK);
 }
 
 // Excel's hard cap on a single row.
