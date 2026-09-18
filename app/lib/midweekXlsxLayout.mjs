@@ -249,6 +249,14 @@ export function paginateWeeks(weeks, { perPage = 2, isSuspended = () => false } 
 // many points, whatever the renderer does.
 export const PRINT_TARGET_PT = 690;
 
+// Excel for Android does not preserve our point heights exactly when it turns
+// the sheet into a PDF. The error is small per row but cumulative: the real
+// October 1/8 spread has 38 rows and a modeled height of 752pt; at the old 91%
+// fallback scale Android stranded its final 17pt row. Reserve one extra point
+// per emitted row when choosing the fallback scale. That makes this exact edge
+// case 87%, while ordinary shorter spreads still remain at 100%.
+export const MOBILE_ROW_ROUNDING_PT = 1;
+
 // The scale we put in <pageSetup>, as a percentage. WE compute it; the renderer
 // is not asked to work anything out.
 export function sheetScale(tallestSpreadPt) {
@@ -480,10 +488,12 @@ export function buildWorksheetSpread(weeks, getAssign, { isSuspended = () => fal
   });
 
   const contentHeight = sumHeights(rows);
+  const scaleHeight = contentHeight + rows.length * MOBILE_ROW_ROUNDING_PT;
   return {
     rows,
     contentHeight,
-    scale: sheetScale(contentHeight),
+    scaleHeight,
+    scale: sheetScale(scaleHeight),
   };
 }
 

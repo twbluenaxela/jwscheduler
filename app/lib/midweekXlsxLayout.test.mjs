@@ -5,6 +5,7 @@ import JSZip from 'jszip';
 import {
   A4_PRINTABLE_PT,
   MAX_ROW_PT,
+  MOBILE_ROW_ROUNDING_PT,
   PRINT_TARGET_PT,
   MIN_ROW_FOR,
   ROW_HT,
@@ -68,6 +69,52 @@ function octoberWeek(id) {
       part('會眾研經班', { roleLabel: '主持/朗讀', cbsRef: '《組織》第 12 章 第 1-9 段，附欄「怎樣善用這本書」' }),
     ],
   };
+}
+
+// The exact program shape from the Android screenshot that stranded
+// 10月 8日's final "9:05  唱詩 38 首" row on a page by itself.
+function androidTallOctoberPair() {
+  return [
+    {
+      ...septemberWeek(1),
+      date: '10月 1日', reading: '耶利米書38－39章',
+      openSong: '102', midSong: '90', closeSong: '56',
+      treasures: [
+        part('要互相支持', { dur: '10 分鐘' }),
+        part('經文寶石', { dur: '10 分鐘' }),
+        part('經文朗讀', { dur: '4 分鐘', roleLabel: '學生' }),
+      ],
+      ministry: [
+        part('初次交談 — 在日常生活中作見證', { dur: '3 分鐘', roleLabel: '學生/助手' }),
+        part('再次交談 — 在日常生活中作見證', { dur: '4 分鐘', roleLabel: '學生/助手' }),
+        part('你會怎麼說？', { dur: '6 分鐘' }),
+      ],
+      living: [
+        part('《「誰摸我」？》', { dur: '15 分鐘' }),
+        part('會眾研經班', { dur: '30 分鐘', roleLabel: '主持/朗讀' }),
+      ],
+    },
+    {
+      ...septemberWeek(8),
+      date: '10月 8日', reading: '耶利米書40－41章',
+      openSong: '33', midSong: '17', closeSong: '38', closeSongTime: '9:05',
+      treasures: [
+        part('耶和華每次都會救我們的命嗎？', { dur: '10 分鐘' }),
+        part('經文寶石', { dur: '10 分鐘' }),
+        part('經文朗讀', { dur: '4 分鐘', roleLabel: '學生' }),
+      ],
+      ministry: [
+        part('初次交談 — 向住戶作見證', { dur: '2 分鐘', roleLabel: '學生/助手' }),
+        part('初次交談 — 在日常生活中作見證', { dur: '2 分鐘', roleLabel: '學生/助手' }),
+        part('初次交談 — 在公共場所傳道', { dur: '4 分鐘', roleLabel: '學生/助手' }),
+        part('解釋自己的信仰 — 示範', { dur: '3 分鐘', roleLabel: '學生/助手' }),
+      ],
+      living: [
+        part('耶和華是寡婦的保護者', { dur: '15 分鐘' }),
+        part('會眾研經班', { dur: '30 分鐘', roleLabel: '主持/朗讀' }),
+      ],
+    },
+  ];
 }
 
 const suspendedWeek = (id, label = '國際大會') => ({
@@ -372,7 +419,28 @@ test('one-page worksheet spread ends on the final real meeting row', () => {
   assert.equal(spread.rows.filter((row) => row.cells?.[0]?.v === ' ').length, 0);
   assert.equal(spread.rows.at(-1).cells[2].v, `唱詩 ${weeks[1].closeSong} 首`);
   assert.equal(spread.contentHeight, sumHeights(spread.rows));
-  assert.equal(spread.scale, sheetScale(spread.contentHeight));
+  assert.equal(spread.scaleHeight, spread.contentHeight + spread.rows.length * MOBILE_ROW_ROUNDING_PT);
+  assert.equal(spread.scale, sheetScale(spread.scaleHeight));
+});
+
+test('Android tall October edge case gets enough rounding headroom for its closing song', async () => {
+  const weeks = androidTallOctoberPair();
+  const spread = buildWorksheetSpread(weeks, null, opts);
+
+  assert.equal(spread.rows.length, 38);
+  assert.equal(spread.contentHeight, 752);
+  assert.equal(spread.scaleHeight, 790);
+  assert.equal(spread.scale, 87, 'the observed 91% left the final 17pt row on page 2');
+  assert.ok(spread.contentHeight * spread.scale / 100 <= 660);
+  assert.equal(spread.rows.at(-1).cells[2].v, '唱詩 38 首');
+
+  const blob = await buildMidweekXlsxBlob(weeks, null);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
+  assert.match(xml, /<pageSetup[^>]*scale="87"[^>]*fitToWidth="1" fitToHeight="1"\/>/);
+  assert.doesNotMatch(xml, /<rowBreaks/);
+  assert.doesNotMatch(xml, /<t xml:space="preserve"> <\/t>/);
+  assert.match(xml, /唱詩 38 首/);
 });
 
 test('cancelled weeks stay with their two scheduled weeks on the same worksheet', async () => {
