@@ -11,6 +11,7 @@ import {
   TITLE_COL_UNITS,
   buildMidweekXlsxBlob,
   buildSheetPlan,
+  buildWorksheetSpread,
   padRows,
   pageHeightFor,
   sheetScale,
@@ -345,6 +346,11 @@ test('downloaded workbook makes each two-week spread an independent one-page she
     assert.match(xml, /<pageSetUpPr fitToPage="1"\/>/);
     assert.match(xml, /<pageSetup[^>]*paperSize="9"[^>]*scale="\d+"[^>]*fitToWidth="1" fitToHeight="1"\/>/);
     assert.doesNotMatch(xml, /<rowBreaks/);
+    assert.doesNotMatch(
+      xml,
+      /<t xml:space="preserve"> <\/t>/,
+      'a per-page worksheet must not contain synthetic space-filled padding rows',
+    );
   });
 
   assert.match(sheets[0], /10月 1日/);
@@ -353,6 +359,20 @@ test('downloaded workbook makes each two-week spread an independent one-page she
   assert.match(sheets[1], /10月 3日/);
   assert.match(sheets[1], /10月 4日/);
   assert.match(sheets[2], /10月 5日/);
+});
+
+test('one-page worksheet spread ends on the final real meeting row', () => {
+  const weeks = [octoberWeek(1), octoberWeek(2)];
+  const spread = buildWorksheetSpread(weeks, null, opts);
+  const expectedRows = weekRows(weeks[0], null, opts).length
+    + 1
+    + weekRows(weeks[1], null, opts).length;
+
+  assert.equal(spread.rows.length, expectedRows, 'only real rows plus the inter-week spacer');
+  assert.equal(spread.rows.filter((row) => row.cells?.[0]?.v === ' ').length, 0);
+  assert.equal(spread.rows.at(-1).cells[2].v, `唱詩 ${weeks[1].closeSong} 首`);
+  assert.equal(spread.contentHeight, sumHeights(spread.rows));
+  assert.equal(spread.scale, sheetScale(spread.contentHeight));
 });
 
 test('cancelled weeks stay with their two scheduled weeks on the same worksheet', async () => {

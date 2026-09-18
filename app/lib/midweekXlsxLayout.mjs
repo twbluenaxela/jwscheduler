@@ -76,7 +76,10 @@
 // wide × 1 page tall. Microsoft documents that Fit to ignores manual page
 // breaks, but these sheets contain no manual breaks and no third week that can
 // flow onto another page. Printer margins and mobile defaults can change the
-// scale, but they cannot change the required one-page result.
+// scale, but they cannot change the required one-page result. These worksheets
+// also contain NO synthetic end padding: Excel for Android can ignore Fit to
+// and count those otherwise invisible filler rows, which stranded the second
+// week's closing song on a page of its own.
 //
 // TWO THEORIES THAT WERE TESTED AND ARE WRONG, so nobody re-derives them: (a)
 // the substituted CJK face wraps titles onto more lines than reserved —
@@ -460,6 +463,30 @@ export function buildSheetPlan(weeks, getAssign, { perPage = 2, isSuspended = ()
   };
 }
 
+// Builds one self-contained worksheet spread from actual meeting rows only.
+// This deliberately differs from the legacy multi-page plan above: that plan's
+// filler rows align manual page breaks inside one long worksheet, while a
+// one-spread worksheet has no boundary to align. Keeping the filler here makes
+// it visible content to mobile Excel even though its cell contains only a
+// space, and that extra height is what pushed the final real row onto page 2.
+export function buildWorksheetSpread(weeks, getAssign, { isSuspended = () => false } = {}) {
+  const opts = { isSuspended };
+  const blocks = (weeks ?? []).map((week) => weekRows(week, getAssign, opts));
+  const rows = [];
+
+  blocks.forEach((block, index) => {
+    if (index > 0) rows.push({ ht: ROW_HT.spacer, cells: [] });
+    rows.push(...block);
+  });
+
+  const contentHeight = sumHeights(rows);
+  return {
+    rows,
+    contentHeight,
+    scale: sheetScale(contentHeight),
+  };
+}
+
 /* ===================== OOXML writing ===================== */
 
 // 時間 / 編號 / 項目 / 角色 / 指派, in Excel character units. The total (72) is
@@ -618,8 +645,7 @@ export function buildMidweekXlsxBlob(weeks, getAssign) {
   const pages = paginateWeeks(list, { perPage: 2, isSuspended: isMidweekSuspended });
   const sheets = pages.map((page, pageIndex) => {
     const pageWeeks = page.indexes.map((index) => list[index]);
-    const plan = buildSheetPlan(pageWeeks, getAssign, {
-      perPage: 2,
+    const spread = buildWorksheetSpread(pageWeeks, getAssign, {
       isSuspended: isMidweekSuspended,
     });
     const dates = pageWeeks.filter((week) => !isMidweekSuspended(week));
@@ -632,7 +658,9 @@ export function buildMidweekXlsxBlob(weeks, getAssign) {
       // there are no manual breaks for Excel to ignore and no following week
       // that an automatic break can strand on another page. The explicit scale
       // remains in the XML as a fallback for mobile readers that ignore Fit to.
-      xml: buildStyledSheetXml(plan.rows, [], plan.scale, PAGE_MARGIN_IN, true),
+      // Do not add the legacy end-of-page filler here: on Android it is part of
+      // the used range and can push the final meeting row onto a second page.
+      xml: buildStyledSheetXml(spread.rows, [], spread.scale, PAGE_MARGIN_IN, true),
     };
   });
   return zipXlsxSheets(sheets, buildMidweekStylesXml());
