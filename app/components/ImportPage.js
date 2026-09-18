@@ -119,6 +119,7 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState(null);
   const cardRefs = useRef([]); // rendered (off-screen) MidweekWeek cards, one per selected week
+  const pdfCardRefs = useRef([]); // print-layout captures; independent of the phone viewport
 
   // CSS media queries key off the viewport, not the element, so on a phone the
   // card always renders in its mobile (stacked) layout. Rendering it inside a
@@ -153,12 +154,19 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
   // leaves stale nodes past the end of the array; the grid PDF places cards by
   // week INDEX, so a stale or missing ref would shift every later card into the
   // wrong box on the page.
-  useEffect(() => { cardRefs.current.length = selectedWeeks.length; }, [selectedWeeks.length]);
+  useEffect(() => {
+    cardRefs.current.length = selectedWeeks.length;
+    pdfCardRefs.current.length = selectedWeeks.length;
+  }, [selectedWeeks.length]);
 
   // Keep nodes index-aligned with selectedWeeks — never .filter(Boolean) into a
   // shorter array, or nodes[i] stops describing weeks[i].
   const exportNodes = useCallback(
     () => selectedWeeks.map((_, i) => cardRefs.current[i] ?? null),
+    [selectedWeeks],
+  );
+  const exportPdfNodes = useCallback(
+    () => selectedWeeks.map((_, i) => pdfCardRefs.current[i] ?? null),
     [selectedWeeks],
   );
 
@@ -219,27 +227,27 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
       const present = nodes.filter(Boolean);
       if (action === 'jpg') await exportNodesJpeg(present, selectedWeeks);
       else if (action === 'xlsx') await exportWeeksXlsx(selectedWeeks, getAssign);
-      else if (action === 'pdf') await exportNodesPdf(present, selectedWeeks);
-      else if (action === 'print') await openNodesPrintWindow(present);
+      else if (action === 'pdf') await exportNodesPdf(exportPdfNodes().filter(Boolean), selectedWeeks);
+      else if (action === 'print') await openNodesPrintWindow(exportPdfNodes().filter(Boolean));
     } catch (err) {
       setExportError(err?.message || '匯出失敗');
     } finally {
       setExporting(false);
     }
-  }, [selectedWeeks, getAssign, exportNodes]);
+  }, [selectedWeeks, getAssign, exportNodes, exportPdfNodes]);
 
   const runGridExport = useCallback(async (layout) => {
     setExportError(null);
     setExporting(true);
     try {
-      await exportNodesPdfGrid(exportNodes(), selectedWeeks, layout);
+      await exportNodesPdfGrid(exportPdfNodes(), selectedWeeks, layout);
       setLayoutOpen(false);
     } catch (err) {
       setExportError(err?.message || '匯出失敗');
     } finally {
       setExporting(false);
     }
-  }, [selectedWeeks, exportNodes]);
+  }, [selectedWeeks, exportPdfNodes]);
 
   const existingDates = new Set(existingWeeks.map((w) => w.date));
   const mergeStats = {
@@ -555,6 +563,23 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
             openSheet={() => {}}
             updateMidweekWeek={() => {}}
             cardRef={(el) => { cardRefs.current[i] = el; }}
+          />
+        ))}
+      </div>
+
+      {/* PDF pages have a fixed paper layout. Capture these cards at print width
+          even on phones; otherwise the mobile card stacks every assignment and
+          then gets scaled down again to share an A4 page with another week. */}
+      <div className="mw-pdf-captures" aria-hidden="true">
+        {selectedWeeks.map((w, i) => (
+          <MidweekWeek
+            key={w.id ?? i}
+            week={w}
+            editMode={false}
+            getAssign={getAssign}
+            openSheet={() => {}}
+            updateMidweekWeek={() => {}}
+            cardRef={(el) => { pdfCardRefs.current[i] = el; }}
           />
         ))}
       </div>

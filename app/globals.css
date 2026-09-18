@@ -1066,6 +1066,38 @@ html, body {
 .pdflay-error { margin: 0; }
 .pdflay-foot { display: flex; justify-content: flex-end; gap: 10px; }
 
+/* PDF/print captures use a fixed desktop-width card even when exported on a
+   phone. Viewport media queries still apply off-screen, so explicitly restore
+   the compact horizontal print rows before the capture is scaled onto paper. */
+.mw-pdf-captures {
+  position: fixed;
+  left: -99999px;
+  top: 0;
+  width: 960px;
+  pointer-events: none;
+}
+.mw-pdf-captures .mw-head { flex-direction: row; gap: 20px; padding: 22px 26px 20px; }
+.mw-pdf-captures .mw-head__date { font-size: 30px; }
+.mw-pdf-captures .mw-head__roles { width: auto; grid-template-columns: auto auto; justify-items: initial; }
+.mw-pdf-captures .role-label { text-align: right; }
+.mw-pdf-captures .row {
+  grid-template-columns: 58px 26px 1fr auto;
+  grid-template-areas: none;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 26px;
+}
+.mw-pdf-captures .row__time,
+.mw-pdf-captures .dotwrap,
+.mw-pdf-captures .row__part,
+.mw-pdf-captures .row__assign { grid-area: auto; }
+.mw-pdf-captures .row__part { font-size: 15.5px; }
+.mw-pdf-captures .row__assign { justify-self: end; flex-wrap: nowrap; }
+.mw-pdf-captures .band { padding: 8px 26px; }
+.mw-pdf-captures .mw-susp { flex-wrap: nowrap; gap: 16px; padding: 13px 20px; }
+.mw-pdf-captures .mw-susp__date { font-size: 19px; }
+.mw-pdf-captures .mw-susp__text { font-size: 15px; }
+
 @media (min-width: 721px) {
   .pdflay-body { flex-direction: row; align-items: flex-start; gap: 22px; padding: 20px 22px 8px; }
   .pdflay-page { width: 164px; }
