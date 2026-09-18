@@ -1076,16 +1076,18 @@ html, body {
   width: 960px;
   pointer-events: none;
 }
-.mw-pdf-captures .mw-head { flex-direction: row; gap: 20px; padding: 22px 26px 20px; }
-.mw-pdf-captures .mw-head__date { font-size: 30px; }
-.mw-pdf-captures .mw-head__roles { width: auto; grid-template-columns: auto auto; justify-items: initial; }
+.mw-pdf-captures .mw-head { flex-direction: row; gap: 16px; padding: 12px 22px 10px; }
+.mw-pdf-captures .mw-head__date { font-size: 26px; }
+.mw-pdf-captures .mw-head__sub { margin-top: 5px; }
+.mw-pdf-captures .mw-head__roles { width: auto; grid-template-columns: auto auto; gap: 4px 10px; justify-items: initial; }
 .mw-pdf-captures .role-label { text-align: right; }
+.mw-pdf-captures .rows { padding: 2px 0; }
 .mw-pdf-captures .row {
   grid-template-columns: 58px 26px 1fr auto;
   grid-template-areas: none;
   align-items: center;
   gap: 10px;
-  padding: 9px 26px;
+  padding: 4px 22px;
 }
 .mw-pdf-captures .row__time,
 .mw-pdf-captures .dotwrap,
@@ -1093,7 +1095,9 @@ html, body {
 .mw-pdf-captures .row__assign { grid-area: auto; }
 .mw-pdf-captures .row__part { font-size: 15.5px; }
 .mw-pdf-captures .row__assign { justify-self: end; flex-wrap: nowrap; }
-.mw-pdf-captures .band { padding: 8px 26px; }
+.mw-pdf-captures .who { padding: 2px 9px; }
+.mw-pdf-captures .who--pair .who { padding: 2px 7px; }
+.mw-pdf-captures .band { padding: 4px 22px; }
 .mw-pdf-captures .mw-susp { flex-wrap: nowrap; gap: 16px; padding: 13px 20px; }
 .mw-pdf-captures .mw-susp__date { font-size: 19px; }
 .mw-pdf-captures .mw-susp__text { font-size: 15px; }

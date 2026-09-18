@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import JSZip from 'jszip';
 
 import {
   A4_PRINTABLE_PT,
@@ -8,6 +9,7 @@ import {
   MIN_ROW_FOR,
   ROW_HT,
   TITLE_COL_UNITS,
+  buildMidweekXlsxBlob,
   buildSheetPlan,
   padRows,
   pageHeightFor,
@@ -323,4 +325,45 @@ test('pageHeightFor is whatever renders to one target page at the chosen scale',
   }
   // A sheet that already fits is left at 100%, so the page is the target itself.
   assert.equal(pageHeightFor([100, 200]), PRINT_TARGET_PT);
+});
+
+test('downloaded workbook makes each two-week spread an independent one-page sheet', async () => {
+  const weeks = [1, 2, 3, 4, 5].map(octoberWeek);
+  const blob = await buildMidweekXlsxBlob(weeks, null);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const workbook = await zip.file('xl/workbook.xml').async('string');
+  const sheetNames = [...workbook.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1]);
+
+  assert.equal(sheetNames.length, 3);
+  assert.match(sheetNames[0], /10月 1日-10月 2日/);
+  assert.match(sheetNames[2], /10月 5日/);
+
+  const sheets = await Promise.all([1, 2, 3].map((n) => (
+    zip.file(`xl/worksheets/sheet${n}.xml`).async('string')
+  )));
+  sheets.forEach((xml) => {
+    assert.match(xml, /<pageSetUpPr fitToPage="1"\/>/);
+    assert.match(xml, /<pageSetup[^>]*paperSize="9"[^>]*scale="\d+"[^>]*fitToWidth="1" fitToHeight="1"\/>/);
+    assert.doesNotMatch(xml, /<rowBreaks/);
+  });
+
+  assert.match(sheets[0], /10月 1日/);
+  assert.match(sheets[0], /10月 2日/);
+  assert.doesNotMatch(sheets[0], /10月 3日/);
+  assert.match(sheets[1], /10月 3日/);
+  assert.match(sheets[1], /10月 4日/);
+  assert.match(sheets[2], /10月 5日/);
+});
+
+test('cancelled weeks stay with their two scheduled weeks on the same worksheet', async () => {
+  const weeks = [octoberWeek(1), suspendedWeek(2), octoberWeek(3), octoberWeek(4)];
+  const blob = await buildMidweekXlsxBlob(weeks, null);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const first = await zip.file('xl/worksheets/sheet1.xml').async('string');
+  const second = await zip.file('xl/worksheets/sheet2.xml').async('string');
+
+  assert.match(first, /10月 1日/);
+  assert.match(first, /9月 2日/);
+  assert.match(first, /10月 3日/);
+  assert.match(second, /10月 4日/);
 });

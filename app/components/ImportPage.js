@@ -34,7 +34,7 @@ const EXPORT_CARDS = [
   { ic: '▦', label: '分享圖片', sub: 'JPG · 貼到 LINE 群組', action: 'jpg' },
   { ic: '⊞', label: 'PDF 版面', sub: '列印用 · 每頁 2–4 週', action: 'pdfgrid' },
   { ic: '▥', label: '下載 PDF', sub: '每頁一週', action: 'pdf' },
-  { ic: '▤', label: '匯出 Excel', sub: '可編輯表格', action: 'xlsx' },
+  { ic: '▤', label: '匯出 Excel', sub: '每 2 週一張工作表', action: 'xlsx' },
   { ic: '⎙', label: '列印', sub: '直接送印表機', action: 'print' },
 ];
 

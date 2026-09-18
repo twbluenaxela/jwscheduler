@@ -56,14 +56,29 @@ export function buildPlainSheetXml(rows, cols = [18, 18, 48, 36, 22, 18]) {
   return xml;
 }
 
-export function zipXlsx(sheetXml, stylesXml, sheetName = '週中') {
+function safeSheetName(value, index) {
+  const cleaned = String(value || `第${index + 1}頁`)
+    .replace(/[\\/?*:[\]]/g, ' ')
+    .replace(/^'+|'+$/g, '')
+    .trim()
+    .slice(0, 31);
+  return cleaned || `第${index + 1}頁`;
+}
+
+export function zipXlsxSheets(sheets, stylesXml) {
+  const list = (sheets ?? []).map((sheet, index) => ({
+    xml: sheet.xml,
+    name: safeSheetName(sheet.name, index),
+  }));
+  if (!list.length) list.push({ xml: buildPlainSheetXml([]), name: '週中' });
+
   const zip = new JSZip();
   zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  ${list.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('\n  ')}
   <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
 </Types>`);
   zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -73,16 +88,16 @@ export function zipXlsx(sheetXml, stylesXml, sheetName = '週中') {
   zip.file('xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="${escapeXml(sheetName)}" sheetId="1" r:id="rId1"/>
+    ${list.map((sheet, index) => `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('\n    ')}
   </sheets>
 </workbook>`);
   zip.file('xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
-  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  ${list.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('\n  ')}
+  <Relationship Id="rId${list.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`);
   zip.file('xl/styles.xml', stylesXml);
-  zip.file('xl/worksheets/sheet1.xml', sheetXml);
+  list.forEach((sheet, index) => zip.file(`xl/worksheets/sheet${index + 1}.xml`, sheet.xml));
   // Tag the blob with the real spreadsheet MIME type. Without it the download
   // carries no content-type and mobile file handlers open it as a raw zip of
   // XML parts instead of in a spreadsheet app.
@@ -90,6 +105,10 @@ export function zipXlsx(sheetXml, stylesXml, sheetName = '週中') {
     type: 'blob',
     mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
+}
+
+export function zipXlsx(sheetXml, stylesXml, sheetName = '週中') {
+  return zipXlsxSheets([{ xml: sheetXml, name: sheetName }], stylesXml);
 }
 
 const PLAIN_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -104,4 +123,3 @@ const PLAIN_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?
 export function buildXlsxBuffer(rows, { sheetName = '週中', cols } = {}) {
   return zipXlsx(buildPlainSheetXml(rows, cols), PLAIN_STYLES_XML, sheetName);
 }
-

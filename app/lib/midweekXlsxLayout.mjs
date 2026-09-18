@@ -55,7 +55,7 @@
 // workaround is to set an explicit scale percentage instead, which keeps the
 // breaks alive.
 //
-// THE FIX — compute the scale ourselves, ask the renderer for nothing:
+// THE FIRST RELIABLE FIX computed the scale itself:
 //   1. COLUMNS NARROW ENOUGH TO FIT A4 (72 character units; 76 is the measured
 //      limit). The old 91-unit total only fitted when the Normal font really was
 //      Calibri; substituted, the 指派 column fell off the right edge.
@@ -64,12 +64,19 @@
 //   3. `sheetScale()` shrinks the sheet so the tallest spread prints inside that
 //      target, and `<pageSetup scale="N">` carries it. fitToPage is OFF, so the
 //      manual <rowBreaks> are honoured and each spread ends where we say.
-//   4. Every page is still padded to one page's worth, every filler row carrying
+//   4. Every page is padded to one page's worth, every filler row carrying
 //      a cell, so a reader that drops the breaks (Google Sheets) still lands on
 //      the right boundaries when its page is near our target. It cannot be exact
 //      when its page is much taller — the file cannot know that height — and
 //      scripts/check-xlsx-pagination.mjs marks those renders advisory rather
 //      than pretending otherwise.
+//
+// THE FINAL CROSS-READER FIX is structural: the downloaded workbook now puts
+// each two-week spread on its own worksheet and marks that sheet Fit to 1 page
+// wide × 1 page tall. Microsoft documents that Fit to ignores manual page
+// breaks, but these sheets contain no manual breaks and no third week that can
+// flow onto another page. Printer margins and mobile defaults can change the
+// scale, but they cannot change the required one-page result.
 //
 // TWO THEORIES THAT WERE TESTED AND ARE WRONG, so nobody re-derives them: (a)
 // the substituted CJK face wraps titles onto more lines than reserved —
@@ -79,7 +86,7 @@
 // cell) but it was never what the device was doing.
 
 import { isMidweekSuspended, suspendedNotice } from './weekType.mjs';
-import { cellRef, escapeXml, zipXlsx } from './xlsx.mjs';
+import { cellRef, escapeXml, zipXlsxSheets } from './xlsx.mjs';
 
 // A4 portrait, minus the 0.35in top/bottom margins the sheet sets. Points.
 export const A4_HEIGHT_PT = 841.89;
@@ -537,7 +544,7 @@ export function buildMidweekStylesXml() {
     + '</styleSheet>';
 }
 
-export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_MARGIN_IN) {
+export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_MARGIN_IN, fitSinglePage = false) {
   let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
   xml += '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ';
   xml += 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
@@ -545,13 +552,10 @@ export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_M
   // sheetFormatPr, cols, sheetData, mergeCells, printOptions, pageMargins,
   // pageSetup, rowBreaks. Reordering makes Excel reject the file.
   //
-  // fitToPage is OFF, deliberately. Microsoft KB 89311 ("Manual Page Breaks
-  // Ignored with Fit To Page/Adjust To"): when a sheet uses Fit To, Excel
-  // IGNORES every manual page break. We had fitToPage="1" AND <rowBreaks>, so
-  // the breaks were dead the whole time. The documented workaround is to set an
-  // explicit scale percentage instead, which keeps the breaks — that is what
-  // `sheetScale` computes.
-  xml += '<sheetPr><pageSetUpPr fitToPage="0"/></sheetPr>';
+  // A multi-page sheet uses explicit scaling so its manual breaks stay live.
+  // The shipped workbook uses `fitSinglePage`: each worksheet contains exactly
+  // one spread, so Fit to 1×1 has no manual breaks to conflict with.
+  xml += `<sheetPr><pageSetUpPr fitToPage="${fitSinglePage ? 1 : 0}"/></sheetPr>`;
   xml += '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>';
   xml += '<sheetFormatPr defaultRowHeight="17"/>';
   xml += '<cols>';
@@ -589,11 +593,15 @@ export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_M
   // marginIn is a parameter only so the renderer check can emulate a print path
   // that overrides our margins; the app always ships PAGE_MARGIN_IN.
   xml += `<pageMargins left="0.3" right="0.3" top="${marginIn}" bottom="${marginIn}" header="0.2" footer="0.2"/>`;
-  // paperSize 9 = A4, at a scale WE computed from our own row heights against a
-  // measured usable height (PRINT_TARGET_PT). Nothing is left for the renderer
-  // to derive, and the manual breaks below stay live.
-  xml += `<pageSetup paperSize="9" orientation="portrait" scale="${Math.max(10, Math.min(100, Math.round(scale)))}"/>`;
-  if (breaks.length) {
+  // paperSize 9 = A4. Single-spread sheets use Fit to 1×1. The legacy/test path
+  // uses the explicit scale computed against PRINT_TARGET_PT so manual breaks
+  // remain live.
+  xml += fitSinglePage
+    // Conforming readers use Fit to 1×1 and ignore scale. Keep the measured
+    // explicit scale as a fallback for mobile print paths that discard Fit to.
+    ? `<pageSetup paperSize="9" orientation="portrait" scale="${Math.max(10, Math.min(100, Math.round(scale)))}" fitToWidth="1" fitToHeight="1"/>`
+    : `<pageSetup paperSize="9" orientation="portrait" scale="${Math.max(10, Math.min(100, Math.round(scale)))}"/>`;
+  if (!fitSinglePage && breaks.length) {
     xml += `<rowBreaks count="${breaks.length}" manualBreakCount="${breaks.length}">`;
     breaks.forEach((b) => { xml += `<brk id="${b}" max="16383" man="1"/>`; });
     xml += '</rowBreaks>';
@@ -606,9 +614,26 @@ export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_M
 // midweekExport.js so the pagination it depends on can be checked against a real
 // spreadsheet renderer (scripts/check-xlsx-pagination.mjs) outside the browser.
 export function buildMidweekXlsxBlob(weeks, getAssign) {
-  const { rows, breaks, scale } = buildSheetPlan(weeks, getAssign, {
-    perPage: 2,
-    isSuspended: isMidweekSuspended,
+  const list = weeks ?? [];
+  const pages = paginateWeeks(list, { perPage: 2, isSuspended: isMidweekSuspended });
+  const sheets = pages.map((page, pageIndex) => {
+    const pageWeeks = page.indexes.map((index) => list[index]);
+    const plan = buildSheetPlan(pageWeeks, getAssign, {
+      perPage: 2,
+      isSuspended: isMidweekSuspended,
+    });
+    const dates = pageWeeks.filter((week) => !isMidweekSuspended(week));
+    const first = dates[0]?.dateLabel || dates[0]?.date;
+    const last = dates[dates.length - 1]?.dateLabel || dates[dates.length - 1]?.date;
+    const range = first && last && first !== last ? `${first}-${last}` : (first || last || '暫停');
+    return {
+      name: `第${pageIndex + 1}頁 ${range}`,
+      // One worksheet is one physical page. Fit-to-page is now safe because
+      // there are no manual breaks for Excel to ignore and no following week
+      // that an automatic break can strand on another page. The explicit scale
+      // remains in the XML as a fallback for mobile readers that ignore Fit to.
+      xml: buildStyledSheetXml(plan.rows, [], plan.scale, PAGE_MARGIN_IN, true),
+    };
   });
-  return zipXlsx(buildStyledSheetXml(rows, breaks, scale), buildMidweekStylesXml());
+  return zipXlsxSheets(sheets, buildMidweekStylesXml());
 }
