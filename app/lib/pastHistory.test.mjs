@@ -112,6 +112,12 @@ test('empty name fields are skipped', () => {
   assert.ok(hist['陳姊妹']);
 });
 
+test('weekend host service contributes to the all-role assignment history', () => {
+  const rows = [{ _id: 4, date: '5/10', speaker: '', chair: '', wt: '', read: '', host: '招待甲' }];
+  const hist = buildPastHistory([], {}, rows, REF);
+  assert.equal(hist['招待甲'].__all__.daysSince, 52);
+});
+
 test('midweek part assignment uses part cat tag (flat parts array)', () => {
   const week = { id: 6, date: '6月 3日', parts: [{ id: 't0', cat: 'treasures' }] };
   const assignments = { 'mw6_t0_0': '楊家松' };

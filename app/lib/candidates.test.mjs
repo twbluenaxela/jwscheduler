@@ -57,6 +57,26 @@ test('a cat in no family is unaffected by the family lookup', () => {
   assert.equal(ranked.find(c => c.n === '甲').viaFamily, null);
 });
 
+test('picker strongly demotes a person still inside their preferred assignment interval', () => {
+  const people = [
+    { ...brother('甲', ['傳道與生活主席']), assignmentIntervalMonths: 5, assignmentNote: '五個月一次' },
+    brother('乙', ['傳道與生活主席']),
+  ];
+  const weeks = [
+    { id: 10, date: '4月 1日', treasures: [], ministry: [], living: [] },
+    { id: 11, date: '6月 1日', treasures: [], ministry: [], living: [] },
+  ];
+  const assignments = {
+    'mw10_openPrayer': '甲', // any assignment 91 days ago: still inside 5 months
+    'mw11_chairman': '乙',  // chaired 30 days ago, but has no special interval
+  };
+  const hist = buildPastHistory(weeks, assignments, [], REF);
+  const ranked = buildCandidates(people, 'chairman', false, 2, hist);
+  assert.equal(ranked[0].n, '乙');
+  assert.equal(ranked[1].interval.months, 5);
+  assert.equal(ranked[1].note, '五個月一次');
+});
+
 test('the 先驅 nudge is the same in the picker as in the engine', () => {
   // Same tie as suggest.test.mjs: both entry points must prefer the 先驅.
   const week = { id: 1, treasures: [{ id: 't0', cat: 'treasures', roleLabel: '學生' }], ministry: [], living: [] };

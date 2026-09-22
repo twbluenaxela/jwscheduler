@@ -116,6 +116,9 @@ export function buildPastHistory(midweekWeeks, assignments, weekendRows, refDate
     for (const [field, tag] of Object.entries(weTagMap)) {
       if (tag) record(row[field], tag, d);
     }
+    // 招待 has no candidate category of its own, but it is still an assignment
+    // and must count toward a person's preferred all-role interval.
+    record(row.host, '__all__', d);
   }
 
   // Compute day distances relative to refDate (never negative — lastDate < ref < nextDate).

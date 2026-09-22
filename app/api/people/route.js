@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../lib/firebase-admin';
 import db from '../../lib/db';
 import { canEdit } from '../../lib/roles.mjs';
+import { normalizeAssignmentIntervalMonths } from '../../lib/assignmentPreferences.mjs';
 
 function personPayload(body) {
   return {
@@ -12,6 +13,8 @@ function personPayload(body) {
     tags: Array.isArray(body.quals) ? body.quals : (Array.isArray(body.tags) ? body.tags : []),
     status: body.status ?? 'active',
     awayNote: body.awayNote || null,
+    assignmentNote: String(body.assignmentNote ?? '').trim().slice(0, 500) || null,
+    assignmentIntervalMonths: normalizeAssignmentIntervalMonths(body.assignmentIntervalMonths),
   };
 }
 
@@ -24,6 +27,8 @@ function mapPerson(person) {
     quals: person.tags ?? [],
     status: person.status,
     awayNote: person.awayNote ?? '',
+    assignmentNote: person.assignmentNote ?? '',
+    assignmentIntervalMonths: person.assignmentIntervalMonths ?? 0,
     lineUserId: person.lineUserId ?? '',
     recent: [],
   };

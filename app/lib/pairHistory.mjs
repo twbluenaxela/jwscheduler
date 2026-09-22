@@ -5,7 +5,7 @@
 // sisters paired again a few weeks later wastes the variety the pool allows.
 // A repeat is allowed - it is a warning and a demotion, never a block - but
 // only once the pair has had time to breathe.
-import { parseCnDate, resolveRowDate } from './cnDate.mjs';
+import { resolveRowDate } from './cnDate.mjs';
 
 export const PAIR_REPEAT_WINDOW_DAYS = 180;
 
@@ -52,6 +52,47 @@ export function recentPairing(index, a, b, ref, windowDays = PAIR_REPEAT_WINDOW_
   return { days: Math.floor(Math.abs(best) / 86400000), future: best > 0, count: arr.length };
 }
 
+// All-time pairing summary for the candidate sheet. Unlike recentPairing this
+// intentionally does not forget older pairings: the scheduler should be able to
+// see that a pair has happened before and prefer a never-used or less-used pair.
+// A pairing on the date currently being edited is excluded from the count.
+export function pairingSummary(index, a, b, ref, recentWindowDays = PAIR_REPEAT_WINDOW_DAYS) {
+  if (!index || !a || !b || a === b) return null;
+  const arr = index.get(pairKey(a, b));
+  if (!arr?.length) return null;
+  const refMs = +ref;
+  const deltas = arr.map(t => t - refMs).filter(diff => diff !== 0);
+  if (!deltas.length) return null;
+  const nearest = deltas.reduce((best, diff) => (
+    best == null || Math.abs(diff) < Math.abs(best) ? diff : best
+  ), null);
+  const days = Math.floor(Math.abs(nearest) / 86400000);
+  return {
+    count: deltas.length,
+    days,
+    future: nearest > 0,
+    recent: days <= recentWindowDays,
+  };
+}
+
+// Historical pairing count for every partner of `name`, excluding a pair on
+// the date currently being edited. The suggestion engine uses the minimum
+// count available, which evens out partnerships instead of only avoiding the
+// most recent repeat.
+export function partnerPairCounts(index, name, ref) {
+  const out = new Map();
+  if (!index || !name) return out;
+  const refMs = +ref;
+  for (const [key, arr] of index) {
+    const [x, y] = key.split(SEP);
+    if (x !== name && y !== name) continue;
+    const other = x === name ? y : x;
+    const count = arr.filter(t => t !== refMs).length;
+    if (other && other !== name && count) out.set(other, count);
+  }
+  return out;
+}
+
 // Every name paired with `name` within the window - the demotion set the
 // suggestion engine applies to the counterpart slot.
 export function partnersWithin(index, name, ref, windowDays = PAIR_REPEAT_WINDOW_DAYS) {
@@ -79,7 +120,7 @@ export function collectMidweekPairs(midweekWeeks, assignments, cats = ['ministry
   const out = [];
   const ref = new Date();
   for (const w of midweekWeeks ?? []) {
-    const date = parseCnDate(w.date, ref);
+    const date = resolveRowDate(w, ref);
     if (!date) continue;
     const parts = [...(w.treasures ?? []), ...(w.ministry ?? []), ...(w.living ?? []), ...(w.parts ?? [])];
     for (const part of parts) {

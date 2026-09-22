@@ -18,7 +18,7 @@ export async function POST(request) {
 
     const congId = user.congregationId;
 
-    const [targetWeek, historyWeeks, people] = await Promise.all([
+    const [targetWeek, historyWeeks, weekendRows, people] = await Promise.all([
       db.midweekWeek.findFirst({
         where: { id: weekId, congregationId: congId },
         include: { parts: { orderBy: [{ section: 'asc' }, { partNum: 'asc' }] } },
@@ -26,6 +26,9 @@ export async function POST(request) {
       db.midweekWeek.findMany({
         where: { congregationId: congId, id: { not: weekId } },
         include: { parts: true, assignments: true },
+      }),
+      db.weekendRow.findMany({
+        where: { congregationId: congId, type: { notIn: ['event', 'suspended'] } },
       }),
       db.person.findMany({ where: { congregationId: congId, status: 'active' } }),
     ]);
@@ -47,7 +50,7 @@ export async function POST(request) {
       for (const a of w.assignments) {
         const roleMatch = a.slotId.match(/^mw\d+_(chairman|openPrayer|closePrayer)$/);
         if (roleMatch) {
-          pastHistory.push({ name: a.name, cat: ROLE_TO_CAT[roleMatch[1]], date: w.date });
+          pastHistory.push({ name: a.name, cat: ROLE_TO_CAT[roleMatch[1]], date: w.date, isoDate: w.isoDate });
           continue;
         }
         const partMatch = a.slotId.match(/^mw\d+_(.+?)_([01])$/);
@@ -59,6 +62,7 @@ export async function POST(request) {
             name: a.name,
             cat: slotCat(part, partMatch[2]),
             date: w.date,
+            isoDate: w.isoDate,
             type: part.cat === 'ministry' ? partTypeOf(part.title) : null,
             role: partMatch[2],
             pairId: String(part.roleLabel ?? '').includes('/') ? `${w.id}_${partMatch[1]}` : null,
@@ -68,13 +72,35 @@ export async function POST(request) {
     }
 
     const normalPeople = people.map(p => ({
-      name: p.name, g: p.gender, quals: p.tags ?? [], status: p.status,
+      name: p.name,
+      g: p.gender,
+      quals: p.tags ?? [],
+      status: p.status,
+      assignmentNote: p.assignmentNote ?? '',
+      assignmentIntervalMonths: p.assignmentIntervalMonths ?? 0,
     }));
+
+    // Preferred assignment intervals apply across every kind of assignment,
+    // not only the category currently being filled. Include weekend service in
+    // the all-role history used solely for that preference.
+    const allHistory = [...pastHistory];
+    for (const row of weekendRows) {
+      for (const name of [row.speaker, row.chair, row.wt, row.read, row.host]) {
+        if (name) allHistory.push({ name, date: row.date, isoDate: row.isoDate });
+      }
+    }
 
     // refDate = the target week's meeting date. historyWeeks includes FUTURE
     // weeks too — the engine's bidirectional gap uses them so a person already
     // booked in an upcoming week is not suggested for this one.
-    const suggestions = suggestMidweekWeek(normalPeople, week, existingAssignments, pastHistory, targetWeek.date);
+    const suggestions = suggestMidweekWeek(
+      normalPeople,
+      week,
+      existingAssignments,
+      pastHistory,
+      targetWeek.date,
+      allHistory,
+    );
     return NextResponse.json({ suggestions });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

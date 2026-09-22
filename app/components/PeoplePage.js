@@ -36,6 +36,8 @@ const QUAL_OPTIONS = [
   '公眾演講',
 ];
 
+const ASSIGNMENT_INTERVAL_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 9, 12, 18, 24];
+
 
 // Prefers a row's stored isoDate; falls back to inferring a year from the
 // year-less display string. Was a third private copy of that inference — see
@@ -125,6 +127,8 @@ function createBlankPerson(nextId) {
     g: 'M',
     appt: DEFAULT_OFFICE,
     quals: [],
+    assignmentNote: '',
+    assignmentIntervalMonths: 0,
     recent: [],
   };
 }
@@ -295,6 +299,17 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
             <span className="settings-row__label">職務</span>
             <span className="settings-row__val">{selectedPerson.appt || '—'}</span>
           </div>
+          <div className="settings-row">
+            <span className="settings-row__label">指派間隔</span>
+            <span className="settings-row__val">
+              {selectedPerson.assignmentIntervalMonths
+                ? `至少 ${selectedPerson.assignmentIntervalMonths} 個月`
+                : '一般輪替'}
+            </span>
+          </div>
+          {selectedPerson.assignmentNote && (
+            <div className="people-preference-note">{selectedPerson.assignmentNote}</div>
+          )}
         </div>
       ) : (
       <div className="people-detail__form">
@@ -356,6 +371,38 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
               <option key={office} value={office}>{office}</option>
             ))}
           </select>
+        </label>
+
+        <label className="field">
+          <span className="field__label">建議指派間隔</span>
+          <select
+            className="field__input field__select"
+            value={selectedPerson.assignmentIntervalMonths ?? 0}
+            onChange={(e) => updateSelected({ assignmentIntervalMonths: Number(e.target.value) })}
+          >
+            {ASSIGNMENT_INTERVAL_OPTIONS.map((months) => (
+              <option key={months} value={months}>
+                {months === 0 ? '一般輪替' : `至少 ${months} 個月一次`}
+              </option>
+            ))}
+          </select>
+          <small className="field__hint">間隔內仍可指派，但會排在其他合資格人選之後。</small>
+        </label>
+
+        <label className="field">
+          <span className="field__label">指派備註</span>
+          <textarea
+            className="field__input field__textarea"
+            defaultValue={selectedPerson.assignmentNote ?? ''}
+            key={`assignment-note-${selectedPerson.id}`}
+            onBlur={(e) => {
+              const value = e.target.value.trim();
+              if (value !== (selectedPerson.assignmentNote ?? '')) updateSelected({ assignmentNote: value });
+            }}
+            maxLength={500}
+            rows={3}
+            placeholder="例如：工作輪班，盡量五個月才安排一次"
+          />
         </label>
       </div>
       )}
@@ -505,7 +552,11 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
                     {person.g === 'M' ? '弟兄' : '姊妹'}
                   </span>
                   {person.appt && person.appt !== '—' && <span className="appt">{person.appt}</span>}
+                  {person.assignmentIntervalMonths > 0 && (
+                    <span className="preference-tag">間隔 {person.assignmentIntervalMonths} 個月</span>
+                  )}
                 </div>
+                {person.assignmentNote && <div className="person__note">{person.assignmentNote}</div>}
                 <div className="quals">
                   {person.quals.slice(0, 4).map((qual) => (
                     <span key={qual} className="qual">{qual}</span>

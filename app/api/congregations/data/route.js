@@ -72,6 +72,8 @@ function mapPerson(person) {
     quals: person.tags ?? [],
     status: person.status,
     awayNote: person.awayNote ?? '',
+    assignmentNote: person.assignmentNote ?? '',
+    assignmentIntervalMonths: person.assignmentIntervalMonths ?? 0,
     lineUserId: person.lineUserId ?? '',
     recent: [],
   };

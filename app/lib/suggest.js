@@ -9,9 +9,15 @@
 // 週末聚會主席 / 守望台主持人 and no member carries 主席 anymore.)
 import { CATS } from '../data/index.js';
 import { partTypeOf, effectiveCat, slotCat, FAMILIES, FAMILY_OF } from './partTypes.mjs';
-import { parseCnDate as parseDate } from './cnDate.mjs';
-import { buildPairIndex, partnersWithin, PAIR_REPEAT_WINDOW_DAYS } from './pairHistory.mjs';
+import { parseCnDate as parseDate, resolveRowDate } from './cnDate.mjs';
+import {
+  buildPairIndex,
+  partnerPairCounts,
+  partnersWithin,
+  PAIR_REPEAT_WINDOW_DAYS,
+} from './pairHistory.mjs';
 import { pioneerBonus } from './appointments.mjs';
+import { assignmentIntervalInfo } from './assignmentPreferences.mjs';
 
 const CAT_REQS = Object.fromEntries(
   Object.entries(CATS).map(([k, v]) => [k, { tag: v.tag, g: v.g }])
@@ -44,7 +50,24 @@ const ROTATE_GAP_TOLERANCE_DAYS = 7;
 // 7 days before it, so editing an earlier week can't double-book a person who
 // is already scheduled in an upcoming week. Assignments dated on `ref` itself
 // are the meeting being planned (its other slots are handled by `used`).
-function rankCandidates(people, tag, gender, history, ref) {
+function historyDate(entry, ref) {
+  return resolveRowDate(entry, ref);
+}
+
+function nearestAssignmentDays(history, name, ref) {
+  const refMs = ref.getTime();
+  let nearest = null;
+  for (const h of history ?? []) {
+    if (h.name !== name) continue;
+    const d = historyDate(h, ref);
+    if (!d || d.getTime() === refMs) continue;
+    const days = Math.floor(Math.abs(d.getTime() - refMs) / 86400000);
+    if (nearest == null || days < nearest) nearest = days;
+  }
+  return nearest;
+}
+
+function rankCandidates(people, tag, gender, history, ref, allHistory = history) {
   const eligible = people.filter(p =>
     p.status === 'active' &&
     (p.quals ?? []).includes(tag) &&
@@ -57,7 +80,7 @@ function rankCandidates(people, tag, gender, history, ref) {
   const counts = new Map();
   for (const h of history) {
     if (!h.name) continue;
-    const d = parseDate(h.date, ref);
+    const d = historyDate(h, ref);
     if (!d || d.getTime() === refMs) continue;
     if (d.getTime() < refMs) {
       const prev = lastSeen.get(h.name);
@@ -83,9 +106,10 @@ function rankCandidates(people, tag, gender, history, ref) {
       // every consumer (pickRotated's tolerance window included) sees one
       // consistent notion of "how rested is this person".
       const gap = Math.min(daysSince, daysUntil) + pioneerBonus(p);
-      return { name: p.name, gap, count: counts.get(p.name) ?? 0 };
+      const interval = assignmentIntervalInfo(p, nearestAssignmentDays(allHistory, p.name, ref));
+      return { name: p.name, gap, count: counts.get(p.name) ?? 0, interval };
     })
-    .sort((a, b) => b.gap - a.gap || a.count - b.count);
+    .sort((a, b) => Number(Boolean(a.interval)) - Number(Boolean(b.interval)) || b.gap - a.gap || a.count - b.count);
 }
 
 // Names with an assignment in ANY category within ±CROWD_WINDOW_DAYS of the
@@ -108,7 +132,7 @@ function crowdedNames(entries, ref, windowDays = CROWD_WINDOW_DAYS) {
   const out = new Set();
   for (const h of entries) {
     if (!h.name) continue;
-    const d = parseDate(h.date, ref);
+    const d = historyDate(h, ref);
     if (!d) continue;
     const diff = Math.abs(d.getTime() - refMs);
     if (diff !== 0 && diff <= win) out.add(h.name);
@@ -141,14 +165,28 @@ function pickOne(ranked, used) {
 //   be of the same sex) but fall back to anyone rather than leave a blank.
 // - type/role: among the top ROTATE_WINDOW by fairness, pick whoever has gone
 //   longest without this specific (type, role) — never-done beats any date.
-// - pairedRecently: names already paired with this slot's counterpart inside the
-//   pair-repeat window (學生／助手 variety) — demoted below everyone else.
-function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf, crowded, pairedRecently } = {}) {
+// - pairedCounts: all-history partnership totals; the least-used available pair
+//   wins. pairedRecently breaks count ties away from a recent repeat.
+function pickRotated(ranked, used, {
+  type,
+  role,
+  typeRoleLast,
+  preferG,
+  genderOf,
+  crowded,
+  pairedRecently,
+  pairedCounts,
+} = {}) {
   let avail = ranked.filter(c => !used.has(c.name));
   if (preferG && genderOf) {
     const same = avail.filter(c => genderOf(c.name) === preferG);
     if (same.length) avail = same;
   }
+  // A personal interval is a strong preference, not a ban. Prefer anyone who
+  // is already outside their interval, but fall back to interval-limited names
+  // when the eligible pool has nobody else.
+  const outsideInterval = avail.filter(c => !c.interval);
+  if (outsideInterval.length) avail = outsideInterval;
   // Crowded names must not re-enter via the rotation window while free
   // candidates exist — only fall back to them when nobody else is left.
   // Applied AFTER the gender preference: a same-gender helper who is busy
@@ -156,6 +194,14 @@ function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf
   if (crowded?.size) {
     const free = avail.filter(c => !crowded.has(c.name));
     if (free.length) avail = free;
+  }
+  // Partnership balance is based on ALL loaded history. Prefer a never-used
+  // pair; if every option is a repeat, prefer the least-used pairing. This is
+  // still a demotion rather than an exclusion because the minimum is taken
+  // from the candidates that actually remain available.
+  if (pairedCounts) {
+    const minCount = Math.min(...avail.map(c => pairedCounts.get(c.name) ?? 0));
+    avail = avail.filter(c => (pairedCounts.get(c.name) ?? 0) === minCount);
   }
   // Pair variety: someone already paired with this slot's counterpart inside
   // PAIR_REPEAT_WINDOW_DAYS drops below everyone who has not been. Applied
@@ -189,19 +235,20 @@ function pickRotated(ranked, used, { type, role, typeRoleLast, preferG, genderOf
 // pastRows: ALL schedule rows — past AND future (future bookings count against
 //   a candidate via the bidirectional gap + crowd demotion).
 // refDate: the row's meeting date (Date or date-string); defaults to today.
-export function suggestWeekendRow(people, pastRows, existing = {}, refDate = new Date()) {
+export function suggestWeekendRow(people, pastRows, existing = {}, refDate = new Date(), allHistory = null) {
   const ref = toRef(refDate);
   const used = new Set(Object.values(existing).filter(Boolean));
   const hist = {
-    speaker: pastRows.filter(r => r.speaker).map(r => ({ name: r.speaker, date: r.date })),
-    chair:   pastRows.filter(r => r.chair).map(r => ({ name: r.chair,   date: r.date })),
-    wt:      pastRows.filter(r => r.wt).map(r => ({ name: r.wt,         date: r.date })),
-    read:    pastRows.filter(r => r.read).map(r => ({ name: r.read,      date: r.date })),
+    speaker: pastRows.filter(r => r.speaker).map(r => ({ name: r.speaker, date: r.date, isoDate: r.isoDate })),
+    chair:   pastRows.filter(r => r.chair).map(r => ({ name: r.chair,   date: r.date, isoDate: r.isoDate })),
+    wt:      pastRows.filter(r => r.wt).map(r => ({ name: r.wt,         date: r.date, isoDate: r.isoDate })),
+    read:    pastRows.filter(r => r.read).map(r => ({ name: r.read,      date: r.date, isoDate: r.isoDate })),
   };
   const crowded = crowdedNames([...hist.speaker, ...hist.chair, ...hist.wt, ...hist.read], ref);
+  const everyAssignment = allHistory ?? [...hist.speaker, ...hist.chair, ...hist.wt, ...hist.read];
   const rank = (catKey, history) => {
     const req = CAT_REQS[catKey];
-    return demoteCrowded(rankCandidates(people, req.tag, req.g, history, ref), crowded);
+    return demoteCrowded(rankCandidates(people, req.tag, req.g, history, ref, everyAssignment), crowded);
   };
   return {
     speaker: pickOne(rank('publictalk',   hist.speaker), used),
@@ -219,7 +266,7 @@ export function suggestWeekendRow(people, pastRows, existing = {}, refDate = new
 //   gap + crowd demotion). cat is the EFFECTIVE cat (ministry talks under
 //   'ministrytalk'); type/role enable part-type rotation and are optional
 //   (old-shape entries still count toward overall fairness).
-export function suggestMidweekWeek(people, week, existingAssignments, pastHistory, refDate = new Date()) {
+export function suggestMidweekWeek(people, week, existingAssignments, pastHistory, refDate = new Date(), allHistory = pastHistory) {
   const ref = toRef(refDate);
   const refMs = ref.getTime();
   const wId = `mw${week.id}`;
@@ -235,9 +282,9 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
   // resurrect exactly the person the bidirectional gap just pushed down.
   const typeRoleLast = new Map();
   for (const h of pastHistory) {
-    (histByCat[h.cat] ??= []).push({ name: h.name, date: h.date });
+    (histByCat[h.cat] ??= []).push({ name: h.name, date: h.date, isoDate: h.isoDate });
     if (h.type && h.role != null) {
-      const d = parseDate(h.date, ref);
+      const d = historyDate(h, ref);
       if (!d || d.getTime() === refMs) continue;
       const k = `${h.name}|${h.type}|${h.role}`;
       const prev = typeRoleLast.get(k);
@@ -251,14 +298,14 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
   const pairSlots = new Map();
   for (const h of pastHistory) {
     if (!h.pairId || h.role == null || !h.name) continue;
-    const slot = pairSlots.get(h.pairId) ?? { date: h.date };
+    const slot = pairSlots.get(h.pairId) ?? { date: h.date, isoDate: h.isoDate };
     slot[String(h.role)] = h.name;
     pairSlots.set(h.pairId, slot);
   }
   const pairIndex = buildPairIndex(
     [...pairSlots.values()]
       .filter(s => s['0'] && s['1'])
-      .map(s => ({ a: s['0'], b: s['1'], date: parseDate(s.date, ref) }))
+      .map(s => ({ a: s['0'], b: s['1'], date: historyDate(s, ref) }))
       .filter(s => s.date)
   );
 
@@ -290,13 +337,23 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
     const hist = fam
       ? FAMILIES[fam].flatMap(c => histByCat[c] ?? [])
       : (histByCat[catKey] ?? []);
-    const ranked = demoteCrowded(rankCandidates(people, req.tag, req.g, hist, ref), effCrowded);
+    const ranked = demoteCrowded(rankCandidates(people, req.tag, req.g, hist, ref, allHistory), effCrowded);
     // `pairWith` = whoever holds the other half of this part. Anyone already
     // paired with them inside the window is demoted (see pickRotated).
     const pairedRecently = opts.pairWith
       ? partnersWithin(pairIndex, opts.pairWith, ref, PAIR_REPEAT_WINDOW_DAYS)
       : null;
-    const name = pickRotated(ranked, used, { ...opts, typeRoleLast, genderOf, crowded: effCrowded, pairedRecently });
+    const pairedCounts = opts.pairWith
+      ? partnerPairCounts(pairIndex, opts.pairWith, ref)
+      : null;
+    const name = pickRotated(ranked, used, {
+      ...opts,
+      typeRoleLast,
+      genderOf,
+      crowded: effCrowded,
+      pairedRecently,
+      pairedCounts,
+    });
     if (name) result[slotId] = name;
   };
 

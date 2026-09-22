@@ -7,9 +7,10 @@
 // 經文朗讀 on the whole 朗讀 family while this picker still ranked per-cat and
 // offered a brother who read at 研經班 six weeks ago as 從未擔任此項.
 import { CATS } from '../data/index.js';
-import { recentPairing } from './pairHistory.mjs';
+import { pairingSummary } from './pairHistory.mjs';
 import { familyCats } from './partTypes.mjs';
 import { pioneerBonus } from './appointments.mjs';
+import { ASSIGNMENT_INTERVAL_WEIGHT, assignmentIntervalInfo } from './assignmentPreferences.mjs';
 
 export function buildCandidates(people, catKey, jitter, spread, pastHistory, pair) {
   const c = CATS[catKey];
@@ -56,19 +57,41 @@ export function buildCandidates(people, catKey, jitter, spread, pastHistory, pai
       const busyNearby = !recent && !soon && anyGap !== null && anyGap < 7;
       if (recent || soon) w *= 0.1;
       else if (busyNearby) w *= 0.3;
-      // 學生／助手 variety: already paired with this slot's counterpart inside
-      // the window → knocked down the list, but still pickable.
+      // Personal cadence is global across assignment categories. It is a strong
+      // demotion, not an exclusion, so a small pool can still fill the slot.
+      const interval = assignmentIntervalInfo(p, anyGap);
+      if (interval) w *= ASSIGNMENT_INTERVAL_WEIGHT;
+      // 學生／助手 variety: every previous pairing is shown and counted. Fresh
+      // pairs rank first; among repeats, a lower historical count ranks higher.
       const paired = pair?.with
-        ? recentPairing(pair.index, p.name, pair.with, pair.ref)
+        ? pairingSummary(pair.index, p.name, pair.with, pair.ref)
         : null;
-      if (paired) w *= 0.25;
+      if (paired) w *= 1 / (1 + paired.count * 4);
+      if (paired?.recent) w *= 0.5;
       if (jitter) w *= 0.55 + Math.random() * 0.9;
       // Only worth showing when the family turn is the NEARER one and it was in
       // a different cat — otherwise the per-cat line above already says it.
       const viaFamily = famVia && famVia !== catKey && famGap != null && famGap < (d ?? 9999)
         ? { days: famGap, name: CATS[famVia]?.name ?? famVia }
         : null;
-      return { n: p.name, g: p.g, a: p.appt, d, u, w, recent, soon, busyNearby, load, paired, viaFamily };
+      return {
+        n: p.name,
+        g: p.g,
+        a: p.appt,
+        d,
+        u,
+        w,
+        recent,
+        soon,
+        busyNearby,
+        load,
+        paired,
+        viaFamily,
+        interval,
+        note: p.assignmentNote ?? '',
+      };
     })
-    .sort((a, b) => b.w - a.w);
+    .sort((a, b) => (
+      Number(Boolean(a.interval)) - Number(Boolean(b.interval)) || b.w - a.w
+    ));
 }

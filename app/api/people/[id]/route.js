@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 import { canEdit } from '../../../lib/roles.mjs';
+import { normalizeAssignmentIntervalMonths } from '../../../lib/assignmentPreferences.mjs';
 
 function personPayload(body) {
   const data = {};
@@ -12,6 +13,10 @@ function personPayload(body) {
   if ('quals' in body || 'tags' in body) data.tags = Array.isArray(body.quals) ? body.quals : (Array.isArray(body.tags) ? body.tags : []);
   if ('status' in body) data.status = body.status ?? 'active';
   if ('awayNote' in body) data.awayNote = body.awayNote || null;
+  if ('assignmentNote' in body) data.assignmentNote = String(body.assignmentNote ?? '').trim().slice(0, 500) || null;
+  if ('assignmentIntervalMonths' in body) {
+    data.assignmentIntervalMonths = normalizeAssignmentIntervalMonths(body.assignmentIntervalMonths);
+  }
   if ('lineUserId' in body) data.lineUserId = body.lineUserId?.trim() || null;
   return data;
 }
@@ -25,6 +30,8 @@ function mapPerson(person) {
     quals: person.tags ?? [],
     status: person.status,
     awayNote: person.awayNote ?? '',
+    assignmentNote: person.assignmentNote ?? '',
+    assignmentIntervalMonths: person.assignmentIntervalMonths ?? 0,
     lineUserId: person.lineUserId ?? '',
     recent: [],
   };

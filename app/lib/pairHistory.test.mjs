@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pairKey, buildPairIndex, recentPairing, partnersWithin,
+  pairKey, buildPairIndex, recentPairing, pairingSummary, partnerPairCounts, partnersWithin,
   collectMidweekPairs, counterpartName, PAIR_REPEAT_WINDOW_DAYS,
 } from './pairHistory.mjs';
 
@@ -46,6 +46,26 @@ test('partnersWithin lists only partners inside the window', () => {
     { a: '\u7532', b: '\u4e19', date: d(2024, 5, 2) }, // too long ago
   ]);
   assert.deepEqual([...partnersWithin(idx, '\u7532', REF)], ['\u4e59']);
+});
+
+test('pairingSummary warns about old pairings and reports the all-time count', () => {
+  const idx = buildPairIndex([
+    { a: '甲', b: '乙', date: d(2024, 1, 1) },
+    { a: '乙', b: '甲', date: d(2025, 1, 1) },
+  ]);
+  const summary = pairingSummary(idx, '甲', '乙', REF);
+  assert.equal(summary.count, 2);
+  assert.equal(summary.recent, false);
+  assert.equal(summary.future, false);
+});
+
+test('partnerPairCounts excludes the pairing on the date being edited', () => {
+  const idx = buildPairIndex([
+    { a: '甲', b: '乙', date: d(2026, 5, 2) },
+    { a: '甲', b: '乙', date: REF },
+    { a: '甲', b: '丙', date: d(2026, 5, 9) },
+  ]);
+  assert.deepEqual([...partnerPairCounts(idx, '甲', REF)], [['乙', 1], ['丙', 1]]);
 });
 
 // ── collection from the app's own state ──────────────────────────────────────

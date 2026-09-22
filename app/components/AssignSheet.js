@@ -105,7 +105,7 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
             <div className="cand-empty">查無符合的人選</div>
           ) : (
             filtered.map((c, i) => {
-              const rec = i === 0 && !query && !c.recent && !c.soon;
+              const rec = i === 0 && !query && !c.recent && !c.soon && !c.interval;
               const pct = Math.round((c.w / maxW) * 100);
               const isCur = currentName === c.n;
               const isUsed = !isCur && usedThisWeek.has(c.n);
@@ -162,18 +162,29 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
                           <span className="meta-warn">● 前後一週內另有安排</span>
                         </>
                       )}
+                      {c.interval && (
+                        <>
+                          <span className="meta-dot">·</span>
+                          <span className="meta-warn">
+                            ● 希望每 {c.interval.months} 個月一次，約還差 {c.interval.daysRemaining} 天
+                          </span>
+                        </>
+                      )}
                       {c.paired && (
                         <>
                           <span className="meta-dot">·</span>
                           <span className="meta-warn">
-                            ● {c.paired.future ? `${c.paired.days} 天後` : `${c.paired.days} 天前`}
-                            曾與 {pairWith} 搭檔
+                            ● 曾與 {pairWith} 搭檔 {c.paired.count} 次
+                            {c.paired.days != null
+                              ? `（最近一次：${c.paired.future ? `${c.paired.days} 天後` : `${c.paired.days} 天前`}）`
+                              : ''}
                           </span>
                         </>
                       )}
                       <span className="meta-dot">·</span>
                       <span>近半年 {c.load} 次</span>
                     </div>
+                    {c.note && <div className="cand__note">備註：{c.note}</div>}
                     <div className="cand__bar">
                       <i style={{ width: `${pct}%` }} />
                     </div>

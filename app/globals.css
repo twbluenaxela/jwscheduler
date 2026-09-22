@@ -836,6 +836,8 @@ html, body {
   background: var(--surface);
 }
 .field__input:focus { outline: 2px solid rgba(47,111,143,.18); border-color: var(--accent); }
+.field__textarea { resize: vertical; min-height: 76px; line-height: 1.55; }
+.field__hint { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); font-weight: 600; }
 .field__select {
   appearance: none;
   background-image:
@@ -923,6 +925,9 @@ html, body {
 .g-badge.g-m { background: #e4eef2; color: #2f6f8f; }
 .g-badge.g-f { background: #f3e9da; color: #9a7510; }
 .appt { font-size: 11.5px; font-weight: 700; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); padding: 2px 8px; border-radius: 6px; }
+.preference-tag { font-size: 11.5px; font-weight: 800; color: #8a6d12; background: #fff6e3; border: 1px solid #ecd9a6; padding: 2px 8px; border-radius: 6px; }
+.person__note { margin: -1px 0 7px; color: var(--ink-3); font-size: 12px; font-weight: 600; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.people-preference-note { background: #fff6e3; border: 1px solid #ecd9a6; color: #6f5815; border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 600; line-height: 1.55; white-space: pre-wrap; }
 .quals { display: flex; gap: 5px; flex-wrap: wrap; }
 .qual { font-size: 12px; font-weight: 600; color: var(--ink-2); border: 1px solid var(--line-2); padding: 2px 8px; border-radius: 999px; }
 .people-empty {
@@ -1170,6 +1175,7 @@ html, body {
 .cand__name { font-size: 15.5px; font-weight: 800; }
 .cur-tag { font-size: 11px; font-weight: 800; color: var(--ink-2); background: var(--line); padding: 1px 7px; border-radius: 5px; }
 .cand__meta { font-size: 12.5px; color: var(--ink-2); font-weight: 600; margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cand__note { margin-top: 6px; color: #6f5815; background: #fff6e3; border-radius: 7px; padding: 5px 8px; font-size: 12px; line-height: 1.45; font-weight: 650; }
 .meta-strong { color: #2f7a4d; font-weight: 800; }
 .meta-warn { color: var(--special); font-weight: 800; }
 .meta-dot { color: var(--ink-3); }

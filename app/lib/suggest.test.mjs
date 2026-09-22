@@ -93,6 +93,29 @@ test('crowd demotion never leaves a slot empty when everyone is busy', () => {
   assert.equal(res['mw1_chairman'], '甲', 'crowded is a demotion, not an exclusion');
 });
 
+test('personal assignment interval demotes a candidate based on any assignment category', () => {
+  const people = [
+    { ...brother('甲', ['傳道與生活主席']), assignmentIntervalMonths: 5 },
+    brother('乙', ['傳道與生活主席']),
+  ];
+  const categoryHistory = [
+    { name: '乙', cat: 'chairman', date: '6月 1日' },
+  ];
+  const allHistory = [
+    ...categoryHistory,
+    { name: '甲', cat: 'prayer', date: '4月 1日' },
+  ];
+  const res = suggestMidweekWeek(people, emptyWeek, {}, categoryHistory, REF, allHistory);
+  assert.equal(res['mw1_chairman'], '乙', '甲 is still inside the requested five-month interval');
+});
+
+test('personal assignment interval remains a preference when only one person qualifies', () => {
+  const people = [{ ...brother('甲', ['傳道與生活主席']), assignmentIntervalMonths: 5 }];
+  const history = [{ name: '甲', cat: 'prayer', date: '6月 1日' }];
+  const res = suggestMidweekWeek(people, emptyWeek, {}, history, REF, history);
+  assert.equal(res['mw1_chairman'], '甲');
+});
+
 test('monthly repeat demotion: a ministry student practice 12 days ago (outside the 7-day crowd window) still loses to someone free that month', () => {
   const sister = (name, quals) => ({ name, g: 'F', quals, status: 'active' });
   const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範'])];
@@ -376,7 +399,7 @@ test('pair variety is a demotion, not an exclusion', () => {
   assert.equal(res['mw21_m0_1'], '乙', '乙 is the only candidate left — the slot still fills');
 });
 
-test('a pairing older than the window no longer counts against the candidate', () => {
+test('an older pairing still counts when balancing all-time pair distribution', () => {
   const week = {
     id: 22, treasures: [], living: [],
     ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談 — 向住戶作見證' }],
@@ -391,7 +414,25 @@ test('a pairing older than the window no longer counts against the candidate', (
     { name: '丁', cat: 'ministry', date: '5月 2日', type: '初次交談', role: '1', pairId: 'w9_m1' },
   ];
   const res = suggestMidweekWeek(people, week, { 'mw22_m0_0': '甲' }, history, REF);
-  assert.equal(res['mw22_m0_1'], '乙', '乙 has the longer gap and the old pairing is out of window');
+  assert.equal(res['mw22_m0_1'], '丙', '甲+乙 already happened; the never-used 甲+丙 pair wins');
+});
+
+test('pair balancing chooses the least-used repeat when every candidate has paired before', () => {
+  const week = {
+    id: 23, treasures: [], living: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談' }],
+  };
+  const people = [sister('甲', ['傳道示範']), sister('乙', ['傳道示範']), sister('丙', ['傳道示範'])];
+  const history = [
+    { name: '甲', cat: 'ministry', date: '1月 1日', role: '0', pairId: 'a' },
+    { name: '乙', cat: 'ministry', date: '1月 1日', role: '1', pairId: 'a' },
+    { name: '甲', cat: 'ministry', date: '2月 1日', role: '0', pairId: 'b' },
+    { name: '乙', cat: 'ministry', date: '2月 1日', role: '1', pairId: 'b' },
+    { name: '甲', cat: 'ministry', date: '3月 1日', role: '0', pairId: 'c' },
+    { name: '丙', cat: 'ministry', date: '3月 1日', role: '1', pairId: 'c' },
+  ];
+  const res = suggestMidweekWeek(people, week, { 'mw23_m0_0': '甲' }, history, REF);
+  assert.equal(res['mw23_m0_1'], '丙', '甲+丙 occurred once, while 甲+乙 occurred twice');
 });
 
 // ── 朗讀 family (經文朗讀 + 研經班朗讀 share one fairness history) ────────────
