@@ -294,7 +294,7 @@ export default function App() {
   }, []);
 
   const saveMidweekWeek = useCallback(async (weekObj) => {
-    if (!weekObj?.id) return;
+    if (!weekObj?.id) return false;
     try {
       const token = await getToken();
       const allParts = [
@@ -302,7 +302,7 @@ export default function App() {
         ...(weekObj.ministry ?? []),
         ...(weekObj.living ?? []),
       ];
-      await fetch(`/api/midweek-weeks/${weekObj.id}`, {
+      const res = await fetch(`/api/midweek-weeks/${weekObj.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -323,10 +323,32 @@ export default function App() {
           parts: allParts.map((p) => ({ id: p.dbId, title: p.title, dur: p.dur, time: p.time, hideHelper: p.hideHelper ?? false, roleLabel: p.roleLabel ?? null })),
         }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '週中節目儲存失敗');
+      return true;
     } catch (err) {
       setToast({ msg: `儲存失敗：${err.message}` });
+      return false;
     }
   }, []);
+
+  const addMidweekPart = useCallback(async (weekObj, partDraft) => {
+    if (!weekObj?.id || !(await saveMidweekWeek(weekObj))) return null;
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/midweek-weeks/${weekObj.id}/parts`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(partDraft),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '新增節目失敗');
+      return data;
+    } catch (err) {
+      setToast({ msg: `新增節目失敗：${err.message}` });
+      return null;
+    }
+  }, [saveMidweekWeek]);
 
   const deleteMidweekWeek = useCallback(async (weekId) => {
     const idx = midweekWeeks.findIndex((w) => w.id === weekId);
@@ -602,7 +624,7 @@ export default function App() {
     onClear: useCallback((slotId) => setSuggestions(prev => { const n = { ...prev }; delete n[slotId]; return n; }), []),
   };
 
-  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, deleteMidweekWeek, clearSlot, ...ghostProps };
+  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, addMidweekPart, deleteMidweekWeek, clearSlot, ...ghostProps };
   const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField, fetchWeekendSuggestions };
 
   const scheduleStats = (() => {
