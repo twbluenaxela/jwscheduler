@@ -7,6 +7,7 @@ import {
   captureBox,
   downloadWeekXlsx,
   jpegImagesToPdfBlob,
+  jpegImagesToA4PdfBlob,
   jpegDataUrlToImage,
   triggerDownload,
   buildWeekText,
@@ -130,7 +131,7 @@ function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, me
         const { toJpeg } = await import('html-to-image');
         const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
         const image = await jpegDataUrlToImage(dataUrl);
-        const blob = jpegImagesToPdfBlob([image]);
+        const blob = jpegImagesToA4PdfBlob([image]);
         triggerDownload(blob, getMidweekExportFilename(week, 'pdf'));
       }
     } catch (error) {

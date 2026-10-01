@@ -106,6 +106,7 @@ model Part {
   section   String
   partNum   Int
   title     String
+  scenario  String      @default("")
   dur       String
   cat       String
   roleLabel   String?

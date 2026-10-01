@@ -6,18 +6,23 @@ import { resolveSequenceYears, toIsoDate } from './cnDate.mjs';
 function extractItems(doc) {
   const items = [];
 
+  const textContent = (el) => String(el.textContent ?? '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[\s　]+/g, ' ')
+    .trim();
+
   function walk(el) {
     const tag = el.tagName?.toUpperCase() ?? '';
     if (tag === 'ASIDE' || tag === 'FOOTER') return;
 
     if (tag === 'H1' || tag === 'H2' || tag === 'H3') {
-      const text = el.textContent.replace(/[​　\s]+/g, ' ').trim();
+      const text = textContent(el);
       if (text) items.push({ tag, text, cls: el.getAttribute('class') ?? '' });
       return; // don't recurse into headings
     }
 
     if (tag === 'P') {
-      const text = el.textContent.replace(/\s+/g, ' ').trim();
+      const text = textContent(el);
       if (text.match(/[（(]\d+分鐘[）)]/)) {
         items.push({ tag: 'DUR', text, cls: el.getAttribute('class') ?? '' });
       }
@@ -45,8 +50,6 @@ function catFromTitle(title) {
   return null; // caller determines from section
 }
 
-const MINISTRY_SHORT = ['初次交談', '再次交談', '教導人成為門徒', '解釋自己的信仰'];
-
 // Pair-vs-single for a ministry part. The description line (durText) is the
 // most reliable signal — the title alone can't always tell (e.g. 解釋自己的信仰
 // can be either a 示範 or a 演講). Rules, in priority order:
@@ -63,14 +66,10 @@ export function ministryRoleLabel(title, durText) {
   return '學生/助手';
 }
 
-function buildTitle(partTitle, durText, section) {
-  if (section !== 'ministry') return partTitle;
-  const isShort = MINISTRY_SHORT.some(n => partTitle === n);
-  if (!isShort) return partTitle;
-  // Extract description: text after duration, before first 。or （
-  const afterDur = durText.replace(/^[（(]\d+分鐘[）)]\s*/, '');
-  const desc = afterDur.split(/[。（(]/)[0].trim();
-  return desc && desc.length <= 15 ? `${partTitle} — ${desc}` : partTitle;
+function ministryScenario(durText) {
+  return String(durText ?? '')
+    .replace(/^[（(]\d+分鐘[）)]\s*/, '')
+    .trim();
 }
 
 // ── Week builder from flat items ─────────────────────────────────────────────
@@ -133,9 +132,15 @@ function buildWeekFromItems(items) {
       const durM = text.match(/[（(](\d+)分鐘[）)]/);
       if (durM) {
         const dur = parseInt(durM[1]);
-        const title = buildTitle(pendingPart.title, text, pendingPart.section);
+        const title = pendingPart.title;
 
-        const base = { partNum: pendingPart.partNum, title, dur, durMins: dur };
+        const base = {
+          partNum: pendingPart.partNum,
+          title,
+          dur,
+          durMins: dur,
+          ...(pendingPart.section === 'ministry' ? { scenario: ministryScenario(text) } : {}),
+        };
 
         if (pendingPart.section === 'treasures') {
           const c = catFromTitle(title) ?? 'treasures';
@@ -188,6 +193,7 @@ function assignTimes(parsed) {
     return {
       id: `m${i}`, time, partNum: p.partNum, title: p.title,
       dur: `${p.dur} 分鐘`, cat: 'ministry', roleLabel: p.roleLabel,
+      ...(p.scenario ? { scenario: p.scenario } : {}),
       assign: Array(p.roleLabel ? p.roleLabel.split('/').length : 1).fill(''),
     };
   });

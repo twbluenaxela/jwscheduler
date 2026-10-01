@@ -179,6 +179,11 @@ function updateWeekSection(weekId, sectionName, partId, updateMidweekWeek, patch
   }));
 }
 
+function partContext(ctx, part, includeScenario) {
+  const heading = `${ctx} · ${part.title}（${part.dur}）`;
+  return includeScenario && part.scenario ? `${heading}　·　情境：${part.scenario}` : heading;
+}
+
 function PartRow({
   weekId,
   ctx,
@@ -223,7 +228,7 @@ function PartRow({
         <span className={`dot ${sectionName === 'ministry' ? 'dot--ministry' : sectionName === 'living' ? 'dot--living' : 'dot--treasures'}`} />
         <span className="partnum">{shownPart.partNum}</span>
       </span>
-      <span className="row__part">
+      <div className="row__part">
         {editMode ? (
           <span className="row__part-edit">
             <input
@@ -253,18 +258,21 @@ function PartRow({
           </span>
         ) : (
           <>
-            {shownPart.title} <span className="dur">（{shownPart.dur}）</span>
-            {shownPart.cbsRef && <span className="cbs-ref">{shownPart.cbsRef}</span>}
+            <div className="row__part-main">
+              {shownPart.title} <span className="dur">（{shownPart.dur}）</span>
+              {shownPart.cbsRef && <span className="cbs-ref">{shownPart.cbsRef}</span>}
+            </div>
           </>
         )}
-      </span>
+        {sectionName === 'ministry' && shownPart.scenario && <div className="row__scenario">{shownPart.scenario}</div>}
+      </div>
       <span className="row__assign">
         {shownPart.roleLabel && <span className="role-label">{shownPart.roleLabel}</span>}
         {isPair ? (
           <PairSlot
             baseId={`${weekId}_${part.id}`}
             catKeys={[slotCat(shownPart, '0'), slotCat(shownPart, '1')]}
-            ctxLabel={`${ctx} · ${shownPart.title}`}
+            ctxLabel={partContext(ctx, shownPart, sectionName === 'ministry')}
             defaultNames={shownPart.assign}
             roleLabels={roleLabels}
             getAssign={getAssign}
@@ -277,7 +285,7 @@ function PartRow({
           <WhoSlot
             slotId={`${weekId}_${part.id}_0`}
             catKey={slotCat(shownPart, '0')}
-            ctxLabel={`${ctx} · ${shownPart.title}`}
+            ctxLabel={partContext(ctx, shownPart, sectionName === 'ministry')}
             defaultName={shownPart.assign[0] ?? ''}
             getAssign={getAssign}
             openSheet={openSheet}

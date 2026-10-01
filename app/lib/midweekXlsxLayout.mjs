@@ -105,6 +105,8 @@ export const A4_PRINTABLE_PT = A4_HEIGHT_PT - 2 * PAGE_MARGIN_IN * 72; // ≈791
 // title in the October shape. Reserving more was tried and reverted: it buys no
 // safety and costs print scale, because a taller sheet is simply shrunk more.
 export const TITLE_COL_UNITS = 34;
+// Scenario rows span all five schedule columns (6 + 3 + 36 + 9 + 18).
+export const SCENARIO_COL_UNITS = 72;
 
 // The vertical box one line of text needs, as a multiple of its point size.
 // 1.2–1.4 is typical for Latin faces; CJK fallbacks run taller, so reserve 1.5.
@@ -148,6 +150,11 @@ export function titleLineCount(title) {
   return Math.ceil(units / TITLE_COL_UNITS);
 }
 
+export function scenarioRowHeight(scenario) {
+  const lines = Math.max(1, Math.ceil(textUnits(scenario) / SCENARIO_COL_UNITS));
+  return Math.min(MAX_ROW_PT, WRAP_LINE_PT * lines + WRAP_PAD_PT);
+}
+
 export function partTitleText(part) {
   let title = `${part?.title ?? ''}（${part?.dur ?? ''}）`;
   if (part?.cbsRef) title += ` ${part.cbsRef}`;
@@ -160,6 +167,24 @@ export function partTitleText(part) {
 export function partRowHeight(part) {
   const lines = titleLineCount(partTitleText(part));
   return lines <= 1 ? ROW_HT.part : WRAP_LINE_PT * lines + WRAP_PAD_PT;
+}
+
+function splitByUnits(value, maxUnits) {
+  const chunks = [];
+  let chunk = '';
+  let units = 0;
+  for (const ch of String(value ?? '')) {
+    const next = textUnits(ch);
+    if (chunk && units + next > maxUnits) {
+      chunks.push(chunk);
+      chunk = '';
+      units = 0;
+    }
+    chunk += ch;
+    units += next;
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
 }
 
 export function sumHeights(rows) {
@@ -317,7 +342,7 @@ export const S = {
   bandT: 8, bandM: 9, bandL: 10, head: 11, headPad: 12,
   numT: 13, numM: 14, numL: 15,
   songTime: 16, songNum: 17, songItem: 18, songRole: 19, songName: 20,
-  notice: 21,
+  notice: 21, scenario: 22,
 };
 
 /* ===================== Row building ===================== */
@@ -403,6 +428,20 @@ export function weekRows(week, getAssign, { isSuspended = () => false } = {}) {
       ],
     };
   };
+  const partScenarioRows = (scenario) => {
+    if (!scenario) return [];
+    const maxLines = Math.floor((MAX_ROW_PT - WRAP_PAD_PT) / WRAP_LINE_PT);
+    const chunks = splitByUnits(scenario, SCENARIO_COL_UNITS * maxLines);
+    return chunks.map((text) => ({
+      ht: scenarioRowHeight(text),
+      merge: true,
+      cells: [
+        { v: text, s: S.scenario },
+        { v: '', s: S.scenario }, { v: '', s: S.scenario },
+        { v: '', s: S.scenario }, { v: '', s: S.scenario },
+      ],
+    }));
+  };
 
   return [
     headRow(headRuns),
@@ -412,7 +451,7 @@ export function weekRows(week, getAssign, { isSuspended = () => false } = {}) {
     band('上帝話語的寶藏', S.bandT),
     ...(week.treasures ?? []).map((p) => partRow(p, S.numT)),
     band('用心準備傳道工作', S.bandM),
-    ...(week.ministry ?? []).map((p) => partRow(p, S.numM)),
+    ...(week.ministry ?? []).flatMap((p) => [partRow(p, S.numM), ...partScenarioRows(p.scenario)]),
     band('基督徒的生活', S.bandL),
     itemRow(week.midSongTime, `唱詩 ${week.midSong ?? ''} 首`, '', '', true),
     ...(week.living ?? []).map((p) => partRow(p, S.numL)),
@@ -531,6 +570,7 @@ export function buildMidweekStylesXml() {
     font(10, XLC.ink3, false, true), // 9 role labels (italic)
     font(11, XLC.ink, false),        // 10 body (part titles)
     font(11, XLC.special, true),     // 11 「本週聚會暫停」 notice
+    font(10, XLC.ink2, false),       // 12 ministry scenario text
   ];
   const fills = [
     '<fill><patternFill patternType="none"/></fill>',
@@ -569,6 +609,7 @@ export function buildMidweekStylesXml() {
     xf(9, 6, 1, 'right'),         // 19 song-row role
     xf(1, 6, 1, 'left'),          // 20 song-row name
     xf(11, 7, 1, 'center'),       // 21 cancelled-week notice
+    xf(12, 0, 1, 'left', true),   // 22 ministry scenario (merged, wrapped)
   ];
 
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

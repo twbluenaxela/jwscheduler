@@ -320,7 +320,7 @@ export default function App() {
           closeSongTime: weekObj.closeSongTime,
           type: weekObj.type ?? 'normal',
           label: weekObj.label ?? '',
-          parts: allParts.map((p) => ({ id: p.dbId, title: p.title, dur: p.dur, time: p.time, hideHelper: p.hideHelper ?? false, roleLabel: p.roleLabel ?? null })),
+          parts: allParts.map((p) => ({ id: p.dbId, title: p.title, scenario: p.scenario ?? '', dur: p.dur, time: p.time, hideHelper: p.hideHelper ?? false, roleLabel: p.roleLabel ?? null })),
         }),
       });
       const data = await res.json();

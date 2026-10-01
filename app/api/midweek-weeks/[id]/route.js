@@ -55,6 +55,7 @@ export async function PATCH(request, context) {
           where: { id: Number(p.id) },
           data: {
             ...(p.title      !== undefined ? { title:      p.title      } : {}),
+            ...(p.scenario   !== undefined ? { scenario:   p.scenario   } : {}),
             ...(p.dur        !== undefined ? { dur:        p.dur        } : {}),
             ...(p.time       !== undefined ? { time:       p.time       } : {}),
             ...(p.hideHelper !== undefined ? { hideHelper: !!p.hideHelper } : {}),

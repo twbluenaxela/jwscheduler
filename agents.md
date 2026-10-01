@@ -136,6 +136,7 @@ The `midweekWeeks` array shape is defined by the seed data in `app/data/index.js
 **Current optional fields** (absent on seed data, present on EPUB-parsed weeks):
 - `dateLabel` — full week range string from the EPUB `<h1>`, e.g. `"9月7-13日"`. Used by `WeekPicker` to show the range.
 - `cbsRef` — book+chapter string from the CBS DUR line. Rendered inline on the CBS row in `MidweekWeek.js`.
+- `scenario` — the complete text after the duration in a 用心準備傳道工作 part, including the exercise setting, instructions, and publication lesson reference. Shown on the part row and in the assignment sheet context; kept separate from `title` so role/category history stays stable.
 
 ### Weekend slot IDs
 

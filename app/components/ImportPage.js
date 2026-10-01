@@ -74,10 +74,11 @@ function WeekReviewCard({ week, idx }) {
                 {parts.map((p, i) => (
                   <div key={i} className="rvc__part">
                     <span className="rvc__part-num">{p.partNum}.</span>
-                    <span className="rvc__part-title">{p.title}</span>
+                    <span className="rvc__part-title">{p.title}（{p.dur}）</span>
                     <span className="rvc__part-meta">
-                      {CAT_LABELS[p.cat] ?? p.cat} · {p.dur}
+                      {CAT_LABELS[p.cat] ?? p.cat}
                     </span>
+                    {sec === 'ministry' && p.scenario && <span className="rvc__part-scenario">{p.scenario}</span>}
                   </div>
                 ))}
               </div>

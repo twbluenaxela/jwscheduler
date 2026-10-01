@@ -90,6 +90,25 @@ export function jpegImagesToPdfBlob(images) {
   return new Blob([writePdf(singleImagePages(images))], { type: 'application/pdf' });
 }
 
+// Fixed A4 pages for midweek cards. The card image is contain-fitted inside a
+// printable margin, so importing longer EPUB scenarios never creates a taller
+// PDF page or clips the end of a week.
+export function jpegImagesToA4PdfBlob(images) {
+  const innerW = A4_PT.w - 2 * MARGIN;
+  const innerH = A4_PT.h - 2 * MARGIN;
+  const pages = (images ?? []).map((img) => {
+    const scale = Math.min(innerW / img.width, innerH / img.height);
+    const w = img.width * scale;
+    const h = img.height * scale;
+    return {
+      w: A4_PT.w,
+      h: A4_PT.h,
+      images: [{ img, x: (A4_PT.w - w) / 2, y: (A4_PT.h - h) / 2, w, h }],
+    };
+  });
+  return new Blob([writePdf(pages, [1, 1, 1])], { type: 'application/pdf' });
+}
+
 /* ===================== Plain-text export ===================== */
 
 // Plain-text version of a week's schedule, suitable for pasting into a LINE group.
@@ -116,7 +135,10 @@ export function buildWeekText(week, getAssign) {
       const names = part.assign
         .map((_, i) => get(`${wId}_${part.id}_${i}`, part.assign[i] ?? ''))
         .filter(Boolean);
-      lines.push(`${part.partNum}. ${part.title}：${names.length ? names.join(' / ') : '—'}`);
+      const hasScenario = part.cat === 'ministry' && part.scenario;
+      const duration = hasScenario ? `（${part.dur}）` : '';
+      const scenario = hasScenario ? `\n   情境：${part.scenario}` : '';
+      lines.push(`${part.partNum}. ${part.title}${duration}：${names.length ? names.join(' / ') : '—'}${scenario}`);
     });
     lines.push('');
   };
@@ -167,7 +189,7 @@ export async function exportNodesPdf(nodes, weeks) {
     // eslint-disable-next-line no-await-in-loop
     images.push(await jpegDataUrlToImage(await nodeToJpegDataUrl(node)));
   }
-  const blob = jpegImagesToPdfBlob(images);
+  const blob = jpegImagesToA4PdfBlob(images);
   triggerDownload(blob, getMultiWeekExportFilename(weeks, 'pdf'));
 }
 
@@ -212,15 +234,18 @@ export async function openNodesPrintWindow(nodes) {
     // eslint-disable-next-line no-await-in-loop
     urls.push(await nodeToJpegDataUrl(node));
   }
-  const imgs = urls.map((u) => `<img src="${u}" />`).join('');
+  const imgs = urls.map((u) => `<section class="page"><img src="${u}" /></section>`).join('');
   const popup = window.open('', '_blank', 'noopener,noreferrer,width=1000,height=900');
   if (!popup) throw new Error('瀏覽器阻擋了列印視窗。');
   popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>週中</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
+      @page { size: A4 portrait; margin: 0; }
       body { background: #ecebe7; }
-      img { display: block; width: 100%; height: auto; page-break-after: always; }
-      @media print { body { background: #fff; } }
+      .page { width: 210mm; height: 297mm; padding: 8mm; display: flex; align-items: center; justify-content: center; overflow: hidden; break-after: page; page-break-after: always; background: #fff; }
+      .page:last-child { break-after: auto; page-break-after: auto; }
+      img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+      @media screen { .page { margin: 12px auto; box-shadow: 0 2px 12px #0002; } }
     </style></head><body>${imgs}
     <script>window.addEventListener('load', () => setTimeout(() => window.print(), 250));<\/script>
     </body></html>`);

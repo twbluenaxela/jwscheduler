@@ -18,6 +18,7 @@ function mapPart(part, weekId, assignmentMap) {
     time: part.time ?? '',
     partNum: part.partNum,
     title: part.title,
+    scenario: part.scenario ?? '',
     dur: part.dur,
     cat: part.cat,
     roleLabel: part.roleLabel ?? undefined,

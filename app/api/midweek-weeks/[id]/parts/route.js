@@ -165,6 +165,7 @@ export async function POST(request, context) {
           time: created.time ?? '',
           partNum: created.partNum,
           title: created.title,
+          scenario: created.scenario ?? '',
           dur: created.dur,
           cat: created.cat,
           roleLabel: created.roleLabel ?? undefined,
