@@ -238,6 +238,8 @@ npm run dev
 | `NEXT_PUBLIC_FIREBASE_*` | Firebase 用戶端 SDK 設定（透過 `fly.toml [build.args]` 在建置時寫入） |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API Channel Access Token |
 | `LINE_CHANNEL_SECRET` | LINE Channel Secret（用於 webhook 簽章驗證） |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth Web client ID（建置時寫入，放 `fly.toml [build.args]`）—— 啟用 Google Drive 自動同步 |
+| `NEXT_PUBLIC_GOOGLE_DRIVE_FOLDER_ID` | Google Drive 目標資料夾 ID（建置時寫入，預設為每月課表資料夾） |
 
 ### 一次性資料匯入腳本
 

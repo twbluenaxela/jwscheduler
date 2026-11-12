@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth, getToken } from '../lib/auth-context';
+import { syncWeeksToDrive } from '../lib/driveSync';
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase-client';
 
@@ -11,7 +12,7 @@ function addException(list, defaults) {
   return [...list, { id: Date.now(), fromMonth: 1, fromDay: 1, toMonth: 12, toDay: 31, dayOffset: defaults.dayOffset, time: defaults.time }];
 }
 
-export default function SettingsPage({ congSettings, setCongSettings, onReapplySchedule, existingWeeks = [] }) {
+export default function SettingsPage({ congSettings, setCongSettings, onReapplySchedule, existingWeeks = [], getAssign }) {
   const { dbUser, setDbUser } = useAuth();
   const [cong, setCong] = useState(null);
   const [members, setMembers] = useState([]);
@@ -22,6 +23,9 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
   const [displayNameEdit, setDisplayNameEdit] = useState(dbUser?.displayName ?? '');
   const [nameSaving, setNameSaving] = useState(false);
   const [nameStatus, setNameStatus] = useState(''); // '' | 'ok' | 'err'
+
+  const [driveSyncing, setDriveSyncing] = useState(false);
+  const [driveResult, setDriveResult] = useState(null); // { ok, msg, results }
 
   const isAdmin = dbUser?.role === 'ADMIN' || dbUser?.role === 'SYSADMIN';
 
@@ -96,6 +100,25 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
       setNameStatus('err');
     } finally {
       setNameSaving(false);
+    }
+  }
+
+  async function syncDrive() {
+    setDriveSyncing(true);
+    setDriveResult(null);
+    try {
+      const results = await syncWeeksToDrive(existingWeeks, getAssign);
+      const created = results.filter((r) => r.action === 'created').length;
+      const updated = results.filter((r) => r.action === 'updated').length;
+      setDriveResult({
+        ok: true,
+        msg: `已同步 ${results.length} 個月（新增 ${created}、更新 ${updated}）`,
+        results,
+      });
+    } catch (err) {
+      setDriveResult({ ok: false, msg: err?.message || '同步失敗', results: [] });
+    } finally {
+      setDriveSyncing(false);
     }
   }
 
@@ -287,6 +310,37 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
             {saveStatus === 'err' && <span className="settings-save-err">儲存失敗，請重試</span>}
           </div>
         </div>
+      </div>
+
+      {/* ── Google Drive sync ── */}
+      <h3 className="settings-h" style={{ marginTop: 20 }}>Google Drive 同步</h3>
+      <div className="settings-card">
+        <p className="settings-hint" style={{ marginTop: 0 }}>
+          將每月課表自動上傳至 Google Drive 資料夾（每月一個 XLSX，重複執行不會產生重複檔案）。
+          登入時會自動同步；也可手動觸發。
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+          <button className="btn btn--primary" onClick={syncDrive} disabled={driveSyncing || !existingWeeks?.length}>
+            {driveSyncing ? '同步中…' : '立即同步'}
+          </button>
+          {driveResult && (
+            <span className={driveResult.ok ? 'settings-save-ok' : 'settings-save-err'}>
+              {driveResult.ok ? '✓ ' : ''}{driveResult.msg}
+            </span>
+          )}
+        </div>
+        {driveResult?.results?.length > 0 && (
+          <ul style={{ marginTop: 10, fontSize: 13, color: 'var(--text-2)', paddingLeft: 18 }}>
+            {driveResult.results.map((r) => (
+              <li key={r.id}>{r.name} — {r.action === 'created' ? '已新增' : '已更新'}</li>
+            ))}
+          </ul>
+        )}
+        {!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
+          <p className="settings-hint" style={{ marginTop: 8, color: 'var(--danger, #c00)' }}>
+            尚未設定 NEXT_PUBLIC_GOOGLE_CLIENT_ID，同步功能停用。
+          </p>
+        )}
       </div>
 
       {/* ── Members ── */}
