@@ -312,7 +312,8 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
         </div>
       </div>
 
-      {/* ── Google Drive sync ── */}
+      {/* ── Google Drive sync (sysadmin only) ── */}
+      {dbUser?.role === 'SYSADMIN' && (<>
       <h3 className="settings-h" style={{ marginTop: 20 }}>Google Drive 同步</h3>
       <div className="settings-card">
         <p className="settings-hint" style={{ marginTop: 0 }}>
@@ -342,6 +343,8 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
           </p>
         )}
       </div>
+
+      </>)}
 
       {/* ── Members ── */}
       <h3 className="settings-h" style={{ marginTop: 28 }}>成員列表</h3>

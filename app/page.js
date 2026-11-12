@@ -293,7 +293,9 @@ export default function App() {
   const driveSyncedRef = useRef(false);
   useEffect(() => {
     if (driveSyncedRef.current) return;
-    if (!canEdit) return;
+    // Only the sysadmin's login triggers the Drive sync — other admins don't
+    // need to (and shouldn't have to) grant Google Drive access.
+    if (!isSysadmin) return;
     if (!midweekWeeks || midweekWeeks.length === 0) return;
     if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) return;
     driveSyncedRef.current = true;
