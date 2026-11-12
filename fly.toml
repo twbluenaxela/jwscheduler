@@ -7,7 +7,7 @@ app = 'jwscheduler'
 primary_region = 'ams'
 
 [build.args]
-  NEXT_PUBLIC_GOOGLE_CLIENT_ID = ""
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID = "538040624770-4me5ubh8iotqev1t45la3fk3ir51d97h.apps.googleusercontent.com"
   NEXT_PUBLIC_GOOGLE_DRIVE_FOLDER_ID = "1jTRCmngzNiQj6QQaHqEMgcr0mN0KAEmo"
   NEXT_PUBLIC_FIREBASE_API_KEY = "AIzaSyBsIcvaW8K_iP8wxENPaTWoMgEDI5DQ_3Q"
   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = "jwschedulertw.firebaseapp.com"
