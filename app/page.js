@@ -16,6 +16,7 @@ import { midweekWeeks as seedWeeks, weekendData as seedWeekendData } from './dat
 import { buildPastHistory, slotRefDate } from './lib/pastHistory.mjs';
 import { parseIsoDate, toIsoDate, resolveRowDate } from './lib/cnDate.mjs';
 import { buildPairIndex, collectMidweekPairs, counterpartName } from './lib/pairHistory.mjs';
+import { syncWeeksToDrive } from './lib/driveSync';
 
 const DAY_NAMES = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
 
@@ -286,6 +287,31 @@ export default function App() {
   const getAssign = useCallback((slotId, defaultName) => {
     return slotId in assignments ? assignments[slotId] : (defaultName ?? '');
   }, [assignments]);
+
+  // One-shot auto-sync to Google Drive when an admin logs in and the workspace
+  // has loaded. Guarded so it never runs twice per session and never for viewers.
+  const driveSyncedRef = useRef(false);
+  useEffect(() => {
+    if (driveSyncedRef.current) return;
+    if (!canEdit) return;
+    if (!midweekWeeks || midweekWeeks.length === 0) return;
+    if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) return;
+    driveSyncedRef.current = true;
+    (async () => {
+      try {
+        const results = await syncWeeksToDrive(midweekWeeks, getAssign);
+        const created = results.filter((r) => r.action === 'created').length;
+        const updated = results.filter((r) => r.action === 'updated').length;
+        setToast({
+          msg: `Google Drive 已同步 ${results.length} 個月課表（新增 ${created}、更新 ${updated}）`,
+        });
+      } catch (err) {
+        driveSyncedRef.current = false; // allow retry on next login
+        console.warn('[drive-sync]', err?.message);
+        setToast({ msg: `Google Drive 同步失敗：${err?.message || '未知錯誤'}` });
+      }
+    })();
+  }, [canEdit, midweekWeeks, getAssign]);
 
   const updateMidweekWeek = useCallback((weekId, updater) => {
     setMidweekWeeks((prev) => prev.map((week) => (
@@ -731,6 +757,7 @@ export default function App() {
               congSettings={congSettings}
               setCongSettings={setCongSettings}
               existingWeeks={midweekWeeks}
+              getAssign={getAssign}
               onReapplySchedule={() => {
                 setMidweekWeeks(prev => prev.map(w => {
                   if (!w.weekStart) return w;
