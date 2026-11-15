@@ -15,6 +15,36 @@ function addException(list, defaults) {
 export default function SettingsPage({ congSettings, setCongSettings, onReapplySchedule, existingWeeks = [], getAssign }) {
   const { dbUser, setDbUser } = useAuth();
   const [cong, setCong] = useState(null);
+  const [mcpTokens, setMcpTokens] = useState([]);
+  const [mcpName, setMcpName] = useState('我的 Claude');
+  const [mcpUrl, setMcpUrl] = useState('');
+  const [mcpError, setMcpError] = useState('');
+  const canUseMcp = dbUser?.role === 'SYSADMIN' || dbUser?.canLiterature;
+  async function mcpRequest(path, options = {}) {
+    const token = await getToken();
+    const res = await fetch(path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '操作失敗');
+    return data;
+  }
+  async function loadMcpTokens() {
+    try { setMcpTokens((await mcpRequest('/api/mcp-tokens')).tokens); }
+    catch (error) { setMcpError(error.message); }
+  }
+  useEffect(() => { if (canUseMcp) loadMcpTokens(); }, [canUseMcp]);
+  async function createMcpToken() {
+    try {
+      const data = await mcpRequest('/api/mcp-tokens', { method: 'POST', body: JSON.stringify({ name: mcpName }) });
+      setMcpUrl(data.url);
+      setMcpError('');
+      await loadMcpTokens();
+    } catch (error) { setMcpError(error.message); }
+  }
+  async function revokeMcpToken(id) {
+    if (!window.confirm('確定撤銷這個連結？')) return;
+    try { await mcpRequest(`/api/mcp-tokens/${id}`, { method: 'DELETE' }); await loadMcpTokens(); }
+    catch (error) { setMcpError(error.message); }
+  }
   const [members, setMembers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'ok' | 'err'
@@ -387,6 +417,28 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
         ))}
       </div>
       </>)}
+      {canUseMcp && <div className="settings-mcp">
+        <h3 className="settings-h">Claude 連線（MCP）</h3>
+        <p>用 Claude 語音或文字管理書刊。把連結加到 Claude 的「自訂連接器」。</p>
+        {mcpTokens.map((item) => <div className="settings-mcp__row" key={item.id}>
+          <span>{item.name} · {item.prefix}… · 建立 {new Date(item.createdAt).toLocaleDateString('zh-TW')}
+            {' · '}最後使用 {item.lastUsedAt ? new Date(item.lastUsedAt).toLocaleString('zh-TW') : '尚未使用'}
+            {item.revokedAt && ' · 已撤銷'}</span>
+          {!item.revokedAt && <button type="button" onClick={() => revokeMcpToken(item.id)}>撤銷</button>}
+        </div>)}
+        <div className="settings-mcp__row">
+          <input aria-label="連結名稱" value={mcpName} onChange={(event) => setMcpName(event.target.value)} />
+          <button type="button" onClick={createMcpToken}>建立連結</button>
+        </div>
+        {mcpUrl && <div>
+          <p>這個連結等同密碼，只會顯示一次，請勿分享</p>
+          <div className="settings-mcp__row">
+            <input aria-label="Claude 連結" readOnly value={mcpUrl} />
+            <button type="button" onClick={() => navigator.clipboard.writeText(mcpUrl)}>複製</button>
+          </div>
+        </div>}
+        {mcpError && <p role="alert">{mcpError}</p>}
+      </div>}
     </section>
   );
 }

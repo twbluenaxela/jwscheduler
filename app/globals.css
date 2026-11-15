@@ -1873,3 +1873,7 @@ body.editing .week-edit__input { background: #fff; }
   body:has(.lit-print-area) .lit-print-area { position: absolute; inset: 0; width: 100%; background: white; color: black; }
   body:has(.lit-print-area) .lit-report-actions { display: none; }
 }
+
+.settings-mcp { margin-top: 28px; padding: 18px; border: 1px solid var(--border); border-radius: 12px; }
+.settings-mcp__row { display: flex; align-items: center; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+.settings-mcp__row input { flex: 1; min-width: 180px; }

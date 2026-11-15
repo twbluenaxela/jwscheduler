@@ -274,3 +274,13 @@ npm test
 測試使用 Node 內建的 `--test` 執行器（無額外依賴）。所有測試檔案為 `.mjs`，與對應模組放在同一目錄。測試不會連接資料庫——路由邏輯透過依賴注入搭配記憶體內假資料庫進行測試。
 
 完整開發者文件——槽位 ID 規範、Prisma Schema、多租戶審計、驗證注意事項、CSS 設計代號及禁止事項——請參閱 [`CLAUDE.md`](./CLAUDE.md)。
+
+## 書刊 MCP 伺服器
+
+在「設定」的「Claude 連線（MCP）」建立連結，複製一次顯示的網址並妥善保管。在 claude.ai 選擇「設定 → 連接器 → 新增自訂連接器」，貼上網址；也可以在 Claude 手機 app 用語音或文字管理書刊。連結可在設定中撤銷。
+
+Claude Code：`claude mcp add --transport http jw-literature <url>`
+
+例如：「王秀蘭姊妹要一本聖經導讀」、「11 月的裝箱單誰還沒拿」、「把 lff 的現有改成 9」。
+
+可用工具：`search_publications`、`find_people`、`get_person_literature`、`add_request`、`set_subscription`、`update_request`、`list_open_requests`、`subscription_totals`、`list_shipments`、`get_shipment_sorting`、`mark_delivered`、`get_inventory`、`set_on_hand`、`start_inventory_count`、`order_checklist`。

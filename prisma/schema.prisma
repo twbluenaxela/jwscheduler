@@ -47,6 +47,7 @@ model User {
   congregation   Congregation? @relation(fields: [congregationId], references: [id])
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  mcpTokens      McpToken[]
 }
 
 // ── Congregation members ──────────────────────────────────────────────────────
@@ -333,4 +334,16 @@ model InventoryLine {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([countId, publicationId])
+}
+
+model McpToken {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name String
+  tokenHash String @unique
+  prefix String
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
+  revokedAt DateTime?
 }
