@@ -230,7 +230,8 @@ export default function CountSheet({ id, items, request, onBack }) {
         <article className="lit-inventory-row" key={line.id}>
           <PubThumb publication={line.publication} />
           <div className="lit-inventory-meta">
-            <span>原有 {line.opening} · 收 {line.received}</span>
+            <strong>{line.publication.name} · {line.publication.code}</strong>
+            <span>原有 {line.opening} · 收 {line.received} · 發 {distributed(line) ?? '—'}</span>
             <button
               className="btn btn--sm"
               onClick={() => {
@@ -240,7 +241,6 @@ export default function CountSheet({ id, items, request, onBack }) {
             >
               編輯原有
             </button>
-            <span className={distributed(line) < 0 ? 'lit-negative' : ''}>發 {distributed(line) ?? '—'}</span>
             <small>{saving[line.id]}</small>
           </div>
           <div className="lit-stepper">
@@ -276,6 +276,7 @@ export default function CountSheet({ id, items, request, onBack }) {
           ).map((p) => (
             <button className="lit-preview-line" key={p.id} onClick={() => add(p)}>
               <PubThumb publication={p} />
+              <span>{p.name} · {p.code}</span>
             </button>
           ))}
         </Sheet>

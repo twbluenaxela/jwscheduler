@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import Toast from '../Toast';
+import PubThumb, { Sheet } from './PubThumb';
 import {
   CATEGORY_LABELS,
   FORMAT_LABELS,
@@ -63,6 +64,7 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
   const [query, setQuery] = useState(''),
     [category, setCategory] = useState('all'),
     [showInactive, setShowInactive] = useState(false);
+  const [actions, setActions] = useState(false);
   const [form, setForm] = useState(null),
     [period, setPeriod] = useState(null),
     [error, setError] = useState(''),
@@ -73,7 +75,7 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
   );
   const visible = useMemo(() => {
     const source = items.filter(
-      (p) => (showInactive || p.active) && (category === 'all' || p.category === category),
+      (p) => (showInactive ? !p.active : p.active) && (category === 'all' || p.category === category),
     );
     if (!query.trim()) return sortPublications(source);
     // The shared matcher excludes inactive records; temporarily mark them active for matching.
@@ -221,62 +223,31 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
       className={`lit-card${p.active ? '' : ' lit-card--inactive'}`}
       onClick={() => edit(p)}
     >
-      {p.coverUrl ? (
-        <img className="lit-cover" src={p.coverUrl} alt="" loading="lazy" />
-      ) : (
-        <span className="lit-cover lit-cover--placeholder">{p.code}</span>
-      )}
+      <PubThumb publication={p} size="card" />
       <span className="lit-card__body">
-        <strong className="lit-card__name">{p.name}</strong>
+        <strong className="lit-card__name">{p.note && <span className="lit-note-dot" />}{p.name}</strong>
         <span className="lit-code">{p.code}</span>
-        <span className="lit-badges">
-          {p.format !== 'standard' && <span>{FORMAT_LABELS[p.format] || p.format}</span>}
-          {p.language !== 'CHT' && <span>{LANGUAGE_LABELS[p.language] || p.language}</span>}
-          {p.itemNumber && <span>{p.itemNumber}</span>}
-          {p.onS28 && <span>S-28</span>}
-          {p.note && <span>待確認</span>}
-          {!p.active && <span>停用</span>}
-        </span>
       </span>
     </button>
   );
   return (
     <section className="lit-page">
-      <div className="lit-header">
-        <div>
-          <h1>書刊目錄</h1>
-          <span>{visible.length} 項</span>
-        </div>
-        <div className="lit-actions">
-          <button className="btn btn--primary" onClick={() => edit(null)}>
-            ＋新增
-          </button>
-          <button className="btn" onClick={openPeriod}>
-            新增期數
-          </button>
-        </div>
+      <div className="lit-search">
+        <input className="field__input" placeholder={`搜尋 ${items.filter((p) => p.active).length} 項書刊`}
+          value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button className="btn btn--primary lit-add" aria-label="新增" onClick={() => setActions(true)}>＋</button>
       </div>
-      <div className="lit-controls">
-        <input
-          className="field__input"
-          placeholder="搜尋代號、名稱、項目編號… 例如：大字 守望台"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <label className="lit-check">
-          <input
-            type="checkbox"
-            checked={showInactive}
-            onChange={(e) => setShowInactive(e.target.checked)}
-          />{' '}
-          顯示停用
-        </label>
-      </div>
+      {actions && <Sheet title="新增" close={() => setActions(false)}>
+        <div className="lit-action-sheet">
+          <button className="btn" onClick={() => { setActions(false); edit(null); }}>新增書刊</button>
+          <button className="btn" onClick={() => { setActions(false); openPeriod(); }}>新增期數</button>
+        </div>
+      </Sheet>}
       <div className="chips lit-chips">
         <button
           className="chip"
-          aria-pressed={category === 'all'}
-          onClick={() => setCategory('all')}
+          aria-pressed={category === 'all' && !showInactive}
+          onClick={() => { setCategory('all'); setShowInactive(false); }}
         >
           全部
         </button>
@@ -285,11 +256,14 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
             key={c}
             className="chip"
             aria-pressed={category === c}
-            onClick={() => setCategory(c)}
+            onClick={() => { setCategory(c); setShowInactive(false); }}
           >
             {CATEGORY_LABELS[c]}
           </button>
         ))}
+        <button className="chip" aria-pressed={showInactive} onClick={() => { setCategory('all'); setShowInactive(true); }}>
+          已停用
+        </button>
       </div>
       {loading ? (
         <p>正在載入書刊…</p>
