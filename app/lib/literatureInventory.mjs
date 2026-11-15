@@ -31,11 +31,15 @@ export function buildCountLines({ publications, previousLines, received }) {
     onHand: null,
   }));
 }
-export function missingReceivedLines({ lines, previousLines, received }) {
+export function missingReceivedLines({ lines, previousLines, received, publications }) {
   const existing = new Set(lines.map((line) => String(line.publicationId)));
   const previous = new Map(previousLines.map((line) => [String(line.publicationId), line]));
+  const byId = new Map(publications.map((p) => [String(p.id), p]));
   return [...received.entries()]
-    .filter(([publicationId, quantity]) => quantity > 0 && !existing.has(String(publicationId)))
+    .filter(([publicationId, quantity]) => {
+      const publication = byId.get(String(publicationId));
+      return quantity > 0 && !existing.has(String(publicationId)) && publication && isCountable(publication);
+    })
     .map(([publicationId, quantity]) => ({
       publicationId,
       opening: previous.get(String(publicationId))?.onHand ?? 0,
@@ -43,8 +47,11 @@ export function missingReceivedLines({ lines, previousLines, received }) {
       onHand: null,
     }));
 }
+export function expected(line) {
+  return line.opening + line.received;
+}
 export function distributed(line) {
-  return line.onHand == null ? null : line.opening + line.received - line.onHand;
+  return line.onHand == null ? null : expected(line) - line.onHand;
 }
 export function s28Rows(publications, lines) {
   const byId = new Map(publications.map((p) => [String(p.id), p]));

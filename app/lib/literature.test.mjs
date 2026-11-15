@@ -41,3 +41,16 @@ test('periodical dates', () => {
   assert.equal(periodicalEntry('mwb', 2027, 5, { format: 'large' }).code, 'mwb27.05');
   for (const args of [['x',2026,1],['w',2019,1],['w',2026,13],['w',2026,1.5]]) assert.throws(() => periodicalEntry(...args));
 });
+
+test('cover fallback matches code and format without mutating items', async () => {
+  const { withCoverFallback } = await import('./literature.mjs');
+  const items = [
+    { code: 'w27.01', format: 'standard', language: 'CHT', coverUrl: '/cover.jpg' },
+    { code: 'w27.01', format: 'standard', language: 'ENG', coverUrl: null },
+    { code: 'w27.01', format: 'large', language: 'JPN', coverUrl: null },
+  ];
+  const result = withCoverFallback(items);
+  assert.equal(result[1].coverUrl, '/cover.jpg');
+  assert.equal(result[2].coverUrl, null);
+  assert.equal(items[1].coverUrl, null);
+});

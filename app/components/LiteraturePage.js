@@ -1,5 +1,6 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { withCoverFallback } from '../lib/literature.mjs';
 import CatalogView from './literature/CatalogView';
 import RequestsView from './literature/RequestsView';
 import ShipmentsView from './literature/ShipmentsView';
@@ -8,6 +9,7 @@ import InventoryView from './literature/InventoryView';
 export default function LiteraturePage({ firebaseUser, people = [] }) {
   const [view, setView] = useState('requests');
   const [items, setItems] = useState([]);
+  const displayItems = useMemo(() => withCoverFallback(items), [items]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const request = useCallback(async (path, init = {}) => {
@@ -41,9 +43,9 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
       </div>
       {view !== 'catalog' && loading && <p>正在載入書刊…</p>}
       {view !== 'catalog' && loadError && <div className="imp-error">{loadError} <button className="btn" onClick={load}>重試</button></div>}
-      {!loading && !loadError && view === 'requests' && <RequestsView people={people} items={items} request={request} />}
-      {(!loading || items.length > 0) && !loadError && view === 'shipments' && <ShipmentsView items={items} request={request} reloadCatalog={load} />}
-      {(!loading || items.length > 0) && !loadError && view === 'inventory' && <InventoryView items={items} request={request} reloadCatalog={load} />}
+      {!loading && !loadError && view === 'requests' && <RequestsView people={people} items={displayItems} request={request} />}
+      {(!loading || items.length > 0) && !loadError && view === 'shipments' && <ShipmentsView items={displayItems} request={request} reloadCatalog={load} />}
+      {(!loading || items.length > 0) && !loadError && view === 'inventory' && <InventoryView items={displayItems} request={request} reloadCatalog={load} />}
       {view === 'catalog' && <CatalogView items={items} setItems={setItems} loading={loading} loadError={loadError} load={load} request={request} />}
     </section>
   );

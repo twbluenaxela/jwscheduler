@@ -44,6 +44,7 @@ test('late receipts add missing lines with previous balances without duplicating
   const { missingReceivedLines } = await import('./literatureInventory.mjs');
   const received = new Map([[1, 2], [2, 7], [3, 4], [4, 0]]);
   const lines = missingReceivedLines({
+    publications: [1, 2, 3, 4].map((id) => ({ id, code: `book${id}`, category: 'book' })),
     lines: [{ publicationId: 1 }],
     previousLines: [{ publicationId: 2, onHand: 8 }, { publicationId: 3, onHand: null }],
     received,
@@ -94,4 +95,17 @@ test('report import batches inserts and preserves previous balances for matched 
   assert.equal(inserts.skipDuplicates, true);
   assert.ok(inserts.data.some((line) => line.publicationId === 1 && line.opening === 9 && line.onHand === 4));
   assert.ok(inserts.data.some((line) => line.publicationId === 2 && line.opening === 0 && line.onHand === 12));
+});
+
+test('late receipts skip non-countable and unknown publications', async () => {
+  const { missingReceivedLines } = await import('./literatureInventory.mjs');
+  const publications = [
+    { id: 1, code: 'be', category: 'book' },
+    { id: 2, code: 'w27.01', category: 'study' },
+    { id: 3, code: 'nwtls', category: 'bible' },
+  ];
+  const received = new Map([[1, 2], [2, 3], [3, 4], [4, 5]]);
+  assert.deepEqual(missingReceivedLines({ lines: [], previousLines: [], received, publications }), [
+    { publicationId: 1, opening: 0, received: 2, onHand: null },
+  ]);
 });

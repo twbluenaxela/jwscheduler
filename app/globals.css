@@ -1990,3 +1990,30 @@ body.editing .week-edit__input { background: #fff; }
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
 .lit-inventory-meta { display: grid; gap: 4px; }
 .lit-pub-picker button { display: grid; gap: 5px; }
+
+/* Compact inventory counting and shipment remainders */
+.lit-cover__code { font-size: 1.6rem; }
+.lit-cover__code::before { display: none; }
+.lit-count-actions { display: flex; flex-wrap: nowrap; gap: 6px; margin: 14px 0; }
+.lit-count-actions .btn { flex: 0 1 auto; white-space: nowrap; }
+.lit-count-filters { position: static; margin: 10px 0; }
+.lit-count-filters button { font-size: 13px; white-space: nowrap; }
+.lit-count-row { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 68px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.lit-count-row .lit-cover--mini { width: 40px; }
+.lit-count-meta { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-2); }
+.lit-count-meta strong { display: block; overflow: hidden; color: var(--ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.lit-count-meta > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lit-opening { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.lit-count-value { flex: none; display: grid; justify-items: end; gap: 2px; color: var(--ink-2); font-size: 11px; }
+.lit-count-value > div { display: flex; align-items: center; gap: 4px; }
+.lit-count-value input { width: 64px; height: 34px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font: inherit; font-size: 16px; text-align: right; }
+.lit-count-check { width: 30px; height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--accent); cursor: pointer; }
+.lit-count-error { color: var(--special); }
+.lit-count-finish { width: 100%; margin-top: 16px; }
+.lit-report-actions { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.lit-inventory-controls { display: grid; justify-items: start; gap: 10px; margin-bottom: 18px; }
+.lit-inventory-month { display: flex; align-items: center; gap: 8px; }
+.lit-remainder-list { display: grid; }
+.lit-remainder-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.lit-remainder-row > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
+.lit-remainder-row small { color: var(--ink-2); }

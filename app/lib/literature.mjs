@@ -189,3 +189,15 @@ export function mapPublication(p) {
     coverUrl: coverToken ? `/api/literature/covers/${coverToken}` : null,
   };
 }
+
+export function withCoverFallback(items) {
+  const covers = new Map();
+  for (const item of items) {
+    const key = JSON.stringify([item.code, item.format]);
+    if (item.coverUrl && !covers.has(key)) covers.set(key, item.coverUrl);
+  }
+  return items.map((item) => {
+    const coverUrl = covers.get(JSON.stringify([item.code, item.format]));
+    return !item.coverUrl && coverUrl ? { ...item, coverUrl } : item;
+  });
+}
