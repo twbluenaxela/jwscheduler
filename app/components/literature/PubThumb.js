@@ -1,3 +1,4 @@
+import Icon from './Icon';
 import { seriesOf } from '../../lib/literatureShipments.mjs';
 
 export const SERIES = { w: '守望台研讀版', wlp: '守望台研讀版（大字版）', mwb: '聚會手冊', g: '警醒！', wp: '守望台（公眾版）' };
@@ -52,7 +53,7 @@ export function Sheet({ title, close, children }) {
     <div className="sheet-backdrop open" onClick={close}>
       <div className="sheet lit-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
         <div className="sheet__grab" />
-        <header className="sheet__head"><strong>{title}</strong><button type="button" className="sheet__close" aria-label="關閉" onClick={close}>✕</button></header>
+        <header className="sheet__head"><strong>{title}</strong><button type="button" className="sheet__close" aria-label="關閉" onClick={close}><Icon name="close" /></button></header>
         <div className="lit-sheet-body">{children}</div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 'use client';
+import Icon from './Icon';
 import { useMemo, useState } from 'react';
 import Toast from '../Toast';
 import PubThumb, { Sheet } from './PubThumb';
@@ -267,7 +268,7 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
         </button>
       </div>
       {loading ? (
-        <p>正在載入書刊…</p>
+        <p className="lit-loading">正在載入書刊…</p>
       ) : loadError ? (
         <div className="imp-error">
           {loadError}{' '}
@@ -315,7 +316,7 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
                   setPeriod(null);
                 }}
               >
-                ✕
+                <Icon name="close" />
               </button>
             </header>
             {form ? (

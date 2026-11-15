@@ -69,7 +69,7 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
   useEffect(() => { loadInitial(); }, [loadInitial]);
   if (!view) return <section className="lit-page">{loadError
     ? <div className="imp-error">{loadError} <button className="btn" onClick={loadInitial}>重試</button></div>
-    : <p>正在載入書刊…</p>}</section>;
+    : <p className="lit-loading">正在載入書刊…</p>}</section>;
   return (
     <section className="lit-page">
       <div className="lit-segment" aria-label="書刊功能">
@@ -77,7 +77,7 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
           <button key={key} type="button" aria-pressed={view === key} onClick={() => { setInitialId(null); setView(key); }}>{label}</button>
         ))}
       </div>
-      {view !== 'catalog' && loading && <p>正在載入書刊…</p>}
+      {view !== 'catalog' && loading && <p className="lit-loading">正在載入書刊…</p>}
       {view !== 'catalog' && loadError && <div className="imp-error">{loadError} <button className="btn" onClick={load}>重試</button></div>}
       {!loading && !loadError && view === 'requests' && <RequestsView people={people} items={displayItems} request={request} />}
       {(!loading || items.length > 0) && !loadError && view === 'shipments' && <ShipmentsView initialId={initialId} items={displayItems} request={request} reloadCatalog={load} />}
