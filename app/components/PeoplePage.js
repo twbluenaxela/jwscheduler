@@ -147,8 +147,8 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
       const response = await fetch(url, { method: 'POST', headers });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '無法取得連結');
-      await navigator.clipboard.writeText(data.url);
-      alert('已複製行事曆訂閱連結');
+      await navigator.clipboard.writeText(data.page);
+      alert('已複製行事曆連結，傳給本人打開即可加入。');
     } catch (error) { setError(error.message); }
   }
 
@@ -489,7 +489,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
           <span>未來安排</span>
           {canEdit && selectedPerson && !String(selectedPerson.id).startsWith('new-') && (
             <span>行事曆訂閱：
-              <button className="btn btn--sm btn--ghost" onClick={() => calendarFeed()}>複製訂閱連結</button>
+              <button className="btn btn--sm btn--ghost" onClick={() => calendarFeed()}>複製行事曆連結</button>
               <button className="btn btn--sm btn--ghost" onClick={() => calendarFeed(true)}>重設連結</button>
             </span>
           )}

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import db from '../../../lib/db';
+import { publicOrigin } from '../../../lib/publicOrigin.mjs';
 import { handleFollow, handleMessage } from '../../../lib/line-webhook.mjs';
 
 function verifySignature(rawBody, signature) {
@@ -35,7 +36,7 @@ export async function POST(request) {
   try { payload = JSON.parse(rawBody); }
   catch { return NextResponse.json({ error: 'bad json' }, { status: 400 }); }
 
-  const deps = { db, reply: replyMessage };
+  const deps = { db, reply: replyMessage, origin: publicOrigin(request) };
   for (const event of payload.events ?? []) {
     if (event.type === 'follow') await handleFollow(event, deps);
     else if (event.type === 'message' && event.message?.type === 'text') await handleMessage(event, deps);

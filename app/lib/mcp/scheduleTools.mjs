@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { ensureCalendarFeed, calendarLinks } from '../calendarFeed.mjs';
 import { resolveRowDate, parseIsoDate, toIsoDate } from '../cnDate.mjs';
 import { resolvePerson } from './resolution.mjs';
 import { slotCat } from '../partTypes.mjs';
@@ -223,11 +223,10 @@ export const scheduleTools = [
   definition('get_calendar_link', '取得個人行事曆訂閱連結', { person: str('姓名') }, ['person'], async (ctx, a) => {
     const c = await load(ctx);
     const person = resolvePerson(a.person, c.people);
-    const feed = await ctx.db.calendarFeed.upsert({
-      where: { personId: person.id }, update: {},
-      create: { personId: person.id, congregationId: ctx.congregationId, token: randomBytes(32).toString('base64url') },
+    const feed = await ensureCalendarFeed(ctx.db, person);
+    const links = calendarLinks(ctx.origin, feed.token, person.name);
+    return result(`${person.name}的行事曆：${links.page}\n訂閱網址：${links.ics}`, {
+      person: person.name, url: links.ics, page: links.page,
     });
-    const url = `${ctx.origin}/api/calendar/${feed.token}.ics`;
-    return result(`${person.name}的行事曆：${url}\niPhone：設定 → 行事曆 → 帳號 → 加入訂閱行事曆；Google 日曆：其他日曆 → 透過網址新增。`, { person: person.name, url });
   }),
 ];

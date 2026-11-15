@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-import { randomBytes } from 'node:crypto';
+import { ensureCalendarFeed, calendarLinks } from '../../../../lib/calendarFeed.mjs';
 import db from '../../../../lib/db';
 import { verifyIdToken } from '../../../../lib/firebase-admin';
 import { publicOrigin } from '../../../../lib/publicOrigin.mjs';
@@ -17,10 +17,9 @@ async function authorize(request, context) {
 export async function POST(request, context) {
   try {
     const person = await authorize(request, context);
-    const feed = await db.calendarFeed.upsert({ where: { personId: person.id }, update: {}, create: {
-      personId: person.id, congregationId: person.congregationId, token: randomBytes(32).toString('base64url'),
-    } });
-    return Response.json({ url: `${publicOrigin(request)}/api/calendar/${feed.token}.ics` });
+    const feed = await ensureCalendarFeed(db, person);
+    const links = calendarLinks(publicOrigin(request), feed.token, person.name);
+    return Response.json({ url: links.ics, page: links.page });
   } catch (error) { return Response.json({ error: error.message }, { status: 403 }); }
 }
 export async function DELETE(request, context) {

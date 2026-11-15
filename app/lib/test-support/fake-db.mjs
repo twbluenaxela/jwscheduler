@@ -37,6 +37,7 @@ export function makeFakeDb(seed = {}) {
     weekendRows: clone(seed.weekendRows ?? []),
     pendingLinks: clone(seed.pendingLinks ?? []),
     changeLogs: [],
+    calendarFeeds: clone(seed.calendarFeeds ?? []),
   };
   let changeLogSeq = 1;
 
@@ -55,6 +56,18 @@ export function makeFakeDb(seed = {}) {
 
   return {
     __stores: stores,
+
+    calendarFeed: {
+      async upsert({ where: { personId }, update, create }) {
+        let feed = stores.calendarFeeds.find((item) => item.personId === personId);
+        if (feed) Object.assign(feed, update);
+        else {
+          feed = { ...create, lastFetchedAt: null };
+          stores.calendarFeeds.push(feed);
+        }
+        return clone(feed);
+      },
+    },
 
     midweekWeek: {
       async findFirst({ where, include }) {
