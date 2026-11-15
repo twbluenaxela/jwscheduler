@@ -106,9 +106,14 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
             <div className="lit-delivery-row">
               <button className="lit-delivery-main" disabled={disabled} onClick={() => togglePerson(p)}
                 aria-label={`${p.name}，${done ? '取消全部發放' : '全部標為已發放'}`}>
-                <span className="lit-round-check" aria-hidden="true">{done && <Icon name="check" />}</span>
+                <span className={`lit-handout-check${done ? " is-done" : ""}`} aria-hidden="true">{done ? <Icon name="check" /> : "發"}</span>
                 <span className="lit-delivery-copy">
                   <span><strong>{p.name}</strong> {p.groupRole && <small>{p.groupRole === 'overseer' ? '小組監督' : '助手'}</small>}</span>
+                  {done && <span className="lit-delivery-summary">已發 {(() => {
+                    const dates = p.items.map(({ recipient, publication }) => deliveryFor(recipient, publication.id)?.deliveredAt).filter(Boolean).sort();
+                    const date = dates.length ? new Date(dates[dates.length - 1]) : null;
+                    return date ? `${date.getMonth() + 1}/${date.getDate()}` : '';
+                  })()}</span>}
                   <span className="lit-delivery-summary">{p.items.map(({ recipient, publication }, index) => <span key={index}>
                     {index > 0 && ' · '}{itemLabel(publication)} {recipient.quantity}
                     {recipient.source !== 'subscription' && <small>單次</small>}

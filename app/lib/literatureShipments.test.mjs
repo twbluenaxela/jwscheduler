@@ -61,3 +61,34 @@ test('counts distinct people with an undelivered recipient entry', () => {
     { personId: 2, publicationId: 11 },
   ]), 0);
 });
+
+test('pendingHandouts groups and sorts undelivered recipients and received requests', async () => {
+  const { pendingHandouts } = await import('./literatureShipments.mjs');
+  const publication = { id: 1, code: 'w26.1', name: '研讀版', language: 'CHT', format: 'standard' };
+  const booklet = { id: 2, code: 'mwb26.3', name: '手冊', language: 'ENG', format: 'standard' };
+  const people = [{ id: 1, name: '王小明', serviceGroup: 'B' }, { id: 2, name: '張子婷', serviceGroup: 'A' }];
+  const allocations = new Map([[10, [{ publication, recipients: [{ personId: 1, quantity: 1, source: 'subscription' }, { personId: 2, quantity: 1, source: 'request', requestId: 4 }] }]]]);
+  const result = pendingHandouts({ shipments: [{ id: 10 }], allocations, people, deliveries: [{ personId: 1, publicationId: 1, requestId: null }], requests: [{ id: 4, personId: 2, publicationId: 1, status: 'received', publication }, { id: 5, personId: 1, publicationId: 2, quantity: 2, status: 'received', publication: booklet }] });
+  assert.deepEqual(result.map(p => p.personId), [2, 1]);
+  assert.equal(result[0].items.length, 1);
+  assert.equal(result[0].items[0].label, '研讀版 1月');
+  assert.equal(result[1].items[0].label, '手冊 英 3月');
+  assert.equal(result[1].items[0].shipmentId, null);
+});
+
+test('handoutSummary merges months in chronological order and combines quantities', async () => {
+  const { handoutSummary } = await import('./literatureShipments.mjs');
+  assert.equal(handoutSummary([
+    { label: '研讀版 1月', code: 'w27.1', quantity: 1 },
+    { label: '研讀版 12月', code: 'w26.12', quantity: 1 },
+    { label: '手冊 英 1月', code: 'mwb27.1', quantity: 2 },
+    { label: '手冊 英 12月', code: 'mwb26.12', quantity: 2 },
+  ]), '研讀版 12月·1月 · 手冊 英 12月·1月 ×2');
+  assert.equal(handoutSummary([
+    { label: '研讀版 1月', code: 'w27.1', quantity: 1 },
+    { label: '研讀版 12月', code: 'w26.12', quantity: 1 },
+    { label: '研讀版 12月', code: 'w26.12', quantity: 1 },
+    { label: '大字 1月', code: 'wlp27.1', quantity: 3 },
+    { label: '書籍', code: 'book', quantity: 2 },
+  ]), '研讀版 12月×2·1月 · 大字 1月 ×3 · 書籍 ×2');
+});

@@ -8,7 +8,7 @@ export async function DELETE(request, context) {
     const delivery = await scoped('literatureDelivery', (await context.params).id, congregationId);
     await db.$transaction(async tx => {
       await tx.literatureDelivery.delete({ where: { id: delivery.id } });
-      if (delivery.requestId) await tx.literatureRequest.updateMany({ where: { id: delivery.requestId, congregationId, status: 'delivered' }, data: { status: 'received', deliveredAt: null } });
+      if (delivery.requestId && !await tx.literatureDelivery.count({ where: { congregationId, requestId: delivery.requestId } })) await tx.literatureRequest.updateMany({ where: { id: delivery.requestId, congregationId, status: 'delivered' }, data: { status: 'received', deliveredAt: null } });
     }, { timeout: 60000, maxWait: 10000 });
     return NextResponse.json({ ok: true });
   } catch (error) { return fail(error); }
