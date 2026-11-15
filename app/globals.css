@@ -1856,3 +1856,20 @@ body.editing .week-edit__input { background: #fff; }
   .lit-controls { min-width: 0; }
   .lit-sheet-body { padding: 0 14px 20px; }
 }
+
+.lit-month { width: auto; max-width: 100%; }
+.lit-inventory-row { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.lit-inventory-row > .lit-thumb { flex: 1 1 180px; min-width: 0; }
+.lit-inventory-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1 1 180px; }
+.lit-stepper { display: flex; align-items: center; gap: 4px; }
+.lit-stepper button { min-width: 44px; min-height: 44px; font-size: 1.3rem; }
+.lit-stepper input { width: 90px; min-height: 44px; font-size: 1.2rem; text-align: center; }
+.lit-negative { color: #b42318; }
+.lit-report-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.lit-report-table th, .lit-report-table td { border: 1px solid #888; padding: 4px; }
+@media print {
+  body:has(.lit-print-area) * { visibility: hidden; }
+  body:has(.lit-print-area) .lit-print-area, body:has(.lit-print-area) .lit-print-area * { visibility: visible; }
+  body:has(.lit-print-area) .lit-print-area { position: absolute; inset: 0; width: 100%; background: white; color: black; }
+  body:has(.lit-print-area) .lit-report-actions { display: none; }
+}

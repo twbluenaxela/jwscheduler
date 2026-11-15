@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import CatalogView from './literature/CatalogView';
 import RequestsView from './literature/RequestsView';
 import ShipmentsView from './literature/ShipmentsView';
+import InventoryView from './literature/InventoryView';
 
 export default function LiteraturePage({ firebaseUser, people = [] }) {
   const [view, setView] = useState('requests');
@@ -34,7 +35,7 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
   return (
     <section className="lit-page">
       <div className="lit-segment" aria-label="書刊功能">
-        {Object.entries({ requests: '申請', shipments: '到貨', catalog: '目錄' }).map(([key, label]) => (
+        {Object.entries({ requests: '申請', shipments: '到貨', catalog: '目錄', inventory: '清點' }).map(([key, label]) => (
           <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>
         ))}
       </div>
@@ -42,6 +43,7 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
       {view !== 'catalog' && loadError && <div className="imp-error">{loadError} <button className="btn" onClick={load}>重試</button></div>}
       {!loading && !loadError && view === 'requests' && <RequestsView people={people} items={items} request={request} />}
       {(!loading || items.length > 0) && !loadError && view === 'shipments' && <ShipmentsView items={items} request={request} reloadCatalog={load} />}
+      {(!loading || items.length > 0) && !loadError && view === 'inventory' && <InventoryView items={items} request={request} reloadCatalog={load} />}
       {view === 'catalog' && <CatalogView items={items} setItems={setItems} loading={loading} loadError={loadError} load={load} request={request} />}
     </section>
   );

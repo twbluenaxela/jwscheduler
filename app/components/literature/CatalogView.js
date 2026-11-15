@@ -21,6 +21,7 @@ const blank = () => ({
   issue: '',
   note: '',
   active: true,
+  countable: null,
 });
 const options = (labels) =>
   Object.entries(labels).map(([value, label]) => (
@@ -383,6 +384,15 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
                 {field('別名（以逗號或、分隔）', 'aliases')}
                 {field('期數', 'issue')}
                 {field('備註', 'note')}
+                <label className="field">
+                  <span className="field__label">納入盤點</span>
+                  <select className="field__input" value={form.countable == null ? 'auto' : String(form.countable)}
+                    onChange={(e) => setForm({ ...form, countable: e.target.value === 'auto' ? null : e.target.value === 'true' })}>
+                    <option value="auto">自動</option>
+                    <option value="true">是</option>
+                    <option value="false">否</option>
+                  </select>
+                </label>
                 <label className="lit-check">
                   <input
                     type="checkbox"
