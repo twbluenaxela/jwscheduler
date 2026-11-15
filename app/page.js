@@ -756,7 +756,7 @@ export default function App() {
               canEdit={canEdit}
             />
           )}
-          {page === 'literature' && canLiterature && <LiteraturePage firebaseUser={firebaseUser} />}
+          {page === 'literature' && canLiterature && <LiteraturePage firebaseUser={firebaseUser} people={people} />}
           {page === 'settings' && (
             <SettingsPage
               congSettings={congSettings}

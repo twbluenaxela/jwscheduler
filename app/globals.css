@@ -1814,3 +1814,45 @@ body.editing .week-edit__input { background: #fff; }
 .lit-cover-edit img { width: 70px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 4px; }
 .lit-file { position: absolute; width: 1px; height: 1px; opacity: 0; }
 @media (max-width: 720px) { .lit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+
+/* Literature requests and shipment sorting */
+.lit-page { min-width: 0; }
+.lit-segment { display: flex; width: min(100%, 420px); padding: 4px; margin-bottom: 20px; border-radius: 12px; background: var(--surface-2, #eee); }
+.lit-segment button { flex: 1; min-height: 44px; border: 0; border-radius: 9px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.lit-segment button[aria-pressed="true"] { background: var(--surface, white); box-shadow: 0 1px 4px #0002; font-weight: 700; }
+.lit-summary { padding: 14px; margin-bottom: 16px; border-radius: 10px; background: var(--surface-2, #f2f2f2); line-height: 1.7; }
+.lit-person-grid, .lit-group-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.lit-person-card, .lit-sort-card, .lit-shipment { min-width: 0; padding: 14px; border: 1px solid var(--border, #ddd); border-radius: 12px; background: var(--surface, white); }
+.lit-person-main { display: block; width: 100%; padding: 0; border: 0; text-align: left; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.lit-thumb-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.lit-item { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 90px; min-width: 0; }
+.lit-thumb { display: flex; flex-direction: column; gap: 3px; width: 80px; max-width: 100%; min-width: 0; font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
+.lit-thumb img, .lit-thumb__placeholder { width: 64px; height: 82px; object-fit: cover; border-radius: 4px; }
+.lit-thumb__placeholder { display: grid; place-items: center; padding: 4px; background: var(--surface-2, #eee); font-weight: 700; overflow-wrap: anywhere; }
+.lit-thumb__code { font-weight: 700; }
+.lit-badge { display: inline-block; padding: 2px 6px; border-radius: 6px; background: var(--accent-soft, #eef2f8); font-size: 12px; white-space: nowrap; }
+.lit-badge--short { background: #fee2e2; color: #a31515; }
+.lit-sheet-body { padding: 0 20px 24px; overflow-y: auto; }
+.lit-picker { display: flex; flex-wrap: wrap; gap: 6px; max-height: 210px; overflow-y: auto; }
+.lit-picker button { min-height: 44px; padding: 8px; border: 1px solid var(--border, #ddd); border-radius: 8px; background: var(--surface, white); color: inherit; text-align: left; }
+.lit-pub-picker button { width: 105px; }
+.lit-edit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border, #ddd); }
+.lit-edit-row strong { flex: 1 1 100%; }
+.lit-edit-row select { width: auto; }
+.lit-number { width: 80px; }
+.lit-shipment-list { display: grid; gap: 10px; }
+.lit-shipment { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; width: 100%; min-height: 70px; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.lit-preview-line { display: flex; align-items: center; gap: 18px; padding: 12px 0; border-bottom: 1px solid var(--border, #ddd); }
+.lit-sort-card { margin-bottom: 10px; }
+.lit-sort-card--done { opacity: .65; }
+.lit-sort-toggle { display: flex; justify-content: space-between; width: 100%; min-height: 44px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lit-sort-items[hidden] { display: none; }
+.lit-sort-item { display: flex; align-items: center; gap: 12px; min-height: 100px; padding: 8px 0; border-top: 1px solid var(--border, #ddd); }
+.lit-sort-item > span:nth-child(2) { flex: 1; }
+.lit-sort-item input { width: 32px; height: 32px; flex: none; }
+@media (max-width: 720px) {
+  .lit-person-grid, .lit-group-grid { grid-template-columns: minmax(0, 1fr); }
+  .lit-header { flex-wrap: wrap; gap: 10px; }
+  .lit-controls { min-width: 0; }
+  .lit-sheet-body { padding: 0 14px 20px; }
+}

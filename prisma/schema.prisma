@@ -29,6 +29,10 @@ model Congregation {
   people          Person[]
   changeLogs      ChangeLog[]
   publications    Publication[]
+  literatureSubscriptions LiteratureSubscription[]
+  literatureRequests LiteratureRequest[]
+  shipments Shipment[]
+  literatureDeliveries LiteratureDelivery[]
 }
 
 model User {
@@ -63,6 +67,10 @@ model Person {
   lineUserId     String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  literatureSubscriptions LiteratureSubscription[]
+  literatureRequests LiteratureRequest[]
+  literatureDeliveries LiteratureDelivery[]
 
   @@unique([congregationId, name])
 }
@@ -203,6 +211,9 @@ model Publication {
   active Boolean @default(true)
   coverToken String? @unique
   cover PublicationCover?
+  literatureRequests LiteratureRequest[]
+  shipmentLines ShipmentLine[]
+  literatureDeliveries LiteratureDelivery[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@unique([congregationId, code, language, format])
@@ -216,4 +227,79 @@ model PublicationCover {
   mime String
   data Bytes
   updatedAt DateTime @updatedAt
+}
+
+model LiteratureSubscription {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  personId Int
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  series String
+  language String @default("CHT")
+  quantity Int @default(1)
+  note String?
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([personId, series, language])
+}
+
+model LiteratureRequest {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  personId Int
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  publicationId Int
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  quantity Int @default(1)
+  status String @default("pending")
+  note String?
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deliveries LiteratureDelivery[]
+  @@index([congregationId, status])
+}
+
+model Shipment {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  slipNumber String
+  shippedAt DateTime?
+  source String @default("jwhub-pdf")
+  note String?
+  createdAt DateTime @default(now())
+  lines ShipmentLine[]
+  deliveries LiteratureDelivery[]
+  @@unique([congregationId, slipNumber])
+}
+
+model ShipmentLine {
+  id Int @id @default(autoincrement())
+  shipmentId Int
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  publicationId Int
+  publication Publication @relation(fields: [publicationId], references: [id])
+  rawCode String
+  quantity Int
+}
+
+model LiteratureDelivery {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  personId Int
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  publicationId Int
+  publication Publication @relation(fields: [publicationId], references: [id])
+  quantity Int
+  shipmentId Int?
+  shipment Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  requestId Int?
+  request LiteratureRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  deliveredAt DateTime @default(now())
+  @@index([congregationId, publicationId])
 }
