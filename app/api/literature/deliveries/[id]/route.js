@@ -9,7 +9,7 @@ export async function DELETE(request, context) {
     await db.$transaction(async tx => {
       await tx.literatureDelivery.delete({ where: { id: delivery.id } });
       if (delivery.requestId) await tx.literatureRequest.updateMany({ where: { id: delivery.requestId, congregationId, status: 'delivered' }, data: { status: 'received', deliveredAt: null } });
-    });
+    }, { timeout: 60000, maxWait: 10000 });
     return NextResponse.json({ ok: true });
   } catch (error) { return fail(error); }
 }

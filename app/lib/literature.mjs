@@ -142,6 +142,10 @@ export function publicationPayload(body, partial = false) {
       if (typeof body[key] !== 'boolean') throw new Error('書刊欄位格式無效');
       data[key] = body[key];
     }
+  if ('countable' in body) {
+    if (body.countable !== null && typeof body.countable !== 'boolean') throw new Error('書刊欄位格式無效');
+    data.countable = body.countable;
+  }
   if ('s28Order' in body) {
     if (body.s28Order !== null && (!Number.isInteger(body.s28Order) || body.s28Order < 1))
       throw new Error('排序格式無效');
@@ -165,6 +169,7 @@ export function mapPublication(p) {
     s28Order,
     active,
     coverToken,
+    countable,
   } = p;
   return {
     id: String(id),
@@ -180,6 +185,7 @@ export function mapPublication(p) {
     onS28,
     s28Order,
     active,
+    countable,
     coverUrl: coverToken ? `/api/literature/covers/${coverToken}` : null,
   };
 }

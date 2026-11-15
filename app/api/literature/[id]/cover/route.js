@@ -25,7 +25,7 @@ async function update(request, context, remove) {
       if (remove) await tx.publicationCover.deleteMany({ where: { publicationId: id } });
       else await tx.publicationCover.upsert({ where: { publicationId: id }, create: { publicationId: id, mime, data }, update: { mime, data } });
       return tx.publication.update({ where: { id }, data: { coverToken: remove ? null : randomUUID() } });
-    });
+    }, { timeout: 60000, maxWait: 10000 });
     return NextResponse.json({ publication: mapPublication(publication) });
   } catch (err) { return NextResponse.json({ error: err.message }, { status: 500 }); }
 }
