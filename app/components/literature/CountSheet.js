@@ -1,5 +1,6 @@
 'use client';
 import Icon from './Icon';
+import Menu from './Menu';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPublications } from '../../lib/literature.mjs';
 import { distributed, expected, hubReportRows, s28Rows } from '../../lib/literatureInventory.mjs';
@@ -197,14 +198,11 @@ export default function CountSheet({ id, items, request, onBack }) {
       </button>
       <div className="lit-header lit-count-header">
         <h1>{monthLabel}</h1>
-        {!done && <details className="lit-menu lit-count-menu">
-          <summary aria-label="更多選項"><Icon name="more" /></summary>
-          <div>
-            <button onClick={() => setReport('s28')}>S-28 表</button>
-            <button onClick={() => setReport('hub')}>JW Hub 填寫清單</button>
-            <button onClick={() => { setAddQuery(''); setAdding(true); }}>加入品項</button>
-          </div>
-        </details>}
+        {!done && <Menu items={[
+          { label: 'S-28 表', onSelect: () => setReport('s28') },
+          { label: 'JW Hub 填寫清單', onSelect: () => setReport('hub') },
+          { label: '加入品項', onSelect: () => { setAddQuery(''); setAdding(true); } },
+        ]} />}
       </div>
       {done && <div className="lit-count-complete">
         <div className="lit-count-reports">

@@ -1,5 +1,6 @@
 'use client';
 import Icon from './Icon';
+import Menu from './Menu';
 import { useCallback, useEffect, useState } from 'react';
 import PubThumb, { GROUPS, groupOf, issueLabel, sameId } from './PubThumb';
 import { seriesOf } from '../../lib/literatureShipments.mjs';
@@ -87,9 +88,7 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
     <div className="lit-detail-header">
       <div><strong>裝箱單 {data.shipment.slipNumber}</strong>
         <span>{shippedDate ? `${Number(shippedDate[2])}/${Number(shippedDate[3])}` : '日期未提供'}</span></div>
-      <details className="lit-menu"><summary aria-label="更多選項"><Icon name="more" /></summary>
-        <button className="btn btn--danger" onClick={remove}>刪除裝箱單</button>
-      </details>
+      <Menu items={[{ label: '刪除裝箱單', onSelect: remove, danger: true }]} />
     </div>
     {issues.length > 0 && <p className="lit-shipment-issues">{issues.join(' · ')}</p>}
     <div className="lit-progress-label">已發 {doneCount} / {members.length} 人</div>
