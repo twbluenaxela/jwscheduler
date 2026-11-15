@@ -1,6 +1,7 @@
 'use client';
 import Icon from './Icon';
-import { useCallback, useEffect, useState } from 'react';
+import Menu from './Menu';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet } from './PubThumb';
 import CountSheet from './CountSheet';
 
@@ -15,6 +16,7 @@ const currentMonth = () => {
 };
 
 export default function InventoryView({ items, request, reloadCatalog }) {
+  const fileInput = useRef(null);
   const [counts, setCounts] = useState([]);
   const [selected, setSelected] = useState(null);
   const month = currentMonth();
@@ -86,17 +88,21 @@ export default function InventoryView({ items, request, reloadCatalog }) {
     <div className="lit-detail">
       <div className="lit-header">
         <h1>每月清點</h1>
-        {counts.length > 0 && <details className="lit-menu lit-inventory-menu">
-          <summary aria-label="更多選項"><Icon name="more" /></summary>
-          <label className="btn btn--sm">
-            匯入 JW Hub 庫存報告
-            <input className="lit-file" type="file" accept="application/pdf" disabled={busy} onChange={(e) => {
+        {counts.length > 0 && <>
+          <Menu items={[{ label: '匯入 JW Hub 庫存報告', onSelect: () => fileInput.current?.click() }]} />
+          <input
+            ref={fileInput}
+            className="lit-file"
+            type="file"
+            accept="application/pdf"
+            disabled={busy}
+            onChange={(e) => {
               const chosen = e.target.files?.[0];
               e.target.value = '';
               if (chosen) upload(chosen, true);
-            }} />
-          </label>
-        </details>}
+            }}
+          />
+        </>}
       </div>
       <div className="lit-inventory-controls">
         {!counts.some((count) => count.month === month) && (

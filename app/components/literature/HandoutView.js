@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { handoutSummary } from '../../lib/literatureShipments.mjs';
 import Icon from './Icon';
+import Menu from './Menu';
 import PubThumb, { Sheet, groupOf } from './PubThumb';
 import ShipmentsView from './ShipmentsView';
 
@@ -277,10 +278,7 @@ export default function HandoutView({ items, request, reloadCatalog }) {
     <div className={`lit-handouts${snack ? ' lit-handouts--snack' : ''}`} style={{ '--snack-height': `${snackHeight}px` }}>
       <div className="lit-handout-heading">
         <h1>發放</h1>
-        <details className="lit-menu">
-          <summary aria-label="更多選項"><Icon name="more" /></summary>
-          <button onClick={() => setShipments(true)}>裝箱單</button>
-        </details>
+        <Menu items={[{ label: '裝箱單', onSelect: () => setShipments(true) }]} />
       </div>
       <div className="lit-handout-sticky">
         <p>還有 {data.people.length} 人待發 · {count} 本</p>

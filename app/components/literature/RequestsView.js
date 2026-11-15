@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
+import Menu from './Menu';
 import FormLinkSheet from './FormLinkSheet';
 import { matchPublications } from '../../lib/literature.mjs';
 import PubThumb, { GROUPS, LANGUAGES, SERIES, Sheet, groupOf, issueLabel, sameId, seriesPublication } from './PubThumb';
@@ -163,21 +164,7 @@ export default function RequestsView({ people, items, request }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <details className="lit-menu lit-count-menu">
-          <summary aria-label="更多選項">
-            <Icon name="more" />
-          </summary>
-          <div>
-            <button
-              onClick={(e) => {
-                e.currentTarget.closest('details').open = false;
-                setLinkOpen(true);
-              }}
-            >
-              申請連結
-            </button>
-          </div>
-        </details>
+        <Menu items={[{ label: '申請連結（給大家用的表單）', onSelect: () => setLinkOpen(true) }]} />
         <button className="btn btn--primary lit-add" aria-label="新增申請" onClick={() => add(null)}>
           ＋
         </button>
