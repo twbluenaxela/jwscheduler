@@ -1,0 +1,29 @@
+import { isMidweekSuspended } from './weekType.mjs';
+import { collectAssignments } from './assignments.mjs';
+import { generateIcal } from './icalExport.js';
+import { resolveRowDate, toIsoDate } from './cnDate.mjs';
+
+export async function calendarResponse(db, token) {
+  const feed = await db.calendarFeed.findUnique({ where: { token: token.replace(/\.ics$/, '') }, include: { person: true, congregation: true } });
+  if (!feed || feed.person.congregationId !== feed.congregationId) return new Response('找不到行事曆', { status: 404 });
+  const [weeks, rows] = await Promise.all([
+    db.midweekWeek.findMany({ where: { congregationId: feed.congregationId }, include: { parts: true, assignments: true } }),
+    db.weekendRow.findMany({ where: { congregationId: feed.congregationId } }),
+  ]);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  cutoff.setHours(0, 0, 0, 0);
+  const events = [];
+  for (const row of [...weeks, ...rows]) {
+    const isWeek = Array.isArray(row.parts);
+    if (isWeek && isMidweekSuspended(row)) continue;
+    const items = collectAssignments(feed.person.name, isWeek ? [row] : [], isWeek ? [] : [row], { today: cutoff, skipSuspended: true });
+    for (const item of items) events.push({
+      ...item, label: item.role, isoDate: toIsoDate(resolveRowDate(row)), weekdayPill: isWeek ? row.weekdayPill : undefined,
+    });
+  }
+  await db.calendarFeed.update({ where: { id: feed.id }, data: { lastFetchedAt: new Date() } });
+  return new Response(generateIcal(events, feed.person.name, feed.congregation.code), { headers: {
+    'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-cache', 'Content-Disposition': 'inline; filename="schedule.ics"',
+  } });
+}

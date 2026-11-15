@@ -28,6 +28,7 @@ model Congregation {
   weekendRows     WeekendRow[]
   people          Person[]
   changeLogs      ChangeLog[]
+  calendarFeeds   CalendarFeed[]
   publications    Publication[]
   literatureSubscriptions LiteratureSubscription[]
   literatureRequests LiteratureRequest[]
@@ -73,6 +74,7 @@ model Person {
   literatureSubscriptions LiteratureSubscription[]
   literatureRequests LiteratureRequest[]
   literatureDeliveries LiteratureDelivery[]
+  calendarFeed CalendarFeed?
 
   @@unique([congregationId, name])
 }
@@ -346,4 +348,15 @@ model McpToken {
   createdAt DateTime @default(now())
   lastUsedAt DateTime?
   revokedAt DateTime?
+}
+
+model CalendarFeed {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  personId Int @unique
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  token String @unique
+  createdAt DateTime @default(now())
+  lastFetchedAt DateTime?
 }

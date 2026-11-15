@@ -5,11 +5,12 @@ import { resolvePerson, resolvePublication } from './resolution.mjs';
 
 const tools = [{ name: 'example', description: '範例', inputSchema: {}, handler: async () => ({ summary: '完成', data: { name: '完成' } }) }];
 test('JSON-RPC initialization, discovery, calls and notifications', async () => {
+  const userContext = { user: { canLiterature: true } };
   const request = (method, params = {}) => ({ jsonrpc: '2.0', id: 1, method, params });
   assert.equal((await dispatch(request('initialize', { protocolVersion: '2024-11-05' }), {}, tools)).result.protocolVersion, '2024-11-05');
   assert.equal((await dispatch(request('initialize', { protocolVersion: 'other' }), {}, tools)).result.protocolVersion, '2025-06-18');
-  assert.equal((await dispatch(request('tools/list'), {}, tools)).result.tools[0].name, 'example');
-  assert.equal((await dispatch(request('tools/call', { name: 'example' }), {}, tools)).result.structuredContent.data.name, '完成');
+  assert.equal((await dispatch(request('tools/list'), userContext, tools)).result.tools[0].name, 'example');
+  assert.equal((await dispatch(request('tools/call', { name: 'example' }), userContext, tools)).result.structuredContent.data.name, '完成');
   assert.equal((await dispatch(request('missing'), {}, tools)).error.code, -32601);
   assert.equal(await dispatch({ jsonrpc: '2.0', method: 'notifications/initialized' }, {}, tools), null);
 });
