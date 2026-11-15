@@ -12,13 +12,37 @@ export function seriesPublication(items, series, language) {
   return issues[0] || items.find((p) => p.code === series && p.language === language) || null;
 }
 
-export default function PubThumb({ publication, code, name }) {
-  const label = name || publication?.name || code || '書刊';
+export function issueLabel(code) {
+  const series = seriesOf(code || '');
+  if (!series) return code || '書刊';
+  const match = /^(?:wlp|mwb|wp|w|g)(\d{2})\.(\d{1,2})$/.exec(code);
+  const unit = ['g', 'wp'].includes(series) ? '期' : '月';
+  return `${match[1]}年${Number(match[2])}${unit}`;
+}
+
+export default function PubThumb({ publication, code, name, size = 'mini', language, format }) {
+  const coverCode = code || publication?.code || '書刊';
+  const label = name || publication?.name || coverCode;
+  const series = seriesOf(coverCode);
+  const displayCode = size === 'mini' ? series || coverCode : coverCode;
+  const category = ['w', 'wlp', 'mwb'].includes(series) ? 'study'
+    : ['g', 'wp'].includes(series) ? 'magazine' : publication?.category || 'other';
+  const coverFormat = format || publication?.format || (series === 'wlp' ? 'large' : 'standard');
+  const coverLanguage = language || publication?.language;
+  const markers = [coverFormat === 'large' ? '大字' : coverFormat === 'pocket' ? '袖珍' : '',
+    coverLanguage === 'ENG' ? '英' : coverLanguage === 'JPN' ? '日' : ''].filter(Boolean);
   return (
-    <span className="lit-thumb">
-      {publication?.coverUrl ? <img src={publication.coverUrl} alt="" /> : <span className="lit-thumb__placeholder">{code || publication?.code || '書刊'}</span>}
-      <span className="lit-thumb__code">{code || publication?.code}</span>
-      <span>{label}</span>
+    <span className={`lit-cover lit-cover--${category} lit-cover--${size}`} aria-label={label}>
+      {publication?.coverUrl ? <img src={publication.coverUrl} alt="" loading="lazy" /> : (
+        <span className="lit-cover__print">
+          <span className={`lit-cover__code${size === 'mini' && displayCode.length > 4 ? ' lit-cover__code--long' : ''}`}>
+            {size === 'mini' ? displayCode : displayCode.split(/(?<=[.-])/).map((part, index) => (
+              <span key={index}>{part}{/[.-]$/.test(part) && <wbr />}</span>
+            ))}
+          </span>
+        </span>
+      )}
+      {markers.length > 0 && <span className="lit-cover__tag">{markers.join(' · ')}</span>}
     </span>
   );
 }

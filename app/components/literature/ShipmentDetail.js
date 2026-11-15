@@ -1,13 +1,13 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import PubThumb, { GROUPS, groupOf, sameId } from './PubThumb';
+import PubThumb, { GROUPS, groupOf, issueLabel, sameId } from './PubThumb';
 
 export default function ShipmentDetail({ id, items, request, onBack }) {
   const [data, setData] = useState(null);
   const [deliveries, setDeliveries] = useState([]);
   const [error, setError] = useState('');
   const [pending, setPending] = useState({});
-  const [expanded, setExpanded] = useState({});
+  const [batchPending, setBatchPending] = useState(false);
   const load = useCallback(async () => {
     try {
       const [detail, result] = await Promise.all([request(`/api/literature/shipments/${id}`), request(`/api/literature/deliveries?shipmentId=${id}`)]);
@@ -32,9 +32,11 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
       if (existing) await request(`/api/literature/deliveries/${existing.id}`, { method: 'DELETE' });
       else await request('/api/literature/deliveries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ personId: recipient.personId, publicationId, quantity: recipient.quantity, shipmentId: id, ...(recipient.requestId ? { requestId: recipient.requestId } : {}) }) });
       await load();
+      return true;
     } catch (err) {
       setDeliveries(original);
       setError(err.message);
+      return false;
     } finally { setPending((prev) => ({ ...prev, [key]: false })); }
   }
   async function remove() {
@@ -50,23 +52,68 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
   }));
   const members = [...people.values()];
   const isDone = (p) => p.items.every(({ recipient, publication }) => !!deliveryFor(recipient, publication.id));
+  const doneCount = members.filter(isDone).length;
+  const disabled = batchPending || Object.values(pending).some(Boolean);
+  async function togglePerson(person) {
+    const done = isDone(person);
+    setBatchPending(true);
+    for (const { recipient, publication } of person.items) {
+      if (!!deliveryFor(recipient, publication.id) !== done) {
+        if (!await toggle(recipient, publication.id)) break;
+      }
+    }
+    setBatchPending(false);
+  }
   return <div>
-    <button className="btn" onClick={onBack}>← 返回到貨</button>
-    <div className="lit-header"><div><h1>裝箱單 {data.shipment.slipNumber}</h1><span>{data.shipment.shippedAt?.slice(0, 10) || '日期未提供'} · 已發 {members.filter(isDone).length} / {members.length} 人</span></div><details><summary className="btn">更多</summary><button className="btn btn--danger" onClick={remove}>刪除裝箱單</button></details></div>
+    <button className="lit-back" onClick={onBack}>‹ 到貨</button>
+    <div className="lit-detail-header">
+      <div><strong>裝箱單 {data.shipment.slipNumber}</strong>
+        <span>{data.shipment.shippedAt?.slice(0, 10) || '日期未提供'}</span></div>
+      <details className="lit-menu"><summary aria-label="更多選項">…</summary>
+        <button className="btn btn--danger" onClick={remove}>刪除裝箱單</button>
+      </details>
+    </div>
+    <div className="lit-progress-label">已發 {doneCount} / {members.length} 人</div>
+    <progress className="lit-progress" max={members.length || 1} value={doneCount} />
     {error && <div className="imp-error" role="alert">{error}</div>}
-    <div className="lit-group-grid">{GROUPS.map((group) => {
+    {GROUPS.map((group) => {
       const grouped = members.filter((p) => groupOf(p) === group);
       if (!grouped.length) return null;
-      return <section key={group}><h2 className="lit-category">{group === '未分組' ? group : `服務小組 ${group}`}</h2>{grouped.map((p) => <article key={p.personId} className={`lit-sort-card${isDone(p) ? ' lit-sort-card--done' : ''}`}>
-        <button className="lit-sort-toggle" onClick={() => setExpanded((prev) => ({ ...prev, [p.personId]: !prev[p.personId] }))} aria-expanded={!isDone(p) || !!expanded[p.personId]}><strong>{isDone(p) && '✓ '}{p.name}</strong>{isDone(p) && <span>{expanded[p.personId] ? '收合' : '展開'}</span>}</button>
-        <div className="lit-sort-items" hidden={isDone(p) && !expanded[p.personId]}>{p.items.map(({ recipient, publication }, index) => {
-          const key = `${recipient.personId}-${publication.id}-${recipient.requestId || 'subscription'}`;
-          return <label className="lit-sort-item" key={`${key}-${index}`}><PubThumb publication={publication} /><span>×{recipient.quantity} <span className="lit-badge">{recipient.source === 'subscription' ? '定期' : '單次'}</span> {recipient.short && <span className="lit-badge lit-badge--short">不足</span>}</span><input type="checkbox" checked={!!deliveryFor(recipient, publication.id)} disabled={Object.values(pending).some(Boolean)} onChange={() => toggle(recipient, publication.id)} aria-label={`${p.name} ${publication.name} 已發放`} /></label>;
-        })}</div>
-      </article>)}</section>;
+      return <section key={group}>
+        <h2 className="lit-category">{group === '未分組' ? group : `${group} 組`}</h2>
+        <div className="lit-grid">{grouped.map((p) => <article key={p.personId}
+          className={`lit-sort-card${isDone(p) ? ' lit-sort-card--done' : ''}`}
+          onClick={() => { if (!disabled) togglePerson(p); }}>
+          <button className="lit-sort-toggle" disabled={disabled} onClick={(event) => { event.stopPropagation(); togglePerson(p); }}
+            aria-label={`${p.name}，${isDone(p) ? '取消全部發放' : '全部標為已發放'}`}>
+            <strong>{p.name}</strong><span className="lit-round-check" aria-hidden="true">{isDone(p) ? '✓' : ''}</span>
+          </button>
+          <div className="lit-sort-items">{p.items.map(({ recipient, publication }, index) => {
+            const key = `${recipient.personId}-${publication.id}-${recipient.requestId || 'subscription'}`;
+            const delivered = !!deliveryFor(recipient, publication.id);
+            return <button className="lit-sort-item" key={`${key}-${index}`} disabled={disabled}
+              aria-pressed={delivered} onClick={(event) => { event.stopPropagation(); toggle(recipient, publication.id); }}>
+              <PubThumb publication={publication} />
+              <span>{issueLabel(publication.code)} ×{recipient.quantity}
+                {recipient.source !== 'subscription' && <small>單次</small>}
+                {recipient.short && <small className="lit-short">不足</small>}
+                {delivered && <small>已發</small>}
+              </span>
+            </button>;
+          })}</div>
+        </article>)}</div>
+      </section>;
+    })}
+    <h2 className="lit-category">入庫</h2>
+    <div className="lit-grid">{data.allocation.filter((entry) => entry.remainder > 0).map((entry) => {
+      const publication = items.find((item) => sameId(item.id, entry.publication?.id)) || entry.publication;
+      return <div className="lit-card lit-remainder" key={entry.line.id}>
+        <PubThumb publication={publication} size="card" />
+        <span className="lit-remainder-tag">剩 {entry.remainder}</span>
+        <span className="lit-card__body"><strong className="lit-card__name">{publication?.name}</strong>
+          <span className="lit-code">{publication?.code}</span></span>
+      </div>;
     })}</div>
-    <h2 className="lit-category">入庫（剩餘）</h2>
-    {data.allocation.filter((entry) => entry.remainder > 0).map((entry) => <div className="lit-preview-line" key={entry.line.id}><PubThumb publication={items.find((item) => sameId(item.id, entry.publication?.id)) || entry.publication} /><strong>剩 {entry.remainder} 本入庫</strong></div>)}
     {!data.allocation.some((entry) => entry.remainder > 0) && <p>沒有剩餘書刊。</p>}
   </div>;
 }
