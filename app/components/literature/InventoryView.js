@@ -16,7 +16,7 @@ const currentMonth = () => {
 export default function InventoryView({ items, request, reloadCatalog }) {
   const [counts, setCounts] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [month, setMonth] = useState(currentMonth);
+  const month = currentMonth();
   const [preview, setPreview] = useState(null);
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
@@ -85,33 +85,30 @@ export default function InventoryView({ items, request, reloadCatalog }) {
     <div>
       <div className="lit-header">
         <h1>每月清點</h1>
-      </div>
-      <div className="lit-inventory-controls">
-        <div className="lit-inventory-month">
-        <input
-          className="field__input lit-month"
-          type="month"
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-        />
-        {!counts.some((count) => count.month === month) && (
-          <button className="btn btn--primary" onClick={start}>開始本月清點</button>
-        )}
-        </div>
-        <label className="btn btn--sm">
-          匯入 JW Hub 庫存報告
-          <input
-            className="lit-file"
-            type="file"
-            accept="application/pdf"
-            disabled={busy}
-            onChange={(e) => {
+        {counts.length > 0 && <details className="lit-menu lit-inventory-menu">
+          <summary aria-label="更多選項">…</summary>
+          <label className="btn btn--sm">
+            匯入 JW Hub 庫存報告
+            <input className="lit-file" type="file" accept="application/pdf" disabled={busy} onChange={(e) => {
               const chosen = e.target.files?.[0];
               e.target.value = '';
               if (chosen) upload(chosen, true);
-            }}
-          />
-        </label>
+            }} />
+          </label>
+        </details>}
+      </div>
+      <div className="lit-inventory-controls">
+        {!counts.some((count) => count.month === month) && (
+          <button className="btn btn--primary" onClick={start}>開始 {Number(month.slice(5))} 月清點</button>
+        )}
+        {!counts.length && <label className="btn btn--sm">
+          匯入 JW Hub 庫存報告
+          <input className="lit-file" type="file" accept="application/pdf" disabled={busy} onChange={(e) => {
+            const chosen = e.target.files?.[0];
+            e.target.value = '';
+            if (chosen) upload(chosen, true);
+          }} />
+        </label>}
       </div>
       {error && <div className="imp-error" role="alert">{error}</div>}
       <div className="lit-shipment-list">

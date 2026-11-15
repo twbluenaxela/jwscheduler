@@ -52,21 +52,10 @@ export default function RequestsView({ people, items, request }) {
     const path = form.type === 'subscription' ? 'subscriptions' : 'requests';
     if (await mutate(`/api/literature/${path}`, json('POST', payload))) setAdding(false);
   }
-  const active = data.subscriptions.filter((s) => s.active);
-  const summary = Object.keys(SERIES).flatMap((series) => Object.keys(LANGUAGES).map((language) => {
-    const total = active.filter((s) => s.series === series && s.language === language)
-      .reduce((sum, s) => sum + s.quantity, 0);
-    const labels = { w: '研讀版', wlp: '研讀版 大字', mwb: '手冊', g: '警醒！', wp: '公眾版' };
-    const suffix = { CHT: '', ENG: ' 英', JPN: ' 日' }[language];
-    return total ? { key: `${series}-${language}`, total, label: labels[series] + suffix } : null;
-  }).filter(Boolean));
   const visiblePeople = people.filter((p) => p.name.includes(query.trim()) &&
     (subscriptionsFor(p.id).some((s) => s.active) || requestsFor(p.id).length));
   return (
     <div>
-      {summary.length > 0 && <div className="lit-stats">{summary.map((stat) => (
-        <div className="lit-stat" key={stat.key}><strong>{stat.total}</strong><span>{stat.label}</span></div>
-      ))}</div>}
       <div className="lit-search">
         <input className="field__input" placeholder="搜尋人員姓名" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button className="btn btn--primary lit-add" aria-label="新增申請" onClick={() => add(null)}>＋</button>
@@ -82,19 +71,32 @@ export default function RequestsView({ people, items, request }) {
             {members.map((p) => {
               const subs = subscriptionsFor(p.id).filter((s) => s.active);
               const requests = requestsFor(p.id);
-              const covers = [
-                ...subs.map((s) => ({ key: `s${s.id}`, publication: seriesPublication(items, s.series, s.language),
-                  code: s.series, name: SERIES[s.series], language: s.language })),
-                ...requests.map((r) => ({ key: `r${r.id}`, publication: publication(r.publicationId) })),
-              ];
+              const first = subs[0];
+              const cover = (first && seriesPublication(items, first.series, first.language)) || publication(requests[0]?.publicationId);
+              const groups = new Map();
+              subs.forEach((subscription) => {
+                if (!groups.has(subscription.series)) groups.set(subscription.series, new Set());
+                groups.get(subscription.series).add(subscription.language);
+              });
+              const labels = { w: '研讀版', wlp: '大字研讀版', mwb: '手冊', es: '天天查考' };
+              const languages = { CHT: '中', ENG: '英', JPN: '日' };
+              const summary = [...groups].map(([series, values]) => {
+                const name = labels[series] || SERIES[series] || seriesPublication(items, series, [...values][0])?.name || series;
+                const suffix = values.size > 1 || !values.has('CHT')
+                  ? ` ${[...values].map((value) => languages[value] || value).join('/')}` : '';
+                return name + suffix;
+              });
               return <button className="lit-person-card" key={p.id} onClick={() => { setError(''); setPerson(p); }}>
-                <span className="lit-person-name">{p.name} {p.groupRole && <small>
-                  {p.groupRole === 'overseer' ? '小組監督' : '助手'}
-                </small>}{requests.some((r) => r.status === 'pending') && <span className="lit-pending-dot" />}</span>
-                <span className="lit-cover-stack">{covers.slice(0, 4).map(({ key, ...cover }) => <PubThumb key={key} {...cover} />)}
-                  {covers.length > 4 && <span className="lit-stack-more">+{covers.length - 4}</span>}
+                {cover && <PubThumb publication={cover} />}
+                <span className="lit-person-content">
+                  <span className="lit-person-name">{p.name} {p.groupRole && <small>
+                    {p.groupRole === 'overseer' ? '小組監督' : '助手'}
+                  </small>}{requests.some((r) => r.status === 'pending') && <span className="lit-pending-dot" />}</span>
+                  {summary.length > 0 && <span className="lit-person-summary">{summary.map((item, index) => (
+                    <span key={item}>{index > 0 && ' · '}<span className="lit-person-summary-item">{item}</span></span>
+                  ))}</span>}
+                  {requests.length > 0 && <span className="lit-person-tag">單次 {requests.length}</span>}
                 </span>
-                <span className="lit-person-summary">定期 {subs.length} · 單次 {requests.length}</span>
               </button>;
             })}
           </div>

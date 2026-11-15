@@ -14,6 +14,8 @@ export default function CountSheet({ id, items, request, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [addQuery, setAddQuery] = useState('');
   const [filter, setFilter] = useState('stock');
   const [report, setReport] = useState('');
   const [adding, setAdding] = useState(false);
@@ -87,13 +89,15 @@ export default function CountSheet({ id, items, request, onBack }) {
   ));
   const hub = hubReportRows(items, lines);
   const stockCount = rows.filter((row) => expected(row) > 0 || row.onHand > 0).length;
-  const monthLabel = count.month.replace(/^(\d{4})-(\d{2})$/, (_, year, month) => `${year}年${Number(month)}月`);
+  const monthLabel = `${Number(count.month.slice(5, 7))}月清點`;
+  const done = count.status === 'done';
 
   async function finish() {
     if (counted < lines.length && !window.confirm('仍有未清點的品項，確定完成清點？')) return;
     await flush();
     try {
       await request(`/api/literature/inventory/${id}`, json('PATCH', { status: 'done' }));
+      setFilter('stock');
       await load();
     } catch (err) {
       setError(err.message);
@@ -190,47 +194,60 @@ export default function CountSheet({ id, items, request, onBack }) {
       >
         ‹ 清點
       </button>
-      <div className="lit-header">
-        <h1>{monthLabel} 清點</h1>
-        <span className="lit-badge">{count.status === 'done' ? '完成' : '草稿'}</span>
+      <div className="lit-header lit-count-header">
+        <h1>{monthLabel}</h1>
+        {!done && <details className="lit-menu lit-count-menu">
+          <summary aria-label="更多選項">…</summary>
+          <div>
+            <button onClick={() => setReport('s28')}>S-28 表</button>
+            <button onClick={() => setReport('hub')}>JW Hub 填寫清單</button>
+            <button onClick={() => { setAddQuery(''); setAdding(true); }}>加入品項</button>
+          </div>
+        </details>}
       </div>
-      <div className="lit-progress-label">已清點 {counted} / {lines.length}</div>
-      <progress className="lit-progress" max={lines.length || 1} value={counted} />
-      <div className="lit-count-actions">
-        <button className="btn btn--sm" onClick={() => setReport('s28')}>S-28 表</button>
-        <button className="btn btn--sm" onClick={() => setReport('hub')}>JW Hub 清單</button>
-        <button className="btn btn--sm" onClick={() => setAdding(true)}>加入品項</button>
+      {done && <div className="lit-count-complete">
+        <div className="lit-count-reports">
+          <button className="btn" onClick={() => setReport('s28')}>S-28 表</button>
+          <button className="btn" onClick={() => setReport('hub')}>JW Hub 填寫清單</button>
+        </div>
+        <p>已完成 · {lines.length} 項</p>
+      </div>}
+      <div className="lit-count-filter-row">
+        <div className="lit-segment lit-count-filters" aria-label="清點篩選">
+          <button aria-pressed={filter === 'stock'} onClick={() => setFilter('stock')}>有庫存 ({stockCount})</button>
+          {!done && <button aria-pressed={filter === 'uncounted'} onClick={() => setFilter('uncounted')}>未清點 ({lines.length - counted})</button>}
+          <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>全部 ({lines.length})</button>
+        </div>
+        <button className="lit-search-toggle" aria-label="搜尋" aria-expanded={searching} onClick={() => {
+          setSearching(!searching);
+          if (searching) setQuery('');
+        }}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
+        </button>
       </div>
-      <div className="lit-segment lit-count-filters" aria-label="清點篩選">
-        <button aria-pressed={filter === 'stock'} onClick={() => setFilter('stock')}>有庫存 ({stockCount})</button>
-        <button aria-pressed={filter === 'uncounted'} onClick={() => setFilter('uncounted')}>未清點 ({lines.length - counted})</button>
-        <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>全部 ({lines.length})</button>
-      </div>
-      <input
-        className="field__input"
-        placeholder="搜尋書刊"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
+      {searching && <div className="lit-count-search">
+        <input className="field__input" placeholder="搜尋書刊" aria-label="搜尋書刊" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button aria-label="清除搜尋" onClick={() => setQuery('')}>✕</button>
+      </div>}
       {error && <div className="imp-error" role="alert">{error}</div>}
       {visible.map((line) => {
         const amount = distributed(line);
         return (
           <article className="lit-count-row" key={line.id}>
             <PubThumb publication={line.publication} />
-            <div className="lit-count-meta">
+            <div className={`lit-count-meta${line.onHand !== null ? ' lit-count-meta--counted' : ''}`}>
               <strong title={line.publication.name}>{line.publication.name}</strong>
-              <span>{line.publication.code} · <button className="lit-opening" onClick={() => {
+              <span>{line.publication.code} · {done ? `原有 ${line.opening}` : <button className="lit-opening" onClick={() => {
                 const value = window.prompt('原有數量', line.opening);
                 if (value !== null && /^\d+$/.test(value)) change(line, { opening: Number(value) });
-              }}>原有 {line.opening}</button> ＋收 {line.received}</span>
+              }}>原有 {line.opening}</button>} ＋收 {line.received}</span>
               {saving[line.id] === '儲存失敗' && <small className="lit-count-error">儲存失敗</small>}
             </div>
             <div className="lit-count-value">
-              {line.onHand === null && <span>應有 {expected(line)}</span>}
+              {!done && line.onHand === null && <span>應有 {expected(line)}</span>}
               <div>
-                {line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}>✓</button>}
-                <input
+                {!done && line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}>✓</button>}
+                {done ? <strong className="lit-count-readonly">{line.onHand ?? '—'}</strong> : <input
                   aria-label={`${line.publication.name} 現有`}
                   type="number"
                   inputMode="numeric"
@@ -242,26 +259,27 @@ export default function CountSheet({ id, items, request, onBack }) {
                       change(line, { onHand: value === '' ? null : Number(value) });
                     }
                   }}
-                />
+                />}
               </div>
-              {amount !== null && <span className={amount < 0 ? 'lit-count-error' : ''}>{amount < 0 ? `多 ${Math.abs(amount)}` : `發 ${amount}`}</span>}
+              {!done && amount !== null && (expected(line) > 0 || line.onHand !== expected(line)) && <span className={amount < 0 ? 'lit-count-error' : ''}>{amount < 0 ? `多 ${Math.abs(amount)}` : `發 ${amount}`}</span>}
             </div>
           </article>
         );
       })}
-      {count.status === 'draft' && (
-        <button className="btn btn--primary lit-count-finish" onClick={finish}>完成清點</button>
-      )}
+      {!done && <div className="lit-count-footer">
+        <span>已清點 {counted} / {lines.length}</span>
+        <button className="btn btn--primary" onClick={finish}>完成清點</button>
+      </div>}
       {adding && (
         <Sheet title="加入品項" close={() => setAdding(false)}>
           <input
             className="field__input"
             placeholder="搜尋書刊"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={addQuery}
+            onChange={(e) => setAddQuery(e.target.value)}
           />
           {matchPublications(
-            query,
+            addQuery,
             items.filter((p) => !lines.some((l) => l.publicationId === p.id)),
             { limit: 100 },
           ).map((p) => (

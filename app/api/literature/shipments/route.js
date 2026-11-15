@@ -2,12 +2,27 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import db from '../../../lib/db';
 import { auth, fail, invalid, mapped, quantity, note } from '../../../lib/literatureApi';
-import { matchShipmentLines } from '../../../lib/literatureShipments.mjs';
+import { allocateShipment, matchShipmentLines, pendingRecipientCount } from '../../../lib/literatureShipments.mjs';
 export async function GET(request) {
   try {
     const congregationId = await auth(request);
-    const shipments = await db.shipment.findMany({ where: { congregationId }, include: { lines: true }, orderBy: { createdAt: 'desc' } });
-    return NextResponse.json({ shipments: mapped(shipments.map(({ lines, ...shipment }) => ({ ...shipment, lineCount: lines.length, totalQuantity: lines.reduce((sum, line) => sum + line.quantity, 0) }))) });
+    const [shipments, publications, subscriptions, requests, deliveries, people] = await Promise.all([
+      db.shipment.findMany({ where: { congregationId }, include: { lines: true }, orderBy: [{ shippedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }] }),
+      db.publication.findMany({ where: { congregationId } }),
+      db.literatureSubscription.findMany({ where: { congregationId } }),
+      db.literatureRequest.findMany({ where: { congregationId } }),
+      db.literatureDelivery.findMany({ where: { congregationId } }),
+      db.person.findMany({ where: { congregationId } }),
+    ]);
+    const latest = shipments[0];
+    const latestDeliveries = latest ? deliveries.filter((delivery) => String(delivery.shipmentId) === String(latest.id)) : [];
+    const allocation = latest ? allocateShipment({ lines: latest.lines, publications, subscriptions, requests, deliveries: latestDeliveries, people }) : [];
+    return NextResponse.json({ shipments: mapped(shipments.map(({ lines, ...shipment }, index) => ({
+      ...shipment,
+      lineCount: lines.length,
+      totalQuantity: lines.reduce((sum, line) => sum + line.quantity, 0),
+      ...(index === 0 ? { pendingPeople: pendingRecipientCount(allocation, latestDeliveries) } : {}),
+    }))) });
   } catch (error) { return fail(error); }
 }
 export async function POST(request) {
