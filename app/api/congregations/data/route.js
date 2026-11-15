@@ -75,6 +75,8 @@ function mapPerson(person) {
     awayNote: person.awayNote ?? '',
     assignmentNote: person.assignmentNote ?? '',
     assignmentIntervalMonths: person.assignmentIntervalMonths ?? 0,
+    serviceGroup: person.serviceGroup,
+    groupRole: person.groupRole,
     lineUserId: person.lineUserId ?? '',
     recent: [],
   };

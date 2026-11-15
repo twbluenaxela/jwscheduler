@@ -1,7 +1,7 @@
 'use client';
 import Image from 'next/image';
 
-export default function Sidebar({ page, setPage, congName, scheduleStats, role, onAdmin }) {
+export default function Sidebar({ page, setPage, congName, scheduleStats, role, onAdmin, canLiterature }) {
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const isSysadmin = role === 'SYSADMIN';
   const items = [
@@ -34,6 +34,10 @@ export default function Sidebar({ page, setPage, congName, scheduleStats, role, 
           <path d="M16 6.5a2.7 2.7 0 0 1 0 5.2M17.5 19c0-2.2-1-3.8-2.5-4.6" />
         </svg>
       ),
+    },
+    {
+      id: 'literature', label: '書刊',
+      icon: <svg viewBox="0 0 24 24" className="navicon"><path d="M4 5.5C7 4 10 4.5 12 6v14c-2-1.5-5-2-8-.5zM20 5.5C17 4 14 4.5 12 6v14c2-1.5 5-2 8-.5z" /></svg>,
     },
     {
       id: 'import',
@@ -72,7 +76,7 @@ export default function Sidebar({ page, setPage, congName, scheduleStats, role, 
         {congName && <span className="brand__cong">{congName}</span>}
       </div>
       <nav className="navlist">
-        {items.filter((i) => canEdit || (i.id !== 'import' && i.id !== 'people')).map((item) => (
+        {items.filter((i) => (i.id !== 'literature' || canLiterature) && (canEdit || (i.id !== 'import' && i.id !== 'people'))).map((item) => (
           <button
             key={item.id}
             className="navitem"

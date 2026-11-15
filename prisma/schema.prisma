@@ -28,6 +28,7 @@ model Congregation {
   weekendRows     WeekendRow[]
   people          Person[]
   changeLogs      ChangeLog[]
+  publications    Publication[]
 }
 
 model User {
@@ -36,6 +37,7 @@ model User {
   email          String        @unique
   displayName    String?
   role           String        @default("VIEWER")  // "SYSADMIN" | "ADMIN" | "VIEWER"
+  canLiterature  Boolean       @default(false)
   congregationId Int?
   congregation   Congregation? @relation(fields: [congregationId], references: [id])
   createdAt      DateTime      @default(now())
@@ -54,6 +56,8 @@ model Person {
   tags           String[]
   status         String       @default("active")
   awayNote       String?
+  serviceGroup   String?
+  groupRole      String?
   assignmentNote String?
   assignmentIntervalMonths Int @default(0)
   lineUserId     String?
@@ -179,4 +183,37 @@ model WeekendRow {
   note           String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+}
+
+model Publication {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  code String
+  name String
+  category String
+  language String @default("CHT")
+  format String @default("standard")
+  itemNumber String?
+  aliases String[]
+  issue String?
+  note String?
+  onS28 Boolean @default(false)
+  s28Order Int?
+  active Boolean @default(true)
+  coverToken String? @unique
+  cover PublicationCover?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([congregationId, code, language, format])
+  @@index([congregationId])
+}
+
+model PublicationCover {
+  id Int @id @default(autoincrement())
+  publicationId Int @unique
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  mime String
+  data Bytes
+  updatedAt DateTime @updatedAt
 }

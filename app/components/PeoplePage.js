@@ -137,6 +137,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
   const RECENT_DEFAULT = 3;
 
   const [query, setQuery] = useState('');
+  const [groupFilter, setGroupFilter] = useState('all');
   const [selectedId, setSelectedId] = useState('');
   const [nextId, setNextId] = useState(1);
   const [error, setError] = useState('');
@@ -147,8 +148,8 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
   const isMobile = useIsMobile();
 
   const filteredPeople = useMemo(() => {
-    return people.filter((person) => !query || person.name.includes(query));
-  }, [people, query]);
+    return people.filter(person => (!query || person.name.includes(query)) && (groupFilter === 'all' || (groupFilter === 'none' ? !person.serviceGroup : person.serviceGroup === groupFilter)));
+  }, [people, query, groupFilter]);
 
   // No auto-fallback: when nothing is selected, selectedPerson is undefined and
   // the detail card is hidden (the list recenters). Selection is explicit.
@@ -373,6 +374,8 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
           </select>
         </label>
 
+        <label className="field"><span className="field__label">小組</span><select className="field__input field__select" value={selectedPerson.serviceGroup || ''} onChange={e => updateSelected({ serviceGroup: e.target.value || null })}><option value="">未分組</option>{['A','B','C','D','E'].map(g => <option key={g} value={g}>{g}組</option>)}</select></label>
+        <label className="field"><span className="field__label">小組職務</span><select className="field__input field__select" value={selectedPerson.groupRole || ''} onChange={e => updateSelected({ groupRole: e.target.value || null })}><option value="">無</option><option value="overseer">小組監督</option><option value="assistant">小組助手</option></select></label>
         <label className="field">
           <span className="field__label">建議指派間隔</span>
           <select
@@ -516,6 +519,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
+          <select className="settings-role-select" aria-label="小組篩選" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}><option value="all">全部小組</option>{['A','B','C','D','E'].map(g => <option key={g} value={g}>{g}組</option>)}<option value="none">未分組</option></select>
           {canEdit && <button className="btn btn--primary" onClick={addPerson}>＋ 新增人員</button>}
         </div>
       </div>
@@ -551,6 +555,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
                   <span className={`g-badge ${person.g === 'M' ? 'g-m' : 'g-f'}`}>
                     {person.g === 'M' ? '弟兄' : '姊妹'}
                   </span>
+                  {person.serviceGroup && <span className="settings-badge">{person.serviceGroup}組</span>}
                   {person.appt && person.appt !== '—' && <span className="appt">{person.appt}</span>}
                   {person.assignmentIntervalMonths > 0 && (
                     <span className="preference-tag">間隔 {person.assignmentIntervalMonths} 個月</span>

@@ -17,6 +17,8 @@ function personPayload(body) {
   if ('assignmentIntervalMonths' in body) {
     data.assignmentIntervalMonths = normalizeAssignmentIntervalMonths(body.assignmentIntervalMonths);
   }
+  if ('serviceGroup' in body) data.serviceGroup = ['A', 'B', 'C', 'D', 'E'].includes(body.serviceGroup) ? body.serviceGroup : null;
+  if ('groupRole' in body) data.groupRole = ['overseer', 'assistant'].includes(body.groupRole) ? body.groupRole : null;
   if ('lineUserId' in body) data.lineUserId = body.lineUserId?.trim() || null;
   return data;
 }
@@ -32,6 +34,8 @@ function mapPerson(person) {
     awayNote: person.awayNote ?? '',
     assignmentNote: person.assignmentNote ?? '',
     assignmentIntervalMonths: person.assignmentIntervalMonths ?? 0,
+    serviceGroup: person.serviceGroup,
+    groupRole: person.groupRole,
     lineUserId: person.lineUserId ?? '',
     recent: [],
   };
