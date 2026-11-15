@@ -220,13 +220,14 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
   const card = (p) => (
     <button
       key={p.id}
-      className={`lit-card${p.active ? '' : ' lit-card--inactive'}`}
+      className={`lit-card${p.active ? '' : ' lit-card--inactive'}${p.coverUrl ? '' : ' lit-card--placeholder'}`}
       onClick={() => edit(p)}
     >
-      <PubThumb publication={p} size="card" />
+      {p.coverUrl && <PubThumb publication={p} size="card" />}
       <span className="lit-card__body">
+        {!p.coverUrl && <span className="lit-card__placeholder-code">{p.code}</span>}
         <strong className="lit-card__name">{p.note && <span className="lit-note-dot" />}{p.name}</strong>
-        <span className="lit-code">{p.code}</span>
+        {p.coverUrl ? <span className="lit-code">{p.code}</span> : <span className="lit-code">{[FORMAT_LABELS[p.format], LANGUAGE_LABELS[p.language]].filter(Boolean).join(' · ')}</span>}
       </span>
     </button>
   );

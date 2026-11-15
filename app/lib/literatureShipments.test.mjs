@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { seriesOf, issueOf, hubLanguage, splitHubCode, parsePackingSlip, matchShipmentLines, allocateShipment } from './literatureShipments.mjs';
+import { seriesOf, issueOf, hubLanguage, splitHubCode, parsePackingSlip, matchShipmentLines, allocateShipment, pendingRecipientCount } from './literatureShipments.mjs';
 
 test('periodical codes and Hub languages', () => {
   assert.equal(seriesOf('wlp27.02'), 'wlp');
@@ -41,4 +41,23 @@ test('allocates requests before subscriptions and records shortages and deliveri
   assert.equal(result.recipients[1].short, true);
   assert.equal(result.allocated, 3);
   assert.equal(result.remainder, 0);
+});
+
+test('counts distinct people with an undelivered recipient entry', () => {
+  const allocation = [
+    { publication: { id: 10 }, recipients: [{ personId: 1 }, { personId: '1', requestId: 5 }, { personId: 2 }] },
+    { publication: { id: '11' }, recipients: [{ personId: 2 }, { personId: 3, requestId: 8 }] },
+  ];
+  const deliveries = [
+    { personId: '1', publicationId: '10', requestId: null },
+    { personId: 2, publicationId: 10, requestId: 99 },
+    { personId: '3', publicationId: 11, requestId: '8' },
+  ];
+  assert.equal(pendingRecipientCount(allocation, deliveries), 2);
+  assert.equal(pendingRecipientCount([], deliveries), 0);
+  assert.equal(pendingRecipientCount(allocation, [...deliveries,
+    { personId: 1, publicationId: 10, requestId: '5' },
+    { personId: '2', publicationId: '10' },
+    { personId: 2, publicationId: 11 },
+  ]), 0);
 });

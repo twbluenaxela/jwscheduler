@@ -3,9 +3,9 @@ import { useCallback, useEffect, useState } from 'react';
 import PubThumb, { Sheet } from './PubThumb';
 import ShipmentDetail from './ShipmentDetail';
 
-export default function ShipmentsView({ items, request, reloadCatalog }) {
+export default function ShipmentsView({ items, request, reloadCatalog, initialId }) {
   const [shipments, setShipments] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(initialId || null);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);

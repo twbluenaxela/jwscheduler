@@ -1,6 +1,15 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import PubThumb, { GROUPS, groupOf, issueLabel, sameId } from './PubThumb';
+import { seriesOf } from '../../lib/literatureShipments.mjs';
+
+const shortSeries = { w: '研讀版', wlp: '大字', mwb: '手冊', g: '警醒', wp: '公眾版' };
+
+function itemLabel(publication) {
+  const series = seriesOf(publication?.code || '');
+  const language = publication?.language === 'ENG' ? ' 英' : publication?.language === 'JPN' ? ' 日' : '';
+  return `${shortSeries[series] || publication?.name || publication?.code || '書刊'}${language}`;
+}
 
 export default function ShipmentDetail({ id, items, request, onBack }) {
   const [data, setData] = useState(null);
@@ -8,6 +17,7 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
   const [error, setError] = useState('');
   const [pending, setPending] = useState({});
   const [batchPending, setBatchPending] = useState(false);
+  const [expanded, setExpanded] = useState({});
   const load = useCallback(async () => {
     try {
       const [detail, result] = await Promise.all([request(`/api/literature/shipments/${id}`), request(`/api/literature/deliveries?shipmentId=${id}`)]);
@@ -54,6 +64,13 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
   const isDone = (p) => p.items.every(({ recipient, publication }) => !!deliveryFor(recipient, publication.id));
   const doneCount = members.filter(isDone).length;
   const disabled = batchPending || Object.values(pending).some(Boolean);
+  const issues = [...new Set(data.allocation.filter((entry) => entry.recipients.length).map((entry) => {
+    const publication = items.find((item) => sameId(item.id, entry.publication?.id)) || entry.publication;
+    const series = seriesOf(publication?.code || '');
+    return series ? `${shortSeries[series]} ${issueLabel(publication.code)}` : publication?.name || publication?.code || '書刊';
+  }))];
+  const remainder = data.allocation.filter((entry) => entry.remainder > 0);
+  const shippedDate = /^(\d{4})-(\d{2})-(\d{2})/.exec(data.shipment.shippedAt || '');
   async function togglePerson(person) {
     const done = isDone(person);
     setBatchPending(true);
@@ -68,11 +85,12 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
     <button className="lit-back" onClick={onBack}>‹ 到貨</button>
     <div className="lit-detail-header">
       <div><strong>裝箱單 {data.shipment.slipNumber}</strong>
-        <span>{data.shipment.shippedAt?.slice(0, 10) || '日期未提供'}</span></div>
+        <span>{shippedDate ? `${Number(shippedDate[2])}/${Number(shippedDate[3])}` : '日期未提供'}</span></div>
       <details className="lit-menu"><summary aria-label="更多選項">…</summary>
         <button className="btn btn--danger" onClick={remove}>刪除裝箱單</button>
       </details>
     </div>
+    {issues.length > 0 && <p className="lit-shipment-issues">{issues.join(' · ')}</p>}
     <div className="lit-progress-label">已發 {doneCount} / {members.length} 人</div>
     <progress className="lit-progress" max={members.length || 1} value={doneCount} />
     {error && <div className="imp-error" role="alert">{error}</div>}
@@ -81,38 +99,49 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
       if (!grouped.length) return null;
       return <section key={group}>
         <h2 className="lit-category">{group === '未分組' ? group : `${group} 組`}</h2>
-        <div className="lit-grid">{grouped.map((p) => <article key={p.personId}
-          className={`lit-sort-card${isDone(p) ? ' lit-sort-card--done' : ''}`}
-          onClick={() => { if (!disabled) togglePerson(p); }}>
-          <button className="lit-sort-toggle" disabled={disabled} onClick={(event) => { event.stopPropagation(); togglePerson(p); }}
-            aria-label={`${p.name}，${isDone(p) ? '取消全部發放' : '全部標為已發放'}`}>
-            <strong>{p.name}</strong><span className="lit-round-check" aria-hidden="true">{isDone(p) ? '✓' : ''}</span>
-          </button>
-          <div className="lit-sort-items">{p.items.map(({ recipient, publication }, index) => {
-            const key = `${recipient.personId}-${publication.id}-${recipient.requestId || 'subscription'}`;
-            const delivered = !!deliveryFor(recipient, publication.id);
-            return <button className="lit-sort-item" key={`${key}-${index}`} disabled={disabled}
-              aria-pressed={delivered} onClick={(event) => { event.stopPropagation(); toggle(recipient, publication.id); }}>
-              <PubThumb publication={publication} />
-              <span>{issueLabel(publication.code)} ×{recipient.quantity}
-                {recipient.source !== 'subscription' && <small>單次</small>}
-                {recipient.short && <small className="lit-short">不足</small>}
-                {delivered && <small>已發</small>}
-              </span>
-            </button>;
-          })}</div>
-        </article>)}</div>
+        <div>{grouped.map((p) => {
+          const done = isDone(p);
+          return <div className={`lit-delivery-person${done ? ' lit-delivery-person--done' : ''}`} key={p.personId}>
+            <div className="lit-delivery-row">
+              <button className="lit-delivery-main" disabled={disabled} onClick={() => togglePerson(p)}
+                aria-label={`${p.name}，${done ? '取消全部發放' : '全部標為已發放'}`}>
+                <span className="lit-round-check" aria-hidden="true">{done ? '✓' : ''}</span>
+                <span className="lit-delivery-copy">
+                  <span><strong>{p.name}</strong> {p.groupRole && <small>{p.groupRole === 'overseer' ? '小組監督' : '助手'}</small>}</span>
+                  <span className="lit-delivery-summary">{p.items.map(({ recipient, publication }, index) => <span key={index}>
+                    {index > 0 && ' · '}{itemLabel(publication)} {recipient.quantity}
+                    {recipient.source !== 'subscription' && <small>單次</small>}
+                    {recipient.short && <small className="lit-short">不足</small>}
+                  </span>)}</span>
+                </span>
+              </button>
+              <button className="lit-delivery-expand" aria-label="逐項發放" aria-expanded={!!expanded[p.personId]}
+                onClick={() => setExpanded((prev) => ({ ...prev, [p.personId]: !prev[p.personId] }))}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={expanded[p.personId] ? 'M6 14l6-6 6 6' : 'M6 10l6 6 6-6'} /></svg>
+              </button>
+            </div>
+            {expanded[p.personId] && <div className="lit-delivery-items">{p.items.map(({ recipient, publication }, index) => {
+              const key = `${recipient.personId}-${publication.id}-${recipient.requestId || 'subscription'}`;
+              const delivered = !!deliveryFor(recipient, publication.id);
+              return <button className="lit-delivery-item" key={`${key}-${index}`} disabled={disabled}
+                aria-pressed={delivered} onClick={() => toggle(recipient, publication.id)}>
+                <span>{itemLabel(publication)} {recipient.quantity}</span><span>{delivered ? '已發' : '未發'}</span>
+              </button>;
+            })}</div>}
+          </div>;
+        })}</div>
       </section>;
     })}
-    <h2 className="lit-category">入庫</h2>
-    <div className="lit-remainder-list">{data.allocation.filter((entry) => entry.remainder > 0).map((entry) => {
-      const publication = items.find((item) => sameId(item.id, entry.publication?.id)) || entry.publication;
-      return <div className="lit-remainder-row" key={entry.line.id}>
-        <PubThumb publication={publication} />
-        <span><strong>{publication?.name}</strong><small>{publication?.code}</small></span>
-        <span>剩 {entry.remainder}</span>
-      </div>;
-    })}</div>
-    {!data.allocation.some((entry) => entry.remainder > 0) && <p>沒有剩餘書刊。</p>}
+    {remainder.length > 0 && <details className="lit-remainder-details">
+      <summary>其餘入庫 {remainder.length} 項</summary>
+      <div className="lit-remainder-list">{remainder.map((entry) => {
+        const publication = items.find((item) => sameId(item.id, entry.publication?.id)) || entry.publication;
+        return <div className="lit-remainder-row" key={entry.line.id}>
+          <PubThumb publication={publication} />
+          <span><strong>{publication?.name}</strong><small>{publication?.code}</small></span>
+          <span>剩 {entry.remainder}</span>
+        </div>;
+      })}</div>
+    </details>}
   </div>;
 }

@@ -76,3 +76,17 @@ export function allocateShipment({ lines, publications, subscriptions, requests,
     return { line, publication, recipients, allocated, remainder: Math.max(0, line.quantity - allocated) };
   });
 }
+
+export function pendingRecipientCount(allocation, deliveries) {
+  const pending = new Set();
+  for (const entry of allocation) {
+    for (const recipient of entry.recipients) {
+      const delivered = deliveries.some((delivery) =>
+        String(delivery.personId) === String(recipient.personId) &&
+        String(delivery.publicationId) === String(entry.publication?.id) &&
+        (recipient.requestId ? String(delivery.requestId) === String(recipient.requestId) : !delivery.requestId));
+      if (!delivered) pending.add(String(recipient.personId));
+    }
+  }
+  return pending.size;
+}
