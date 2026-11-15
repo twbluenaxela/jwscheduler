@@ -23,6 +23,7 @@ const blank = () => ({
   issue: '',
   note: '',
   active: true,
+  requestable: true,
   countable: null,
 });
 const options = (labels) =>
@@ -360,6 +361,7 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
                 {field('別名（以逗號或、分隔）', 'aliases')}
                 {field('期數', 'issue')}
                 {field('備註', 'note')}
+                <label className="field"><span className="field__label">開放申請</span><input type="checkbox" role="switch" checked={form.requestable !== false} onChange={e => setForm({ ...form, requestable: e.target.checked })} /></label>
                 <label className="field">
                   <span className="field__label">納入盤點</span>
                   <select className="field__input" value={form.countable == null ? 'auto' : String(form.countable)}

@@ -1,4 +1,5 @@
 import Icon from './Icon';
+import { useEffect, useState } from 'react';
 import { seriesOf } from '../../lib/literatureShipments.mjs';
 
 export const SERIES = { w: '守望台研讀版', wlp: '守望台研讀版（大字版）', mwb: '聚會手冊', g: '警醒！', wp: '守望台（公眾版）' };
@@ -49,11 +50,14 @@ export default function PubThumb({ publication, code, name, size = 'mini', langu
 }
 
 export function Sheet({ title, close, children }) {
+  const [phase, setPhase] = useState('enter');
+  useEffect(() => { const frame = requestAnimationFrame(() => setPhase('open')); return () => cancelAnimationFrame(frame); }, []);
+  function dismiss() { if (phase === 'exit') return; if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { close(); return; } setPhase('exit'); setTimeout(close, 180); }
   return (
-    <div className="sheet-backdrop open" onClick={close}>
+    <div className={`sheet-backdrop ${phase === 'open' ? 'open' : ''} ${phase === 'exit' ? 'lit-sheet-exit' : ''}`} onClick={dismiss}>
       <div className="sheet lit-sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
         <div className="sheet__grab" />
-        <header className="sheet__head"><strong>{title}</strong><button type="button" className="sheet__close" aria-label="關閉" onClick={close}><Icon name="close" /></button></header>
+        <header className="sheet__head"><strong>{title}</strong><button type="button" className="sheet__close" aria-label="關閉" onClick={dismiss}><Icon name="close" /></button></header>
         <div className="lit-sheet-body">{children}</div>
       </div>
     </div>

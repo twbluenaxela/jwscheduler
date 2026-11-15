@@ -59,6 +59,7 @@ export function allocateShipment({ lines, publications, subscriptions, requests,
     const recipients = [];
     if (!publication) return { line, publication: null, recipients, allocated: 0, remainder: line.quantity };
     const add = (item, source) => {
+      if (item.personId == null) return;
       const person = people.find(p => same(p.id, item.personId) && p.status !== 'inactive');
       if (!person) return;
       const matches = deliveries.filter(d => same(d.personId, person.id) && same(d.publicationId, publication.id) && same(d.shipmentId, line.shipmentId) && (source === 'request' ? same(d.requestId, item.id) : !d.requestId));
@@ -108,6 +109,7 @@ export function handoutItem(publication, recipient, shipmentId = null) {
 
 export function pendingHandouts({ shipments, allocations, deliveries, requests, people }) {
   const grouped = new Map();
+  const guests = [];
   const covered = new Set();
   const add = (person, item) => {
     const key = String(person.id);
@@ -129,15 +131,21 @@ export function pendingHandouts({ shipments, allocations, deliveries, requests, 
   }
   for (const request of requests) {
     if (request.status !== 'received' || covered.has(String(request.id)) || delivered(request.personId, request.publicationId, request.id)) continue;
+    if (request.personId == null && request.publication) {
+      guests.push({ personId: null, guestKey: `guest:${request.id}`, name: request.guestName, serviceGroup: null, guest: true,
+        items: [handoutItem(request.publication, { ...request, requestId: request.id, source: 'request' })] });
+      continue;
+    }
     const person = people.find(p => sameHandoutId(p.id, request.personId) && p.status !== 'inactive');
     const publication = request.publication;
     if (person && publication) add(person, handoutItem(publication, { ...request, requestId: request.id, source: 'request' }));
   }
   const groups = ['A', 'B', 'C', 'D', 'E'];
-  return [...grouped.values()].sort((a, b) => {
+  const roster = [...grouped.values()].sort((a, b) => {
     const group = p => groups.includes(p.serviceGroup) ? groups.indexOf(p.serviceGroup) : groups.length;
     return group(a) - group(b) || a.name.localeCompare(b.name, 'zh-Hant');
   });
+  return [...roster, ...guests];
 }
 
 export function handoutSummary(items) {
