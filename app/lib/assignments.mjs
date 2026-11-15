@@ -32,7 +32,7 @@ export function collectAssignments(name, weeks, weekendRows, { today, now = new 
     const d = resolveRowDate(week, now);
     if (!d || d < cutoff) continue;
     const aMap = new Map((week.assignments ?? []).map((a) => [a.slotId, a.name]));
-    if (aMap.get(`mw${week.id}_chairman`) === name) items.push({ date: week.date, role: '主席' });
+    if (aMap.get(`mw${week.id}_chairman`) === name) items.push({ date: week.date, _d: d, role: '主席' });
     if (aMap.get(`mw${week.id}_openPrayer`) === name) items.push({ date: week.date, _d: d, role: '開始禱告' });
     if (aMap.get(`mw${week.id}_closePrayer`) === name) items.push({ date: week.date, _d: d, role: '結束禱告' });
     for (const part of week.parts ?? []) {

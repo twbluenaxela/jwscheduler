@@ -31,7 +31,7 @@ function context() {
       lines: [{ shipmentId: 9, publicationId: 4, quantity: 3 }] }) },
     inventoryCount: { findFirst: async () => ({ id: 1, month: '2026-11', status: 'done' }) },
   };
-  return { db, congregationId: 1, created };
+  return { db, congregationId: 1, created, user: { canLiterature: true } };
 }
 test('add request creates for unique names and refuses ambiguous people', async () => {
   const ctx = context();

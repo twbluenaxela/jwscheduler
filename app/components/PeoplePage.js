@@ -135,6 +135,23 @@ function createBlankPerson(nextId) {
 
 export default function PeoplePage({ people, setPeople, midweekWeeks = [], weekendRows = [], loading = false, congCode = 'jwscheduler', canEdit = true }) {
   const RECENT_DEFAULT = 3;
+  async function calendarFeed(reset = false) {
+    try {
+      const token = await getToken();
+      const url = `/api/people/${selectedPerson.id}/calendar-feed`;
+      const headers = { Authorization: `Bearer ${token}` };
+      if (reset) {
+        const response = await fetch(url, { method: 'DELETE', headers });
+        if (!response.ok) throw new Error('無法重設連結');
+      }
+      const response = await fetch(url, { method: 'POST', headers });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '無法取得連結');
+      await navigator.clipboard.writeText(data.url);
+      alert('已複製行事曆訂閱連結');
+    } catch (error) { setError(error.message); }
+  }
+
 
   const [query, setQuery] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
@@ -470,6 +487,12 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
       <div className="people-detail__section">
         <div className="people-detail__section-head">
           <span>未來安排</span>
+          {canEdit && selectedPerson && !String(selectedPerson.id).startsWith('new-') && (
+            <span>行事曆訂閱：
+              <button className="btn btn--sm btn--ghost" onClick={() => calendarFeed()}>複製訂閱連結</button>
+              <button className="btn btn--sm btn--ghost" onClick={() => calendarFeed(true)}>重設連結</button>
+            </span>
+          )}
           {upcoming.length > 0 && (
             <button
               className="btn btn--sm btn--ghost"

@@ -19,7 +19,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
   const [mcpName, setMcpName] = useState('我的 Claude');
   const [mcpUrl, setMcpUrl] = useState('');
   const [mcpError, setMcpError] = useState('');
-  const canUseMcp = dbUser?.role === 'SYSADMIN' || dbUser?.canLiterature;
+  const canUseMcp = ['ADMIN', 'SYSADMIN'].includes(dbUser?.role) || dbUser?.canLiterature;
   async function mcpRequest(path, options = {}) {
     const token = await getToken();
     const res = await fetch(path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
