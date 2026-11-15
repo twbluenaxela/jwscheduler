@@ -29,16 +29,24 @@ export async function POST(request) {
       const publications = await tx.publication.findMany({ where: { congregationId } });
       const matched = matchShipmentLines(body.lines, publications);
       const created = await tx.shipment.create({ data: { congregationId, slipNumber, shippedAt, source: body.source ?? 'jwhub-pdf', note: note(body.note) } });
-      for (const line of matched) {
-        let publicationId = line.publicationId;
-        if (!publicationId) {
-          const p = await tx.publication.upsert({ where: { congregationId_code_language_format: { congregationId, code: line.createData.code, language: line.createData.language, format: line.createData.format } }, create: { ...line.createData, congregationId }, update: {} });
-          publicationId = p.id;
-        }
-        await tx.shipmentLine.create({ data: { shipmentId: created.id, publicationId, rawCode: line.rawCode, quantity: line.quantity } });
+      const newPublications = matched.filter((line) => !line.publicationId)
+        .map((line) => ({ ...line.createData, congregationId }));
+      if (newPublications.length) {
+        await tx.publication.createMany({ data: newPublications, skipDuplicates: true });
+        const added = await tx.publication.findMany({ where: { congregationId } });
+        publications.splice(0, publications.length, ...added);
       }
+      const resolved = matchShipmentLines(body.lines, publications);
+      await tx.shipmentLine.createMany({
+        data: resolved.map((line) => ({
+          shipmentId: created.id,
+          publicationId: line.publicationId,
+          rawCode: line.rawCode,
+          quantity: line.quantity,
+        })),
+      });
       return tx.shipment.findUnique({ where: { id: created.id }, include: { lines: true } });
-    });
+    }, { timeout: 60000, maxWait: 10000 });
     return NextResponse.json({ shipment: mapped(shipment) });
   } catch (error) { return fail(error); }
 }

@@ -53,3 +53,45 @@ test('late receipts add missing lines with previous balances without duplicating
     { publicationId: 3, opening: 0, received: 4, onHand: null },
   ]);
 });
+
+test('report import batches inserts and preserves previous balances for matched and new items', async () => {
+  const { importHubReport } = await import('./inventoryServer.js');
+  const publications = [{ id: 1, code: 'be', name: 'Book', category: 'book', language: 'CHT', format: 'standard', active: true }];
+  const operations = [];
+  const tx = {
+    inventoryCount: {
+      findUnique: async ({ where }) => where.id ? { id: 10, status: 'done' } : { id: 10, status: 'draft' },
+      updateMany: async () => ({ count: 1 }),
+      findFirst: async () => ({ lines: [{ publicationId: 1, onHand: 9 }] }),
+    },
+    publication: {
+      findMany: async () => [...publications],
+      createMany: async ({ data, skipDuplicates }) => {
+        operations.push({ type: 'publications', data, skipDuplicates });
+        publications.push(...data.map((p) => ({ ...p, id: 2, active: true })));
+      },
+    },
+    shipment: { findMany: async () => [] },
+    inventoryLine: {
+      createMany: async (args) => operations.push({ type: 'createLines', ...args }),
+      updateMany: async (args) => operations.push({ type: 'updateLines', ...args }),
+    },
+  };
+  const client = {
+    $transaction: async (callback, options) => {
+      assert.deepEqual(options, { timeout: 60000, maxWait: 10000 });
+      return callback(tx);
+    },
+  };
+  const report = { month: '2026-10', language: 'CHT', items: [
+    { code: 'be', name: 'Book', quantity: 4 },
+    { code: 'T-new', name: 'New', quantity: 12 },
+  ] };
+  assert.equal((await importHubReport(1, report, { db: client })).id, 10);
+  assert.equal(operations.filter((op) => op.type === 'publications').length, 1);
+  assert.equal(operations.find((op) => op.type === 'publications').data[0].category, 'toolbox');
+  const inserts = operations.find((op) => op.type === 'createLines');
+  assert.equal(inserts.skipDuplicates, true);
+  assert.ok(inserts.data.some((line) => line.publicationId === 1 && line.opening === 9 && line.onHand === 4));
+  assert.ok(inserts.data.some((line) => line.publicationId === 2 && line.opening === 0 && line.onHand === 12));
+});

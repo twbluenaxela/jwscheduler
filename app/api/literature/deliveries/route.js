@@ -28,7 +28,7 @@ export async function POST(request) {
       const result = await tx.literatureDelivery.create({ data: { congregationId, personId, publicationId, quantity: amount, shipmentId, requestId } });
       if (requestId) await tx.literatureRequest.update({ where: { id: requestId }, data: { status: 'delivered', deliveredAt: result.deliveredAt } });
       return result;
-    });
+    }, { timeout: 60000, maxWait: 10000 });
     return NextResponse.json({ delivery: mapped(delivery) });
   } catch (error) { return fail(error); }
 }
