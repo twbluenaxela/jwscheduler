@@ -17,7 +17,7 @@ export async function PATCH(request) {
       data: { displayName: displayName.trim() },
     });
 
-    return NextResponse.json({ user: { id: user.id, displayName: user.displayName, email: user.email, role: user.role, congregationId: user.congregationId } });
+    return NextResponse.json({ user: { id: user.id, displayName: user.displayName, email: user.email, role: user.role, canLiterature: user.canLiterature, congregationId: user.congregationId } });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -1,7 +1,7 @@
 'use client';
 import Image from 'next/image';
 
-const LABELS = { meetings: '本週聚會', overview: '總覽', people: '人員', import: '匯入 / 匯出' };
+const LABELS = { meetings: '本週聚會', overview: '總覽', people: '人員', literature: '書刊', import: '匯入 / 匯出' };
 
 export default function TopBar({ page }) {
   return (

@@ -8,6 +8,7 @@ import TabBar from './components/TabBar';
 import MeetingsPage from './components/MeetingsPage';
 import OverviewPage from './components/OverviewPage';
 import PeoplePage from './components/PeoplePage';
+import LiteraturePage from './components/LiteraturePage';
 import ImportPage from './components/ImportPage';
 import SettingsPage from './components/SettingsPage';
 import AssignSheet from './components/AssignSheet';
@@ -176,6 +177,7 @@ export default function App() {
   const role = dbUser?.role;
   const isSysadmin = role === 'SYSADMIN';
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
+  const canLiterature = dbUser?.role === 'SYSADMIN' || dbUser?.canLiterature === true;
   const [page, setPage] = useState('meetings');
   const [midweekWeeks, setMidweekWeeks] = useState([]);
   const [view, setView] = useState('midweek');
@@ -193,8 +195,8 @@ export default function App() {
 
   // Viewers are read-only: they can't open the import/export or 人員 pages.
   useEffect(() => {
-    if (!canEdit && (page === 'import' || page === 'people')) setPage('meetings');
-  }, [canEdit, page]);
+    if ((!canEdit && (page === 'import' || page === 'people')) || (page === 'literature' && !canLiterature)) setPage('meetings');
+  }, [canEdit, canLiterature, page]);
 
   // Auth-driven navigation — must run in an effect, never during render.
   useEffect(() => {
@@ -709,7 +711,7 @@ export default function App() {
   return (
     <>
       <div className="shell">
-        <Sidebar page={page} setPage={setPage} congName={congName} scheduleStats={scheduleStats} role={role} onAdmin={() => router.push('/admin')} />
+        <Sidebar page={page} setPage={setPage} congName={congName} scheduleStats={scheduleStats} role={role} canLiterature={canLiterature} onAdmin={() => router.push('/admin')} />
         <TopBar page={page} />
         <div className="content">
           {page === 'meetings' && (
@@ -754,6 +756,7 @@ export default function App() {
               canEdit={canEdit}
             />
           )}
+          {page === 'literature' && canLiterature && <LiteraturePage firebaseUser={firebaseUser} />}
           {page === 'settings' && (
             <SettingsPage
               congSettings={congSettings}
@@ -838,7 +841,7 @@ export default function App() {
           )}
         </div>
       </div>
-      <TabBar page={page} setPage={setPage} role={role} onAdmin={() => router.push('/admin')} />
+      <TabBar page={page} setPage={setPage} role={role} canLiterature={canLiterature} onAdmin={() => router.push('/admin')} />
 
       {sheet && (() => {
         // Recomputed per open sheet (cheap: one pass over the loaded weeks) so

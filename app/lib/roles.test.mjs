@@ -56,3 +56,11 @@ test('admin routes require sysadmin', () => {
     assert.ok(src.includes('isSysadmin'), `${rel} must gate on isSysadmin`);
   }
 });
+
+test('literature permission is explicit except for sysadmins', async () => {
+  const { canLiterature } = await import('./roles.mjs');
+  assert.equal(canLiterature({ role: 'SYSADMIN' }), true);
+  assert.equal(canLiterature({ role: 'VIEWER', canLiterature: true }), true);
+  assert.equal(canLiterature({ role: 'ADMIN' }), false);
+  assert.equal(canLiterature(null), false);
+});

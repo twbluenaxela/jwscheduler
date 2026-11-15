@@ -11,6 +11,8 @@ function personPayload(body) {
     gender: body.g ?? body.gender ?? 'M',
     appointment: body.appt ?? body.appointment ?? '',
     tags: Array.isArray(body.quals) ? body.quals : (Array.isArray(body.tags) ? body.tags : []),
+    serviceGroup: ['A', 'B', 'C', 'D', 'E'].includes(body.serviceGroup) ? body.serviceGroup : null,
+    groupRole: ['overseer', 'assistant'].includes(body.groupRole) ? body.groupRole : null,
     status: body.status ?? 'active',
     awayNote: body.awayNote || null,
     assignmentNote: String(body.assignmentNote ?? '').trim().slice(0, 500) || null,
@@ -29,6 +31,8 @@ function mapPerson(person) {
     awayNote: person.awayNote ?? '',
     assignmentNote: person.assignmentNote ?? '',
     assignmentIntervalMonths: person.assignmentIntervalMonths ?? 0,
+    serviceGroup: person.serviceGroup,
+    groupRole: person.groupRole,
     lineUserId: person.lineUserId ?? '',
     recent: [],
   };

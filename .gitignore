@@ -3,3 +3,6 @@ node_modules
 /_design
 /sample
 .env
+
+# Local roster data (personal info; not for the public repo)
+scripts/data/

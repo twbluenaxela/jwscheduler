@@ -1,6 +1,6 @@
 'use client';
 
-export default function TabBar({ page, setPage, role, onAdmin }) {
+export default function TabBar({ page, setPage, role, onAdmin, canLiterature }) {
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const isSysadmin = role === 'SYSADMIN';
   const items = [
@@ -17,6 +17,10 @@ export default function TabBar({ page, setPage, role, onAdmin }) {
       icon: <svg viewBox="0 0 24 24" className="navicon"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 6.5a2.7 2.7 0 0 1 0 5.2M17.5 19c0-2.2-1-3.8-2.5-4.6"/></svg>,
     },
     {
+      id: 'literature', label: '書刊',
+      icon: <svg viewBox="0 0 24 24" className="navicon"><path d="M4 5.5C7 4 10 4.5 12 6v14c-2-1.5-5-2-8-.5zM20 5.5C17 4 14 4.5 12 6v14c2-1.5 5-2 8-.5z" /></svg>,
+    },
+    {
       id: 'import', label: '匯入',
       icon: <svg viewBox="0 0 24 24" className="navicon"><path d="M12 3.5v10m0 0 3.5-3.5M12 13.5 8.5 10"/><path d="M4.5 15v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3"/></svg>,
     },
@@ -26,7 +30,7 @@ export default function TabBar({ page, setPage, role, onAdmin }) {
     },
   ];
 
-  const visible = items.filter((i) => canEdit || (i.id !== 'import' && i.id !== 'people'));
+  const visible = items.filter((i) => (i.id !== 'literature' || canLiterature) && (canEdit || (i.id !== 'import' && i.id !== 'people')));
   if (isSysadmin && onAdmin) {
     visible.push({
       id: 'admin', label: '管理', isAdmin: true,

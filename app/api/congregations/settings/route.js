@@ -39,7 +39,7 @@ export async function GET(request) {
 
     const congregation = await db.congregation.findUnique({
       where: { id: user.congregationId },
-      include: { users: { select: { id: true, displayName: true, email: true, role: true } } },
+      include: { users: { select: { id: true, displayName: true, email: true, role: true, canLiterature: true } } },
     });
 
     return NextResponse.json({ congregation });

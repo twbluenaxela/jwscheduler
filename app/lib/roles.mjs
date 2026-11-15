@@ -17,3 +17,5 @@ export function canManageCongregation(role) { return role === ROLES.ADMIN || rol
 
 // Roles a congregation ADMIN may assign to members (cannot grant SYSADMIN).
 export const ASSIGNABLE_MEMBER_ROLES = [ROLES.ADMIN, ROLES.VIEWER];
+
+export function canLiterature(user) { return user?.role === ROLES.SYSADMIN || user?.canLiterature === true; }

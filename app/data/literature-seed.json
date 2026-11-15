@@ -1,0 +1,1457 @@
+[
+ {
+  "category": "bible",
+  "itemNumber": "5140",
+  "name": "新世界譯本",
+  "code": "nwt",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 1,
+  "language": "CHT",
+  "aliases": [
+   "聖經"
+  ]
+ },
+ {
+  "category": "bible",
+  "itemNumber": "5142",
+  "name": "新世界譯本（袖珍本）",
+  "code": "nwtpkt",
+  "format": "pocket",
+  "onS28": true,
+  "s28Order": 2,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "bible",
+  "itemNumber": "5100",
+  "name": "其他聖經",
+  "code": "other-bible",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 3,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7305",
+  "name": "會眾聚會邀請單",
+  "code": "inv",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 4,
+  "language": "CHT",
+  "aliases": [
+   "聚會邀請函",
+   "邀請卡"
+  ]
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "8410",
+  "name": "名片（打開的聖經）",
+  "code": "jwcd1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 5,
+  "language": "CHT",
+  "aliases": [
+   "JW網站名片"
+  ]
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "8524",
+  "name": "名片（只有jw.org的標誌）",
+  "code": "jwcd4",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 6,
+  "language": "CHT",
+  "aliases": [
+   "JW網站名片"
+  ]
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "8569",
+  "name": "名片（面對面的聖經課程）",
+  "code": "jwcd9",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 7,
+  "language": "CHT",
+  "aliases": [
+   "免費聖經課程名片"
+  ]
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "8570",
+  "name": "名片（線上進行的聖經課程）",
+  "code": "jwcd10",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 8,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "5445",
+  "name": "美好生命",
+  "code": "lff",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 9,
+  "language": "CHT",
+  "aliases": [
+   "永遠享受美好的生命（書本）",
+   "美好生命"
+  ]
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "65445",
+  "name": "美好生命（體驗版）",
+  "code": "lffi",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 10,
+  "language": "CHT",
+  "aliases": [
+   "永遠享受美好的生命（冊子）",
+   "美好生命體驗版"
+  ]
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "6657",
+  "name": "聽從（詳盡版）",
+  "code": "ll",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 11,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7130",
+  "name": "聖經",
+  "code": "T-30",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 12,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7131",
+  "name": "未來",
+  "code": "T-31",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 13,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7132",
+  "name": "家庭幸福",
+  "code": "T-32",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 14,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7133",
+  "name": "控制世界",
+  "code": "T-33",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 15,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7134",
+  "name": "苦難終止",
+  "code": "T-34",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 16,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7135",
+  "name": "復活",
+  "code": "T-35",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 17,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7136",
+  "name": "王國",
+  "code": "T-36",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 18,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "toolbox",
+  "itemNumber": "7137",
+  "name": "網站傳單",
+  "code": "T-37",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 19,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5414",
+  "name": "課本",
+  "code": "be",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 20,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5340",
+  "name": "聖經學習",
+  "code": "bhs",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 21,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5416",
+  "name": "作見證",
+  "code": "bt",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 22,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5231",
+  "name": "跟隨",
+  "code": "cf",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 23,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5331",
+  "name": "親近",
+  "code": "cl",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 24,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5227",
+  "name": "家庭幸福",
+  "code": "fy",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 25,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5419",
+  "name": "信心的榜樣",
+  "code": "ia",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 26,
+  "language": "CHT",
+  "aliases": [
+   "榜樣"
+  ]
+ },
+ {
+  "category": "book",
+  "itemNumber": "5329",
+  "name": "以賽亞的預言（上）",
+  "code": "ip-1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 27,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5330",
+  "name": "以賽亞的預言（下）",
+  "code": "ip-2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 28,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5232",
+  "name": "耶利米",
+  "code": "jr",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 29,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5425",
+  "name": "耶穌是道路",
+  "code": "jy",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 30,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5422",
+  "name": "王國統治",
+  "code": "kr",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 31,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5427",
+  "name": "學聖經",
+  "code": "lfb",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 32,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5415",
+  "name": "導師",
+  "code": "lr",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 33,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5343",
+  "name": "留在愛裡",
+  "code": "lvs",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 34,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5332",
+  "name": "組織",
+  "code": "od",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 35,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5435",
+  "name": "正確崇拜",
+  "code": "rr",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 36,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5341",
+  "name": "高聲歡唱",
+  "code": "sjj",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 37,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5441",
+  "name": "高聲歡唱（放大本）",
+  "code": "sjjls",
+  "format": "large",
+  "onS28": true,
+  "s28Order": 38,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5442",
+  "name": "高聲歡唱——純歌詞版",
+  "code": "sjjyls",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 39,
+  "language": "CHT",
+  "aliases": [
+   "高聲歡唱（純歌詞版）",
+   "純歌詞版"
+  ]
+ },
+ {
+  "category": "book",
+  "itemNumber": "5339",
+  "name": "青年人問1",
+  "code": "yp1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 40,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5336",
+  "name": "青年人問2",
+  "code": "yp2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 41,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "book",
+  "itemNumber": "5200",
+  "name": "其他書籍",
+  "code": "other-book",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 42,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6618",
+  "name": "Reading and Writing（專心寫讀）",
+  "code": "ay",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 43,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6652",
+  "name": "淺淡聖經",
+  "code": "bm",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 44,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6638",
+  "name": "教育",
+  "code": "ed",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 45,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6659",
+  "name": "好消息",
+  "code": "fg",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 46,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6645",
+  "name": "朋友",
+  "code": "gf",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 47,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6665",
+  "name": "促進家庭幸福",
+  "code": "hf",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 48,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6662",
+  "name": "幸福快樂",
+  "code": "hl",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 49,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6660",
+  "name": "旨意",
+  "code": "jl",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 50,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6647",
+  "name": "心滿意足",
+  "code": "la",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 51,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6654",
+  "name": "生命來自創造嗎?",
+  "code": "lc",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 52,
+  "language": "CHT",
+  "aliases": [
+   "生命來自創造"
+  ]
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6658",
+  "name": "聽從（簡易版）",
+  "code": "ld",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 53,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6655",
+  "name": "生命的起源",
+  "code": "lf",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 54,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6663",
+  "name": "寶寶學聖經",
+  "code": "mb",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 55,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6648",
+  "name": "Road to Life（永生之道）",
+  "code": "ol",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 56,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6639",
+  "name": "平安",
+  "code": "pc",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 57,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6653",
+  "name": "幸福之道",
+  "code": "ph",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 58,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6671",
+  "name": "回到耶和華身邊",
+  "code": "rj",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 59,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6656",
+  "name": "真信心",
+  "code": "rk",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 60,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6630",
+  "name": "死者的靈",
+  "code": "sp",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 61,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6667",
+  "name": "教導",
+  "code": "th",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 62,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6670",
+  "name": "智慧",
+  "code": "wfg",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 63,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6635",
+  "name": "Why Worship God（敬拜上帝）",
+  "code": "wj",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 64,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6664",
+  "name": "聖經小故事",
+  "code": "yc",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 65,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6684",
+  "name": "10個問與答",
+  "code": "ypq",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 66,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "brochure",
+  "itemNumber": "6600",
+  "name": "其他冊子",
+  "code": "other-brochure",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 67,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "form",
+  "itemNumber": "8724",
+  "name": "交易記錄",
+  "code": "S-24",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 68,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "form",
+  "itemNumber": "8704",
+  "name": "傳道報告",
+  "code": "S-4",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 69,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "form",
+  "itemNumber": "8708",
+  "name": "逐戶傳道記錄表",
+  "code": "S-8",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 70,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2018年1期",
+  "code": "g18.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 71,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2018年2期",
+  "code": "g18.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 72,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2018年3期",
+  "code": "g18.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 73,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2019年1期",
+  "code": "g19.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 74,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2019年2期",
+  "code": "g19.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 75,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2019年3期",
+  "code": "g19.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 76,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2020年1期",
+  "code": "g20.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 77,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2020年2期",
+  "code": "g20.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 78,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2020年3期",
+  "code": "g20.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 79,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2021年1期",
+  "code": "g21.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 80,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2021年2期",
+  "code": "g21.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 81,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2021年3期",
+  "code": "g21.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 82,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《警醒！》2022年1期",
+  "code": "g22.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 83,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2018年1期",
+  "code": "wp18.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 84,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2018年2期",
+  "code": "wp18.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 85,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2018年3期",
+  "code": "wp18.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 86,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2019年1期",
+  "code": "wp19.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 87,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2019年2期",
+  "code": "wp19.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 88,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2019年3期",
+  "code": "wp19.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 89,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2020年1期",
+  "code": "wp20.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 90,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2020年2期",
+  "code": "wp20.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 91,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2020年3期",
+  "code": "wp20.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 92,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2021年1期",
+  "code": "wp21.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 93,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2021年2期",
+  "code": "wp21.2",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 94,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2021年3期",
+  "code": "wp21.3",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 95,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "《守望台》2022年1期",
+  "code": "wp22.1",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 96,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "category": "magazine",
+  "itemNumber": null,
+  "name": "所有其他公眾版雜誌",
+  "code": "other-magazine",
+  "format": "standard",
+  "onS28": true,
+  "s28Order": 97,
+  "language": "CHT",
+  "aliases": []
+ },
+ {
+  "code": "w",
+  "name": "守望台研讀版",
+  "category": "study",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "守望台",
+   "研讀版"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "wlp",
+  "name": "守望台研讀版（大字版）",
+  "category": "study",
+  "format": "large",
+  "language": "CHT",
+  "aliases": [
+   "守望台",
+   "研讀版",
+   "大字本"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "w",
+  "name": "The Watchtower (Study Edition)",
+  "category": "study",
+  "format": "standard",
+  "language": "ENG",
+  "aliases": [
+   "守望台",
+   "研讀版"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "w",
+  "name": "ものみの塔（研究用）",
+  "category": "study",
+  "format": "standard",
+  "language": "JPN",
+  "aliases": [
+   "守望台",
+   "研讀版"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "mwb",
+  "name": "傳道與生活聚會手冊",
+  "category": "study",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "手冊",
+   "聚會手冊"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "mwb",
+  "name": "Life and Ministry Meeting Workbook",
+  "category": "study",
+  "format": "standard",
+  "language": "ENG",
+  "aliases": [
+   "手冊",
+   "聚會手冊"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "es27",
+  "name": "天天查考聖經2027",
+  "category": "other",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "天天查考聖經",
+   "每日經文"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "wcg",
+  "name": "鼓起勇氣與上帝同行",
+  "category": "book",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "Courage",
+   "鼓起勇氣"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "scl",
+  "name": "基督徒生活指南",
+  "category": "book",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "nwtls",
+  "name": "聖經新世界譯本（放大本）",
+  "category": "bible",
+  "format": "large",
+  "language": "CHT",
+  "aliases": [
+   "新世界譯本",
+   "聖經"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "gwt2",
+  "name": "上帝的話語就是真理：聖經導讀（阿摩司書－西番雅書）",
+  "category": "book",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "聖經導讀"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "lmd",
+  "name": "Love People",
+  "category": "brochure",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [],
+  "note": "中文名稱待確認",
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-fam",
+  "name": "怎樣讓你的家庭更快樂？（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "家庭傳單"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-ftr",
+  "name": "你想永遠活下去嗎？（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "未來傳單"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-god",
+  "name": "有那麼多神，誰才是真的？（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "上帝傳單"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-jss",
+  "name": "Jesus（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "耶穌傳單"
+  ],
+  "note": "中文名稱待確認",
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-pry",
+  "name": "祈禱有用嗎？（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "禱告傳單"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "wp23.1",
+  "name": "《守望台》2023年1期",
+  "category": "magazine",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "wp25.1",
+  "name": "《守望台》2025年1期",
+  "category": "magazine",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "wp26.1",
+  "name": "《守望台》2026年1期",
+  "category": "magazine",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "ic",
+  "name": "耶和華見證人子女身分卡",
+  "category": "form",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "身分卡"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "dpa",
+  "name": "預立醫療指示",
+  "category": "form",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "醫療卡"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "gwt1",
+  "name": "上帝的話語就是真理：聖經導讀（以西結書－約珥書）",
+  "category": "book",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "聖經導讀"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-dth",
+  "name": "去世的親友還能活過來嗎？（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "復活傳單"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-sfr",
+  "name": "沒有煩惱、沒有痛苦，可能嗎？（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "苦難傳單"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ },
+ {
+  "code": "T-rlg",
+  "name": "信什麼都沒關係嗎？（傳單）",
+  "category": "toolbox",
+  "format": "standard",
+  "language": "CHT",
+  "aliases": [
+   "宗教傳單"
+  ],
+  "note": null,
+  "onS28": false,
+  "s28Order": null,
+  "itemNumber": null
+ }
+]

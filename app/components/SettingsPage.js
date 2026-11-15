@@ -146,6 +146,17 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
     }
   }
 
+  async function changeLiterature(userId, canLiterature) {
+    try {
+      const token = await getToken();
+      const res = await fetch('/api/congregations/members', { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, canLiterature }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setMembers(prev => prev.map(m => m.id === userId ? { ...m, canLiterature: data.user.canLiterature } : m));
+      if (userId === dbUser?.id) setDbUser(prev => ({ ...prev, canLiterature: data.user.canLiterature }));
+    } catch (err) { window.alert(err.message || '變更書刊權限失敗'); }
+  }
+
   const roleLabel = (r) => (r === 'SYSADMIN' ? '系統管理員' : r === 'ADMIN' ? '管理員' : '檢視者');
 
   const profileCard = (
@@ -353,9 +364,10 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
           <div key={m.id} className="settings-member">
             <div className="settings-member__avatar">{(m.displayName || m.email)?.[0]?.toUpperCase()}</div>
             <div className="settings-member__info">
-              <div className="settings-member__name">{m.displayName || m.email}</div>
+              <div className="settings-member__name">{m.displayName || m.email} {m.canLiterature && <span className="settings-badge">書刊</span>}</div>
               <div className="settings-member__email">{m.displayName ? m.email : ''}</div>
             </div>
+            {isAdmin && <label className="lit-permission"><input type="checkbox" checked={!!m.canLiterature} onChange={e => changeLiterature(m.id, e.target.checked)} /> 書刊</label>}
             {isAdmin && m.id !== dbUser?.id && m.role !== 'SYSADMIN' ? (
               <select
                 className="settings-role-select"
