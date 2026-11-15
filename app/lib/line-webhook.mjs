@@ -3,9 +3,11 @@
 // in-memory fake DB and a reply spy — no network, no Prisma singleton. The route
 // file owns signature verification, the real reply call, and HTTP plumbing.
 
+import { ensureCalendarFeed, calendarLinks } from './calendarFeed.mjs';
 import { collectAssignments } from './assignments.mjs';
 
 export const QUERY_KEYWORDS = ['我的安排', '查詢安排', '安排查詢', '節目查詢'];
+export const CALENDAR_KEYWORDS = ['行事曆', '日曆', '訂閱行事曆', '加入行事曆', 'calendar'];
 export const HELP_KEYWORDS = ['說明', '幫助', '指令', 'help', '?', '？'];
 
 // Phone IMEs hand back variant glyphs for characters our keywords spell the
@@ -14,10 +16,10 @@ export const HELP_KEYWORDS = ['說明', '幫助', '指令', 'help', '?', '？'];
 // actually appear in the keyword tables before matching. Only keyword matching
 // is normalized: congregation and person lookups keep the raw text, because a
 // name must still match the roster exactly.
-const KEYWORD_VARIANTS = { 説: '說', 说: '說', 帮: '幫', 询: '詢', 节: '節', 单: '單' };
+const KEYWORD_VARIANTS = { 説: '說', 说: '說', 帮: '幫', 询: '詢', 节: '節', 单: '單', 历: '曆' };
 
 export function normalizeKeyword(text) {
-  return text.toLowerCase().replace(/[説说帮询节单]/g, (c) => KEYWORD_VARIANTS[c]);
+  return text.toLowerCase().replace(/[説说帮询节单历]/g, (c) => KEYWORD_VARIANTS[c]);
 }
 
 export function isHelpText(text) {
@@ -30,9 +32,15 @@ export function isQueryText(text) {
   return QUERY_KEYWORDS.some((kw) => t.includes(normalizeKeyword(kw)));
 }
 
+export function isCalendarText(text) {
+  const normalized = normalizeKeyword(text);
+  return CALENDAR_KEYWORDS.some((keyword) => normalized === normalizeKeyword(keyword));
+}
+
 export const HELP_LINKED = `📋 可用指令：
 
 ▸ 我的安排 — 查詢你目前所有未來排班
+▸ 行事曆 — 把安排自動加到手機行事曆
 ▸ 說明 — 顯示此說明
 
 收到排班通知後如有疑問，請聯絡編排負責人。`;
@@ -60,7 +68,7 @@ export async function handleFollow(event, { reply }) {
 }
 
 // ── Step 2 / Query: Handle text messages ──────────────────────────────────────
-export async function handleMessage(event, { db, reply, now }) {
+export async function handleMessage(event, { db, reply, now, origin }) {
   const userId = event.source?.userId;
   const text = event.message?.text?.trim();
   if (!userId || !text) return;
@@ -76,6 +84,10 @@ export async function handleMessage(event, { db, reply, now }) {
     const isQuery = isQueryText(text);
     if (isHelp) {
       await reply(event.replyToken, HELP_LINKED);
+    } else if (isCalendarText(text)) {
+      const feed = await ensureCalendarFeed(db, linked);
+      const links = calendarLinks(origin, feed.token, linked.name);
+      await reply(event.replyToken, `📅 ${linked.name}，點這個連結就能把你的安排加到手機行事曆，之後有變動會自動更新：\n${links.page}`);
     } else if (isQuery) {
       const [weeks, weekendRows] = await Promise.all([
         db.midweekWeek.findMany({

@@ -86,6 +86,12 @@ export async function POST(request) {
       }),
     ]);
 
+    const feeds = await db.calendarFeed.findMany({
+      where: { personId: { in: people.map((person) => person.id) } },
+      select: { personId: true, lastFetchedAt: true },
+    });
+    const fetchedPeople = new Set(feeds.filter((feed) => feed.lastFetchedAt).map((feed) => feed.personId));
+
     const prevSnapshot = (congregation.publishedSnapshot ?? null);
     const newSnapshot = {};
     let sent = 0, failed = 0, skipped = 0;
@@ -95,8 +101,11 @@ export async function POST(request) {
       const current = collectAssignments(person.name, weeks, weekendRows);
       newSnapshot[person.name] = current;
       const previous = prevSnapshot ? (prevSnapshot[person.name] ?? []) : null;
-      const text = buildMessage(person.name, current, previous);
+      let text = buildMessage(person.name, current, previous);
       if (!text) { skipped++; continue; }
+      if (!fetchedPeople.has(person.id)) {
+        text += '\n\n📅 想讓安排自動出現在手機行事曆？回覆「行事曆」就可以。';
+      }
       try {
         await pushLineMessage(person.lineUserId, text);
         sent++;

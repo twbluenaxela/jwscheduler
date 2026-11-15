@@ -1,7 +1,35 @@
+import { randomBytes } from 'node:crypto';
 import { isMidweekSuspended } from './weekType.mjs';
 import { collectAssignments } from './assignments.mjs';
 import { generateIcal } from './icalExport.js';
 import { resolveRowDate, toIsoDate } from './cnDate.mjs';
+
+export async function ensureCalendarFeed(db, person) {
+  return db.calendarFeed.upsert({
+    where: { personId: person.id },
+    update: {},
+    create: {
+      personId: person.id,
+      congregationId: person.congregationId,
+      token: randomBytes(32).toString('base64url'),
+    },
+  });
+}
+
+export function calendarLinks(origin, token, name) {
+  const page = `${origin}/cal/${token}`;
+  const ics = `${origin}/api/calendar/${token}.ics`;
+  const webcal = `webcal://${new URL(origin).host}/api/calendar/${token}.ics`;
+  const params = `url=${encodeURIComponent(ics)}&name=${encodeURIComponent(`${name} 聚會安排`)}`;
+  return {
+    page,
+    ics,
+    webcal,
+    google: `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcal)}`,
+    outlook: `https://outlook.live.com/calendar/0/addfromweb?${params}`,
+    office: `https://outlook.office.com/calendar/0/addfromweb?${params}`,
+  };
+}
 
 export async function calendarResponse(db, token) {
   const feed = await db.calendarFeed.findUnique({ where: { token: token.replace(/\.ics$/, '') }, include: { person: true, congregation: true } });

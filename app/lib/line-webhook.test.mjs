@@ -134,3 +134,17 @@ test('follow 事件詢問會眾名稱', async () => {
   await handleFollow({ replyToken: 'tok' }, { reply });
   assert.match(replies[0].text, /請先回覆你所屬的會眾名稱/);
 });
+
+test('行事曆指令建立並重用個人連結，也支援簡體及英文', async () => {
+  const db = makeFakeDb(baseSeed);
+  const { replies, reply } = replySpy();
+  for (const text of ['行事曆', '日曆', '訂閱行事曆', '行事历', '加入行事曆', 'CALENDAR']) {
+    await handleMessage(msg('U-wang', text), { db, reply, now: NOW, origin: 'https://example.com' });
+  }
+  assert.equal(db.__stores.calendarFeeds.length, 1);
+  const token = db.__stores.calendarFeeds[0].token;
+  for (const { text } of replies) {
+    assert.match(text, /王大明，點這個連結/);
+    assert.ok(text.endsWith(`https://example.com/cal/${token}`));
+  }
+});
