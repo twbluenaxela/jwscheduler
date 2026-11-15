@@ -37,6 +37,15 @@ export async function GET(request) {
       }, delivery.shipmentId));
       group.deliveryIds.push(delivery.id);
     }
+    for (const row of data.requests.filter(item => item.personId == null && item.status === 'delivered' && item.deliveredAt >= today)) {
+      if (!row.publication) continue;
+      grouped.set(`guest:${row.id}`, {
+        personId: null, guestKey: `guest:${row.id}`, name: row.guestName, serviceGroup: null,
+        guest: true, requestId: row.id, deliveredAt: row.deliveredAt,
+        items: [handoutItem(row.publication, { ...row, requestId: row.id, source: 'request' })],
+        deliveryIds: [],
+      });
+    }
     const olderShipments = data.shipments.slice(1).map(shipment => ({
       id: shipment.id,
       slipNumber: shipment.slipNumber,

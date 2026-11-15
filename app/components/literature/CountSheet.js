@@ -237,16 +237,17 @@ export default function CountSheet({ id, items, request, onBack }) {
           <article className="lit-count-row" key={line.id}>
             <PubThumb publication={line.publication} />
             <div className={`lit-count-meta${line.onHand !== null ? ' lit-count-meta--counted' : ''}`}>
-              <strong title={line.publication.name}>{line.publication.name}</strong>
+              <strong className={expected(line) === 0 && !line.onHand ? 'lit-count-empty' : ''} title={line.publication.name}>{line.publication.name}</strong>
               <span>{line.publication.code} · {done ? `原有 ${line.opening}` : <button className="lit-opening" onClick={() => {
                 const value = window.prompt('原有數量', line.opening);
                 if (value !== null && /^\d+$/.test(value)) change(line, { opening: Number(value) });
-              }}>原有 {line.opening}</button>} ＋收 {line.received}</span>
+              }}>原有 {line.opening}</button>} <span className={line.received > 0 ? "lit-received" : ""}>＋收 {line.received}</span></span>
             </div>
             <div className="lit-count-value">
               {saving[line.id] === '儲存失敗' && <small className="lit-count-error" role="status">儲存失敗</small>}
               {!done && line.onHand === null && <span>應有 {expected(line)}</span>}
               <div>
+                {line.onHand !== null && line.onHand === expected(line) && <span className="lit-count-equal" role="img" aria-label="與應有相同"><Icon name="check" /></span>}
                 {!done && line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}><Icon name="check" /></button>}
                 {done ? <strong className="lit-count-readonly">{line.onHand ?? '—'}</strong> : <input
                   aria-label={`${line.publication.name} 現有`}
@@ -262,7 +263,7 @@ export default function CountSheet({ id, items, request, onBack }) {
                   }}
                 />}
               </div>
-              {!done && amount !== null && (expected(line) > 0 || line.onHand !== expected(line)) && <span className={amount < 0 ? 'lit-count-error' : ''}>{amount < 0 ? `多 ${Math.abs(amount)}` : `發 ${amount}`}</span>}
+              {amount !== null && <span className={amount < 0 ? 'lit-count-error' : amount === 0 ? 'lit-count-zero' : ''}>{amount < 0 ? `多 ${Math.abs(amount)}` : `發 ${amount}`}</span>}
             </div>
           </article>
         );

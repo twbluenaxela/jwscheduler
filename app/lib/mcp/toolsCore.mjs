@@ -100,7 +100,7 @@ return [
     const rows = await ctx.db.literatureRequest.findMany({ where: { congregationId: ctx.congregationId,
       status: a.status || { in: ['pending', 'ordered', 'received'] } }, include: { person: true, publication: true } });
     const grouped = {};
-    for (const row of rows.filter((r) => !a.group || r.person.serviceGroup === a.group)) (grouped[row.person.name] ||= []).push(row);
+    for (const row of rows.filter((r) => !a.group || r.person?.serviceGroup === a.group)) (grouped[row.person?.name || `${row.guestName || '訪客'}（名單外）`] ||= []).push(row);
     return output(`共有 ${Object.keys(grouped).length} 位成員有申請`, grouped);
   }),
   definition('subscription_totals', '訂閱總數 subscription totals JW Hub', {}, [], async (ctx) => output('定期訂閱總數', await totals(ctx))),

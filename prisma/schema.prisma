@@ -14,6 +14,7 @@ model Congregation {
   id              Int          @id @default(autoincrement())
   name            String
   code            String       @unique  // short readable code e.g. "xinwu"
+  literatureFormToken String? @unique
   inviteToken     String       @unique  @default(uuid())
   guestInviteToken String      @unique  @default(dbgenerated("gen_random_uuid()::text"))  // read-only GUEST join link
   meetingDayOffset Int         @default(2)
@@ -32,6 +33,7 @@ model Congregation {
   publications    Publication[]
   literatureSubscriptions LiteratureSubscription[]
   literatureRequests LiteratureRequest[]
+  literatureFormSubmissions LiteratureFormSubmission[]
   shipments Shipment[]
   inventoryCounts InventoryCount[]
   literatureDeliveries LiteratureDelivery[]
@@ -73,6 +75,7 @@ model Person {
 
   literatureSubscriptions LiteratureSubscription[]
   literatureRequests LiteratureRequest[]
+  literatureFormSubmissions LiteratureFormSubmission[]
   literatureDeliveries LiteratureDelivery[]
   calendarFeed CalendarFeed?
 
@@ -213,6 +216,7 @@ model Publication {
   onS28 Boolean @default(false)
   s28Order Int?
   active Boolean @default(true)
+  requestable Boolean @default(true)
   countable Boolean?
   inventoryLines InventoryLine[]
   coverToken String? @unique
@@ -255,18 +259,37 @@ model LiteratureRequest {
   id Int @id @default(autoincrement())
   congregationId Int
   congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
-  personId Int
-  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  personId Int?
+  person Person? @relation(fields: [personId], references: [id], onDelete: Cascade)
   publicationId Int
   publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
   quantity Int @default(1)
   status String @default("pending")
   note String?
+  source String @default("app")
+  guestName String?
+  guestNote String?
   deliveredAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deliveries LiteratureDelivery[]
   @@index([congregationId, status])
+}
+
+model LiteratureFormSubmission {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  personId Int?
+  person Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  guestName String?
+  guestNote String?
+  items Json
+  flagged Boolean @default(false)
+  reason String?
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([congregationId, createdAt])
 }
 
 model Shipment {

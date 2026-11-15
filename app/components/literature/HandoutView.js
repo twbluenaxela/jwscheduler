@@ -24,7 +24,7 @@ function PersonRow({ person, pending, onMark, onSelect }) {
       >
         <Check />
         <span className="lit-handout-copy">
-          <strong>{person.name}</strong>
+          <strong>{person.name} {person.guest && <small className="lit-badge">名單外</small>}</strong>
           <span>
             {handoutSummary(person.items)}{' '}
             {person.items.some(item => item.source === 'request') && <small>單次</small>}{' '}
@@ -55,7 +55,7 @@ function DeliveredRow({ person, pending, onUndo }) {
     >
       <Check done />
       <span className="lit-handout-copy">
-        <strong>{person.name}</strong>
+        <strong>{person.name} {person.guest && <small className="lit-badge">名單外</small>}</strong>
         <span>{handoutSummary(person.items)}</span>
       </span>
       <time>
@@ -152,6 +152,16 @@ export default function HandoutView({ items, request, reloadCatalog }) {
   }
 
   async function mark(person, chosen = person.items) {
+    if (person.guest) {
+      const key = person.guestKey || `guest:${person.requestId}`;
+      if (!begin(key)) return;
+      try {
+        for (const item of chosen) await request(`/api/literature/requests/${item.requestId}/handout`, { method: 'POST' });
+        setSnack({ text: `已發給 ${person.name}`, undo: () => undo({ ...person, items: chosen }) });
+      } catch (err) { setError(`發放失敗：${err.message}，請重試。`); }
+      finally { finish(key); }
+      return;
+    }
     if (!begin(person.personId)) return;
     setError('');
     navigator.vibrate?.(10);
@@ -200,6 +210,16 @@ export default function HandoutView({ items, request, reloadCatalog }) {
   }
 
   async function undo(person) {
+    if (person.guest) {
+      const key = person.guestKey || `guest:${person.requestId}`;
+      if (!begin(key)) return;
+      try {
+        for (const item of person.items) await request(`/api/literature/requests/${item.requestId || person.requestId}/handout`, { method: 'DELETE' });
+        setSnack({ text: `已取消 ${person.name} 的發放`, undo: () => mark(person) });
+      } catch (err) { setError(`取消失敗：${err.message}，請重試。`); }
+      finally { finish(key); }
+      return;
+    }
     if (!person.deliveryIds.length || !begin(person.personId)) return;
     setError('');
     const previous = dataRef.current;
@@ -294,9 +314,9 @@ export default function HandoutView({ items, request, reloadCatalog }) {
           : !filtered.length ? <p className="lit-handout-empty">找不到符合的姓名。</p>
             : filtered.map(person => (
               <PersonRow
-                key={person.personId}
+                key={person.guestKey || person.personId}
                 person={person}
-                pending={pending.has(person.personId)}
+                pending={pending.has(person.guestKey || person.personId)}
                 onMark={mark}
                 onSelect={setSelected}
               />
@@ -305,9 +325,9 @@ export default function HandoutView({ items, request, reloadCatalog }) {
         <summary>今天已發 ({data.delivered.length})</summary>
         {data.delivered.map(person => (
           <DeliveredRow
-            key={person.personId}
+            key={person.guestKey || person.personId}
             person={person}
-            pending={pending.has(person.personId)}
+            pending={pending.has(person.guestKey || person.personId)}
             onUndo={undo}
           />
         ))}
@@ -318,8 +338,8 @@ export default function HandoutView({ items, request, reloadCatalog }) {
             <button
               className="lit-handout-sheet-row"
               key={item.key}
-              disabled={pending.has(selected.personId)}
-              aria-busy={pending.has(selected.personId) || undefined}
+              disabled={pending.has(selected.guestKey || selected.personId)}
+              aria-busy={pending.has(selected.guestKey || selected.personId) || undefined}
               onClick={() => mark(selected, [item])}
             >
               <Check />
