@@ -105,13 +105,12 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
       </section>;
     })}
     <h2 className="lit-category">入庫</h2>
-    <div className="lit-grid">{data.allocation.filter((entry) => entry.remainder > 0).map((entry) => {
+    <div className="lit-remainder-list">{data.allocation.filter((entry) => entry.remainder > 0).map((entry) => {
       const publication = items.find((item) => sameId(item.id, entry.publication?.id)) || entry.publication;
-      return <div className="lit-card lit-remainder" key={entry.line.id}>
-        <PubThumb publication={publication} size="card" />
-        <span className="lit-remainder-tag">剩 {entry.remainder}</span>
-        <span className="lit-card__body"><strong className="lit-card__name">{publication?.name}</strong>
-          <span className="lit-code">{publication?.code}</span></span>
+      return <div className="lit-remainder-row" key={entry.line.id}>
+        <PubThumb publication={publication} />
+        <span><strong>{publication?.name}</strong><small>{publication?.code}</small></span>
+        <span>剩 {entry.remainder}</span>
       </div>;
     })}</div>
     {!data.allocation.some((entry) => entry.remainder > 0) && <p>沒有剩餘書刊。</p>}

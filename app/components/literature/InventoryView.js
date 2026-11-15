@@ -86,17 +86,19 @@ export default function InventoryView({ items, request, reloadCatalog }) {
       <div className="lit-header">
         <h1>每月清點</h1>
       </div>
-      <div className="lit-actions">
+      <div className="lit-inventory-controls">
+        <div className="lit-inventory-month">
         <input
           className="field__input lit-month"
           type="month"
           value={month}
           onChange={(e) => setMonth(e.target.value)}
         />
-        <button className="btn btn--primary" onClick={start}>
-          開始本月清點
-        </button>
-        <label className="btn">
+        {!counts.some((count) => count.month === month) && (
+          <button className="btn btn--primary" onClick={start}>開始本月清點</button>
+        )}
+        </div>
+        <label className="btn btn--sm">
           匯入 JW Hub 庫存報告
           <input
             className="lit-file"
@@ -116,7 +118,7 @@ export default function InventoryView({ items, request, reloadCatalog }) {
         {counts.map((count) => (
           <button className="lit-shipment" key={count.id} onClick={() => setSelected(count.id)}>
             <strong>
-              {count.month} <span className="lit-badge">{count.status === 'done' ? '完成' : '草稿'}</span>
+              {count.month.replace(/^(\d{4})-(\d{2})$/, (_, year, number) => `${year}年${Number(number)}月`)} <span className="lit-badge">{count.status === 'done' ? '完成' : '草稿'}</span>
             </strong>
             <span>已清點 {count.counted} / {count.total}</span>
           </button>

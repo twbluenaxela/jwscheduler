@@ -34,7 +34,7 @@ export async function getCount(id, congregationId) {
 export async function refreshLines(count) {
   let lines = await db.inventoryLine.findMany({ where: { countId: count.id } });
   if (count.status !== 'draft') return lines;
-  const [shipments, previous] = await Promise.all([
+  const [shipments, previous, publications] = await Promise.all([
     db.shipment.findMany({
       where: { congregationId: count.congregationId },
       include: { lines: true },
@@ -44,9 +44,10 @@ export async function refreshLines(count) {
       orderBy: { month: 'desc' },
       include: { lines: true },
     }),
+    db.publication.findMany({ where: { congregationId: count.congregationId } }),
   ]);
   const received = receivedByPublication(shipments, count.month);
-  const missing = missingReceivedLines({ lines, previousLines: previous?.lines || [], received });
+  const missing = missingReceivedLines({ lines, previousLines: previous?.lines || [], received, publications });
   if (missing.length) {
     await db.inventoryLine.createMany({
       data: missing.map((line) => ({ ...line, countId: count.id })),
