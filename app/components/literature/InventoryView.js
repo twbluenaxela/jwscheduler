@@ -1,4 +1,5 @@
 'use client';
+import Icon from './Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { Sheet } from './PubThumb';
 import CountSheet from './CountSheet';
@@ -82,11 +83,11 @@ export default function InventoryView({ items, request, reloadCatalog }) {
   }
 
   return (
-    <div>
+    <div className="lit-detail">
       <div className="lit-header">
         <h1>每月清點</h1>
         {counts.length > 0 && <details className="lit-menu lit-inventory-menu">
-          <summary aria-label="更多選項">…</summary>
+          <summary aria-label="更多選項"><Icon name="more" /></summary>
           <label className="btn btn--sm">
             匯入 JW Hub 庫存報告
             <input className="lit-file" type="file" accept="application/pdf" disabled={busy} onChange={(e) => {

@@ -1,4 +1,5 @@
 'use client';
+import Icon from './Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPublications } from '../../lib/literature.mjs';
 import { distributed, expected, hubReportRows, s28Rows } from '../../lib/literatureInventory.mjs';
@@ -118,7 +119,7 @@ export default function CountSheet({ id, items, request, onBack }) {
     return (
       <div className="lit-print-area">
         <div className="lit-report-actions">
-          <button className="lit-back" onClick={() => setReport('')}>‹ 清點</button>{' '}
+          <button className="lit-back" onClick={() => setReport('')}><Icon name="back" /> 清點</button>{' '}
           <button className="btn" onClick={() => window.print()}>列印</button>
         </div>
         <h1>{count.month} 存書月結記錄 S-28</h1>
@@ -150,7 +151,7 @@ export default function CountSheet({ id, items, request, onBack }) {
     return (
       <div>
         <div className="lit-report-actions">
-          <button className="lit-back" onClick={() => setReport('')}>‹ 清點</button>
+          <button className="lit-back" onClick={() => setReport('')}><Icon name="back" /> 清點</button>
           <button
             className="btn"
             onClick={() => navigator.clipboard
@@ -184,7 +185,7 @@ export default function CountSheet({ id, items, request, onBack }) {
   }
 
   return (
-    <div>
+    <div className="lit-detail">
       <button
         className="lit-back"
         onClick={async () => {
@@ -192,12 +193,12 @@ export default function CountSheet({ id, items, request, onBack }) {
           onBack();
         }}
       >
-        ‹ 清點
+        <Icon name="back" /> 清點
       </button>
       <div className="lit-header lit-count-header">
         <h1>{monthLabel}</h1>
         {!done && <details className="lit-menu lit-count-menu">
-          <summary aria-label="更多選項">…</summary>
+          <summary aria-label="更多選項"><Icon name="more" /></summary>
           <div>
             <button onClick={() => setReport('s28')}>S-28 表</button>
             <button onClick={() => setReport('hub')}>JW Hub 填寫清單</button>
@@ -222,12 +223,12 @@ export default function CountSheet({ id, items, request, onBack }) {
           setSearching(!searching);
           if (searching) setQuery('');
         }}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
+          <Icon name="search" />
         </button>
       </div>
       {searching && <div className="lit-count-search">
         <input className="field__input" placeholder="搜尋書刊" aria-label="搜尋書刊" autoFocus value={query} onChange={(e) => setQuery(e.target.value)} />
-        <button aria-label="清除搜尋" onClick={() => setQuery('')}>✕</button>
+        <button aria-label="清除搜尋" onClick={() => setQuery('')}><Icon name="close" /></button>
       </div>}
       {error && <div className="imp-error" role="alert">{error}</div>}
       {visible.map((line) => {
@@ -241,12 +242,12 @@ export default function CountSheet({ id, items, request, onBack }) {
                 const value = window.prompt('原有數量', line.opening);
                 if (value !== null && /^\d+$/.test(value)) change(line, { opening: Number(value) });
               }}>原有 {line.opening}</button>} ＋收 {line.received}</span>
-              {saving[line.id] === '儲存失敗' && <small className="lit-count-error">儲存失敗</small>}
             </div>
             <div className="lit-count-value">
+              {saving[line.id] === '儲存失敗' && <small className="lit-count-error" role="status">儲存失敗</small>}
               {!done && line.onHand === null && <span>應有 {expected(line)}</span>}
               <div>
-                {!done && line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}>✓</button>}
+                {!done && line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}><Icon name="check" /></button>}
                 {done ? <strong className="lit-count-readonly">{line.onHand ?? '—'}</strong> : <input
                   aria-label={`${line.publication.name} 現有`}
                   type="number"

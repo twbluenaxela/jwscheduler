@@ -1,4 +1,5 @@
 'use client';
+import Icon from './Icon';
 import { useCallback, useEffect, useState } from 'react';
 import PubThumb, { GROUPS, groupOf, issueLabel, sameId } from './PubThumb';
 import { seriesOf } from '../../lib/literatureShipments.mjs';
@@ -81,12 +82,12 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
     }
     setBatchPending(false);
   }
-  return <div>
-    <button className="lit-back" onClick={onBack}>‹ 到貨</button>
+  return <div className="lit-detail">
+    <button className="lit-back" onClick={onBack}><Icon name="back" /> 到貨</button>
     <div className="lit-detail-header">
       <div><strong>裝箱單 {data.shipment.slipNumber}</strong>
         <span>{shippedDate ? `${Number(shippedDate[2])}/${Number(shippedDate[3])}` : '日期未提供'}</span></div>
-      <details className="lit-menu"><summary aria-label="更多選項">…</summary>
+      <details className="lit-menu"><summary aria-label="更多選項"><Icon name="more" /></summary>
         <button className="btn btn--danger" onClick={remove}>刪除裝箱單</button>
       </details>
     </div>
@@ -101,11 +102,11 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
         <h2 className="lit-category">{group === '未分組' ? group : `${group} 組`}</h2>
         <div>{grouped.map((p) => {
           const done = isDone(p);
-          return <div className={`lit-delivery-person${done ? ' lit-delivery-person--done' : ''}`} key={p.personId}>
+          return <div className={`lit-delivery-person${done ? ' lit-delivery-person--done' : ''}`} key={p.personId} aria-busy={disabled || undefined}>
             <div className="lit-delivery-row">
               <button className="lit-delivery-main" disabled={disabled} onClick={() => togglePerson(p)}
                 aria-label={`${p.name}，${done ? '取消全部發放' : '全部標為已發放'}`}>
-                <span className="lit-round-check" aria-hidden="true">{done ? '✓' : ''}</span>
+                <span className="lit-round-check" aria-hidden="true">{done && <Icon name="check" />}</span>
                 <span className="lit-delivery-copy">
                   <span><strong>{p.name}</strong> {p.groupRole && <small>{p.groupRole === 'overseer' ? '小組監督' : '助手'}</small>}</span>
                   <span className="lit-delivery-summary">{p.items.map(({ recipient, publication }, index) => <span key={index}>
@@ -117,7 +118,7 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
               </button>
               <button className="lit-delivery-expand" aria-label="逐項發放" aria-expanded={!!expanded[p.personId]}
                 onClick={() => setExpanded((prev) => ({ ...prev, [p.personId]: !prev[p.personId] }))}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={expanded[p.personId] ? 'M6 14l6-6 6 6' : 'M6 10l6 6 6-6'} /></svg>
+                <Icon name="chevronDown" className={expanded[p.personId] ? "lit-chevron-open" : ""} />
               </button>
             </div>
             {expanded[p.personId] && <div className="lit-delivery-items">{p.items.map(({ recipient, publication }, index) => {
@@ -133,7 +134,7 @@ export default function ShipmentDetail({ id, items, request, onBack }) {
       </section>;
     })}
     {remainder.length > 0 && <details className="lit-remainder-details">
-      <summary>其餘入庫 {remainder.length} 項</summary>
+      <summary><Icon name="chevronRight" /> 其餘入庫 {remainder.length} 項</summary>
       <div className="lit-remainder-list">{remainder.map((entry) => {
         const publication = items.find((item) => sameId(item.id, entry.publication?.id)) || entry.publication;
         return <div className="lit-remainder-row" key={entry.line.id}>

@@ -61,7 +61,7 @@ export default function RequestsView({ people, items, request }) {
         <button className="btn btn--primary lit-add" aria-label="新增申請" onClick={() => add(null)}>＋</button>
       </div>
       {error && <div className="imp-error" role="alert">{error}</div>}
-      {!visiblePeople.length && <p>{query ? '沒有符合的人員。' : '還沒有申請。按 ＋ 新增。'}</p>}
+      {!visiblePeople.length && <p>{query.trim() ? `找不到「${query.trim()}」` : '還沒有申請。按 ＋ 新增。'}</p>}
       {GROUPS.map((group) => {
         const members = visiblePeople.filter((p) => groupOf(p) === group);
         if (!members.length) return null;

@@ -42,6 +42,7 @@ export default function ShipmentsView({ items, request, reloadCatalog, initialId
   }
   if (selected) return <ShipmentDetail id={selected} items={items} request={request} onBack={() => { setSelected(null); load(); }} />;
   return <div>
+    {!shipments.length && !error && <p>還沒有裝箱單。上傳 JW Hub 的裝箱單 PDF，就會依申請自動分裝。</p>}
     <label className="btn lit-upload">{busy ? '讀取中…' : '上傳裝箱單 PDF'}
       <input className="lit-file" type="file" accept="application/pdf" disabled={busy} onChange={(e) => {
         const file = e.target.files?.[0];
@@ -50,7 +51,6 @@ export default function ShipmentsView({ items, request, reloadCatalog, initialId
       }} />
     </label>
     {error && <div className="imp-error" role="alert">{error}</div>}
-    {!shipments.length && <p>還沒有到貨紀錄。按上傳裝箱單 PDF 新增。</p>}
     <div className="lit-shipment-list">{shipments.map((s) => <button className="lit-shipment" key={s.id}
       onClick={() => setSelected(s.id)}><span><strong>裝箱單 {s.slipNumber}</strong>
         <small>{s.shippedAt?.slice(0, 10) || '日期未提供'} · {s.lineCount} 項 · {s.totalQuantity.toLocaleString()} 本</small>
