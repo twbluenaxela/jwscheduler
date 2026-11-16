@@ -3,9 +3,10 @@ import { retryTransient, withDbParams } from './dbRetry.mjs';
 
 const globalForPrisma = globalThis;
 
-const db = globalForPrisma.prisma ?? new PrismaClient({
-  datasources: { db: { url: withDbParams(process.env.DATABASE_URL) } },
-}).$extends({
+const databaseUrl = process.env.DATABASE_URL;
+const db = globalForPrisma.prisma ?? (typeof databaseUrl === 'string' && databaseUrl.trim()
+  ? new PrismaClient({ datasources: { db: { url: withDbParams(databaseUrl) } } })
+  : new PrismaClient()).$extends({
   query: {
     $allOperations({ args, query }) {
       return retryTransient(() => query(args));
