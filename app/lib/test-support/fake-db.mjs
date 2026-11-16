@@ -38,6 +38,9 @@ export function makeFakeDb(seed = {}) {
     pendingLinks: clone(seed.pendingLinks ?? []),
     changeLogs: [],
     calendarFeeds: clone(seed.calendarFeeds ?? []),
+    serviceCategories: clone(seed.serviceCategories ?? []),
+    serviceAssignments: clone(seed.serviceAssignments ?? []),
+    fieldServiceMeetings: clone(seed.fieldServiceMeetings ?? []),
   };
   let changeLogSeq = 1;
 
@@ -57,6 +60,9 @@ export function makeFakeDb(seed = {}) {
   return {
     __stores: stores,
 
+    serviceCategory: { async findMany({ where }) { return clone(stores.serviceCategories.filter(row => whereMatch(row, where))); } },
+    serviceAssignment: { async findMany({ where }) { return clone(stores.serviceAssignments.filter(row => whereMatch(row, where))); } },
+    fieldServiceMeeting: { async findMany({ where }) { return clone(stores.fieldServiceMeetings.filter(row => whereMatch(row, where))); } },
     calendarFeed: {
       async upsert({ where: { personId }, update, create }) {
         let feed = stores.calendarFeeds.find((item) => item.personId === personId);

@@ -53,7 +53,8 @@ test('訂閱輸出含 VEVENT', async () => {
   const w = { ...week, isoDate, assignments: [{ slotId: 'mw42_t0_0', name: '王小明' }] };
   const feed = { id: 1, congregationId: 1, person: { name: '王小明', congregationId: 1 }, congregation: { code: 'x' } };
   const db = { calendarFeed: { findUnique: async () => feed, update: async () => {} },
-    midweekWeek: { findMany: async () => [w] }, weekendRow: { findMany: async () => [] } };
+    midweekWeek: { findMany: async () => [w] }, weekendRow: { findMany: async () => [] },
+    serviceCategory: { findMany: async () => [] }, serviceAssignment: { findMany: async () => [] }, fieldServiceMeeting: { findMany: async () => [] } };
   const response = await calendarResponse(db, 'secret.ics');
   assert.match(await response.text(), /BEGIN:VEVENT/);
 });
@@ -74,4 +75,46 @@ test('推薦先標示目前已排人員，並說明候選人從未擔任', async
   assert.doesNotMatch(lines[0], /從未擔任/);
   assert.match(lines[1], /^新候選人：從未擔任/);
   assert.equal(response.structuredContent.data.candidates[0].current, true);
+});
+
+test('個人與服務工具合併安排、顯示月表及修改服務', async () => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date());
+  const month = today.slice(0, 7);
+  const person = { id: 7, name: '王小明', congregationId: 1, serviceGroup: 'A' };
+  const categories = [
+    { id: 1, key: 'microphone', name: '麥克風服務', kind: 'slots', positions: ['左邊', '右邊'] },
+    { id: 2, key: 'cleaning', name: '打掃', kind: 'groups', positions: ['小組'] },
+    { id: 3, key: 'field', name: '帶頭傳道', kind: 'field', positions: [] },
+  ];
+  const meeting = { ...week, isoDate: today, weekdayPill: '星期三 · 19:30', assignments: [{ slotId: 'mw42_t0_0', name: person.name }] };
+  const assignments = [{ categoryId: 1, date: today, position: '左邊', personId: 7, person: { name: person.name } }, { categoryId: 2, date: `${month}-01`, position: '小組', text: 'A' }];
+  const field = [{ date: today, time: '09:00', place: '公園', leaderId: 7, leader: { name: person.name }, territory: '第一区' }];
+  let written;
+  const db = {
+    congregation: { findUnique: async () => ({ people: [person], weeks: [meeting], weekendRows: [] }) },
+    serviceCategory: { findMany: async () => categories },
+    serviceAssignment: { findMany: async () => assignments, upsert: async args => { written = args; }, deleteMany: async args => { written = args; } },
+    fieldServiceMeeting: { findMany: async () => field },
+    calendarFeed: { upsert: async () => ({ token: 'token' }) },
+  };
+  const ctx = { db, congregationId: 1, user: { role: 'ADMIN', displayName: ' 王小明 ' }, origin: 'https://example.org' };
+  const call = async (name, args = {}, context = ctx) => (await dispatch({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, context, scheduleTools)).result;
+  const mine = await call('get_my_assignments');
+  assert.match(mine.content[0].text, /經文朗讀/);
+  assert.match(mine.content[0].text, /麥克風服務（左邊）/);
+  assert.match(mine.content[0].text, /帶頭傳道 · 公園/);
+  assert.match(mine.content[0].text, /https:\/\/example.org\/cal\/token/);
+  assert.match((await call('get_person_assignments', { person: '王小明' })).content[0].text, /聚會後打掃/);
+  const schedule = await call('get_service_schedule', { month });
+  assert.match(schedule.content[0].text, /左邊 → 王小明/);
+  assert.match(schedule.content[0].text, /打掃\n.*A/);
+  assert.match(schedule.content[0].text, /公園｜帶領：王小明｜地區：第一区/);
+  assert.match((await call('get_service_schedule', { month, category: 'field' })).content[0].text, /帶頭傳道/);
+  await call('set_service_assignment', { category: 'microphone', date: today, position: '右邊', person: '王小明' });
+  assert.equal(written.create.personId, 7);
+  await call('set_service_assignment', { category: 'microphone', date: today, position: '右邊', person: '' });
+  assert.equal(written.where.position, '右邊');
+  assert.equal((await call('set_service_assignment', { category: 'field', date: today, position: '', person: '' })).isError, true);
+  assert.match((await call('get_my_assignments', {}, { ...ctx, user: { role: 'ADMIN', displayName: '未知' } })).content[0].text, /請問您是哪一位/);
+  assert.equal((await call('set_service_assignment', {}, { ...ctx, user: { role: 'VIEWER' } })).isError, true);
 });

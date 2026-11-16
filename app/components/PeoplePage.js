@@ -118,7 +118,7 @@ function collectUpcomingAssignments(name, midweekWeeks, weekendRows) {
     if (row.host === name) items.push({ date: row.date, isoDate: row.isoDate, label: '招待', context: row.topic });
   });
 
-  return items.slice(0, 8);
+  return items;
 }
 
 function createBlankPerson(nextId) {
@@ -161,6 +161,8 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
   const [error, setError] = useState('');
   const [localName, setLocalName] = useState('');
   const [showAllRecent, setShowAllRecent] = useState(false);
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
+  const [serviceResult, setServiceResult] = useState({ personId: '', items: [] });
   const prevSelectedIdRef = useRef('');
   const writeChainRef = useRef(Promise.resolve());
   const isMobile = useIsMobile();
@@ -180,13 +182,41 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
       prevSelectedIdRef.current = currentId;
       setLocalName(selectedPerson?.name ?? '');
       setShowAllRecent(false);
+      setShowAllUpcoming(false);
     }
   });
 
+  useEffect(() => {
+    const personId = selectedPerson?.id;
+    if (!canEdit || !personId || String(personId).startsWith('new-')) return;
+    let active = true;
+    async function loadServices() {
+      try {
+        const token = await getToken();
+        const response = await fetchRetry(`/api/services/person/${personId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (active) setServiceResult({ personId, items: data.items });
+      } catch {
+        // The rest of the person details remain available if services fail.
+      }
+    }
+    loadServices();
+    return () => { active = false; };
+  }, [selectedPerson?.id, selectedPerson?.serviceGroup, canEdit]);
+
   const upcoming = useMemo(() => {
     if (!selectedPerson?.name) return [];
-    return collectUpcomingAssignments(selectedPerson.name, midweekWeeks, weekendRows);
-  }, [selectedPerson, midweekWeeks, weekendRows]);
+    const meetings = collectUpcomingAssignments(selectedPerson.name, midweekWeeks, weekendRows);
+    const services = serviceResult.personId === selectedPerson.id ? serviceResult.items : [];
+    return [...meetings, ...services].sort((a, b) => {
+      const aDate = resolveRowDate(a);
+      const bDate = resolveRowDate(b);
+      return (aDate - bDate) || (a.time || '').localeCompare(b.time || '');
+    });
+  }, [selectedPerson, midweekWeeks, weekendRows, serviceResult]);
 
   const recent = useMemo(() => {
     if (!selectedPerson?.name) return [];
@@ -505,18 +535,20 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
           )}
         </div>
         <div className="timeline">
-          {upcoming.length ? upcoming.map((item, index) => (
-            <div key={`${item.date}-${item.label}-${index}`} className="timeline__row">
-              <span className="timeline__date">{item.date}</span>
+          {upcoming.length ? (showAllUpcoming ? upcoming : upcoming.slice(0, RECENT_DEFAULT)).map((item, index) => (
+            <div key={`${item.isoDate || item.date}-${item.label}-${index}`} className={`timeline__row${item.category ? ' timeline__row--service' : ''}`}>
+              <span className="timeline__date">{item.date || `${Number(item.isoDate.slice(5, 7))}/${Number(item.isoDate.slice(8, 10))}`}</span>
               <span className="timeline__main">
                 <b>{item.label}</b>
-                <small>{item.context}</small>
+                {item.category && <small className="timeline__service-tag">{item.category.name}</small>}
+                <small>{[item.time, item.context].filter(Boolean).join(' · ')}</small>
               </span>
             </div>
           )) : (
             <div className="people-empty people-empty--compact">目前沒有排定的未來項目。</div>
           )}
         </div>
+        {upcoming.length > RECENT_DEFAULT && <button className="btn btn--sm btn--ghost" onClick={() => setShowAllUpcoming(!showAllUpcoming)}>{showAllUpcoming ? '收合' : `顯示全部（${upcoming.length}）`}</button>}
       </div>
     </>
   ) : (

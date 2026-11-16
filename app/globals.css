@@ -2124,3 +2124,99 @@ body.editing .week-edit__input { background: #fff; }
 .sheet-backdrop .lit-sheet { transition: transform 280ms var(--ease-out); }
 .sheet-backdrop.lit-sheet-exit, .sheet-backdrop.lit-sheet-exit .lit-sheet { transition-duration: 180ms; }
 @media (prefers-reduced-motion: reduce) { .sheet-backdrop:has(.lit-sheet) { transition: opacity 150ms; } .sheet-backdrop .lit-sheet { transform: none; transition: none; } }
+
+/* 服務安排 */
+ .services-page { max-width: 720px; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+.service-tabs-sticky { position: sticky; top: 0; z-index: 32; background: var(--surface); }
+.service-tabs-mask.fade-right { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.service-tabs-mask.fade-left { mask-image: linear-gradient(to right, transparent, #000 24px); }
+.service-tabs-mask.fade-left.fade-right {
+  mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
+}
+.service-tabs.lit-segment { width: 100%; overflow-x: auto; gap: 2px; margin-bottom: 0; scrollbar-width: none; }
+.service-tabs::-webkit-scrollbar { display: none; }
+.service-tabs.lit-segment button { flex: none; min-height: 44px; padding: 0 14px; white-space: nowrap; }
+.service-tabs.lit-segment .service-add-tab { color: var(--ink-3); font-size: 20px; }
+.service-toolbar, .service-section-head, .service-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.service-toolbar { margin: 16px 0 18px; }
+.service-header-actions { display: flex; align-items: center; gap: 4px; }
+.service-add-button { min-height: 44px; padding-inline: 10px; white-space: nowrap; }
+.service-switcher { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.service-switcher button { width: 44px; height: 44px; flex: none; border: 0; border-radius: 9px; background: var(--surface-2); color: var(--ink); font-size: 25px; cursor: pointer; }
+.service-switcher strong { white-space: nowrap; }
+.service-table-wrap { overflow: visible; }
+.service-table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; font-variant-numeric: tabular-nums; }
+.service-table th, .service-table td { border-bottom: 1px solid var(--line); padding: 4px; }
+.service-table thead th { position: sticky; top: 52px; z-index: 30; background: var(--surface); color: var(--ink-3); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.service-table tbody th { min-width: 72px; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.service-table td { min-width: 75px; }
+.service-next th { box-shadow: inset 2px 0 var(--accent); font-weight: 700 !important; }
+.service-past th, .service-past .service-cell { color: var(--ink-3); }
+.service-cell { display: block; width: 100%; min-height: 48px; padding: 10px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 16px; text-align: left; }
+button.service-cell { cursor: pointer; }
+button.service-cell:hover, button.service-cell:active { background: var(--surface-2); }
+button.service-cell--empty { color: var(--ink-3); border: 1px dashed var(--line-2); }
+.service-cell--empty, .service-cell--text { color: var(--ink-3); }
+.service-cell--text { font-style: italic; }
+.service-cell--own { color: var(--accent); font-weight: 700; }
+.service-cell--flash { animation: service-flash 120ms var(--ease-out); }
+@keyframes service-flash { from { background: var(--accent-soft); } to { background: transparent; } }
+.service-notes { margin-top: 28px; padding: 12px 18px 18px; border-radius: 12px; background: var(--surface-2); }
+.service-note-lines { white-space: pre-wrap; }
+.service-note-line { display: flex; align-items: baseline; }
+.service-note-line > span:first-child { flex: none; white-space: pre; }
+.service-notes-input { min-height: 96px; resize: none; overflow: hidden; }
+.service-link { min-height: 44px; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.service-hint, .service-empty { color: var(--ink-3); font-size: 14px; margin: 24px 0; }
+.service-error { color: var(--special); margin: 12px 0; }
+.service-actions { justify-content: flex-end; margin-top: 16px; }
+.service-quiet-actions { justify-content: space-between; }
+.service-person-list { max-height: 260px; overflow-y: auto; margin: 8px 0 18px; }
+.service-person-heading { padding: 12px 8px 2px; color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.service-person-list button { display: flex; justify-content: space-between; width: 100%; min-height: 52px; align-items: center; padding: 8px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.service-person-list small { color: var(--ink-3); background: var(--surface-2); padding: 3px 7px; border-radius: 6px; }
+.service-month-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.service-month-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 100px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; text-align: left; }
+button.service-month-card { cursor: pointer; }
+.service-month-card.is-current { border-color: var(--accent); }
+.service-month-card.is-past { opacity: .7; }
+.service-month-label { color: var(--ink-3); font-size: 14px; }
+.service-month-label small { margin-left: 6px; color: var(--accent); font-size: 12px; }
+.service-month-card strong { font-size: 20px; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.service-month-card .service-month-empty { color: var(--ink-3); font-size: 14px; font-weight: 400; }
+.service-group-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.service-group-chips .chip { min-width: 48px; min-height: 44px; }
+.service-form { display: grid; gap: 16px; }
+.service-form .field { margin: 0; }
+.service-form-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.service-field-list { display: grid; gap: 10px; }
+.service-field-card { padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.service-field-card.is-editable { cursor: pointer; }
+.service-field-card.is-editable:active { background: var(--surface-2); }
+.service-field-content { display: grid; gap: 5px; font-size: 14px; }
+.service-field-content strong { font-size: 16px; font-weight: 600; }
+.service-field-date { color: var(--ink-3); font-size: 14px; font-variant-numeric: tabular-nums; }
+.service-field-note { color: var(--ink-3); white-space: pre-wrap; }
+.service-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.service-field-card .service-images { flex-wrap: nowrap; overflow-x: auto; }
+.service-thumb, .service-image { width: 56px; height: 56px; flex: none; position: relative; padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: var(--surface-2); }
+.service-thumb { cursor: pointer; }
+.service-thumb img, .service-image img { width: 100%; height: 100%; object-fit: cover; }
+.service-image button { position: absolute; top: 0; right: 0; width: 28px; height: 28px; border: 0; background: var(--ink); color: var(--surface); cursor: pointer; }
+.service-pending { padding: 8px; background: var(--surface-2); overflow-wrap: anywhere; }
+.service-pending button { margin-left: 8px; }
+.service-image-viewer { display: flex; align-items: center; justify-content: center; min-height: 65vh; }
+.service-image-viewer img { max-width: 100%; max-height: 75vh; object-fit: contain; }
+.service-danger { color: var(--special); margin-right: auto; }
+.service-content { animation: service-enter 150ms var(--ease-out); }
+@keyframes service-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 720px) {
+  .service-tabs-sticky { top: 58px; }
+  .service-table thead th { top: 110px; }
+  .services-page { padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .service-content, .service-cell--flash { animation: none; } }
+@media (max-width: 720px) { .tabbar__item { gap: 2px; font-size: 10px; white-space: nowrap; } }
+
+.timeline__row--service { border-left: 2px solid var(--accent); padding-left: 10px; }
+.timeline__service-tag { display: inline-block; width: fit-content; padding: 2px 6px; border-radius: 4px; background: var(--surface-2); color: var(--ink-3); }

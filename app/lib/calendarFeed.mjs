@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { serviceEventsForPerson } from './services.mjs';
 import { isMidweekSuspended } from './weekType.mjs';
 import { collectAssignments } from './assignments.mjs';
 import { generateIcal } from './icalExport.js';
@@ -34,14 +35,17 @@ export function calendarLinks(origin, token, name) {
 export async function calendarResponse(db, token) {
   const feed = await db.calendarFeed.findUnique({ where: { token: token.replace(/\.ics$/, '') }, include: { person: true, congregation: true } });
   if (!feed || feed.person.congregationId !== feed.congregationId) return new Response('找不到行事曆', { status: 404 });
-  const [weeks, rows] = await Promise.all([
-    db.midweekWeek.findMany({ where: { congregationId: feed.congregationId }, include: { parts: true, assignments: true } }),
-    db.weekendRow.findMany({ where: { congregationId: feed.congregationId } }),
-  ]);
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 30);
   cutoff.setHours(0, 0, 0, 0);
-  const events = [];
+  const [weeks, rows, categories, assignments, fieldMeetings] = await Promise.all([
+    db.midweekWeek.findMany({ where: { congregationId: feed.congregationId }, include: { parts: true, assignments: true } }),
+    db.weekendRow.findMany({ where: { congregationId: feed.congregationId } }),
+    db.serviceCategory.findMany({ where: { congregationId: feed.congregationId } }),
+    db.serviceAssignment.findMany({ where: { congregationId: feed.congregationId, date: { gte: `${toIsoDate(cutoff).slice(0, 7)}-01` } } }),
+    db.fieldServiceMeeting.findMany({ where: { congregationId: feed.congregationId, date: { gte: toIsoDate(cutoff) } } }),
+  ]);
+  const events = serviceEventsForPerson({ person: feed.person, categories, assignments, fieldMeetings, weeks, weekendRows: rows }).filter(event => event.isoDate >= toIsoDate(cutoff));
   for (const row of [...weeks, ...rows]) {
     const isWeek = Array.isArray(row.parts);
     if (isWeek && isMidweekSuspended(row)) continue;
