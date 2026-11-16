@@ -1,6 +1,25 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
+
 export default function TabBar({ page, setPage, role, onAdmin, canLiterature }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButtonRef = useRef(null);
+  const closeButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    closeButtonRef.current?.focus();
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        setMoreOpen(false);
+        moreButtonRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [moreOpen]);
+
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const isSysadmin = role === 'SYSADMIN';
   const items = [
@@ -42,19 +61,84 @@ export default function TabBar({ page, setPage, role, onAdmin, canLiterature }) 
     });
   }
 
+  const priority = ['meetings', 'overview', 'services', 'literature', 'people', 'import', 'settings', 'admin'];
+  visible.sort((a, b) => priority.indexOf(a.id) - priority.indexOf(b.id));
+  const hasOverflow = visible.length > 5;
+  const primary = hasOverflow ? visible.slice(0, 4) : visible;
+  const overflow = hasOverflow ? visible.slice(4) : [];
+  const currentOverflow = overflow.find((item) => item.id === page);
+  const descriptions = {
+    people: '名單、資格與小組',
+    import: 'EPUB 匯入與匯出',
+    settings: '帳號與會眾設定',
+    admin: '系統管理',
+  };
+
+  function navigate(item) {
+    setMoreOpen(false);
+    if (item.isAdmin) onAdmin();
+    else setPage(item.id);
+  }
+
+  function closeMore() {
+    setMoreOpen(false);
+    moreButtonRef.current?.focus();
+  }
+
   return (
-    <nav className="tabbar" style={{ gridTemplateColumns: `repeat(${visible.length}, 1fr)` }}>
-      {visible.map((item) => (
-        <button
-          key={item.id}
-          className="tabbar__item"
-          aria-current={page === item.id ? 'true' : 'false'}
-          onClick={() => (item.isAdmin ? onAdmin() : setPage(item.id))}
-        >
-          {item.icon}
-          <span>{item.label}</span>
-        </button>
-      ))}
-    </nav>
+    <>
+      <nav className="tabbar" aria-label="主要導覽" style={{ gridTemplateColumns: `repeat(${primary.length + (hasOverflow ? 1 : 0)}, minmax(64px, 1fr))` }}>
+        {primary.map((item) => (
+          <button
+            key={item.id}
+            className="tabbar__item"
+            aria-current={page === item.id ? 'page' : undefined}
+            onClick={() => navigate(item)}
+          >
+            <span className="tabbar__icon">{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+        {hasOverflow && (
+          <button
+            ref={moreButtonRef}
+            className="tabbar__item"
+            aria-current={currentOverflow ? 'page' : undefined}
+            aria-haspopup="dialog"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen(true)}
+          >
+            <span className="tabbar__icon">
+              {currentOverflow ? currentOverflow.icon : (
+                <svg viewBox="0 0 24 24" className="navicon" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" />
+                </svg>
+              )}
+            </span>
+            <span>{currentOverflow?.label ?? '更多'}</span>
+          </button>
+        )}
+      </nav>
+      {moreOpen && (
+        <div className="sheet-backdrop open" onClick={(event) => { if (event.target === event.currentTarget) closeMore(); }}>
+          <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="tabbar-more-title">
+            <div className="sheet__grab" />
+            <header className="sheet__head">
+              <div className="sheet__heads"><div className="sheet__role" id="tabbar-more-title">更多</div></div>
+              <button ref={closeButtonRef} className="sheet__close" aria-label="關閉" onClick={closeMore}>✕</button>
+            </header>
+            <div className="tabbar-more__list">
+              {overflow.map((item) => (
+                <button key={item.id} className="tabbar-more__row" aria-current={page === item.id ? 'page' : undefined} onClick={() => navigate(item)}>
+                  {item.icon}
+                  <span className="tabbar-more__text"><span>{item.label}</span><small>{descriptions[item.id]}</small></span>
+                  {page === item.id && <svg viewBox="0 0 24 24" className="navicon" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
