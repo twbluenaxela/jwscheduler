@@ -1,4 +1,5 @@
 'use client';
+import { fetchRetry } from '../lib/fetchRetry.mjs';
 import { useState, useEffect } from 'react';
 import { useAuth, getToken } from '../lib/auth-context';
 import { syncWeeksToDrive } from '../lib/driveSync';
@@ -22,7 +23,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
   const canUseMcp = ['ADMIN', 'SYSADMIN'].includes(dbUser?.role) || dbUser?.canLiterature;
   async function mcpRequest(path, options = {}) {
     const token = await getToken();
-    const res = await fetch(path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
+    const res = await fetchRetry(path, { ...options, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '操作失敗');
     return data;
@@ -67,7 +68,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
     if (!isAdmin) return; // settings (invite/members/schedule) are admin-only
     try {
       const token = await getToken();
-      const res = await fetch('/api/congregations/settings', {
+      const res = await fetchRetry('/api/congregations/settings', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -91,7 +92,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
     setSaveStatus('');
     try {
       const token = await getToken();
-      const res = await fetch('/api/congregations/settings', {
+      const res = await fetchRetry('/api/congregations/settings', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -116,7 +117,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
     setNameStatus('');
     try {
       const token = await getToken();
-      const res = await fetch('/api/users/me', {
+      const res = await fetchRetry('/api/users/me', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ displayName: displayNameEdit }),
@@ -163,7 +164,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
   async function changeRole(userId, role) {
     try {
       const token = await getToken();
-      const res = await fetch('/api/congregations/members', {
+      const res = await fetchRetry('/api/congregations/members', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, role }),
@@ -179,7 +180,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
   async function changeLiterature(userId, canLiterature) {
     try {
       const token = await getToken();
-      const res = await fetch('/api/congregations/members', { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, canLiterature }) });
+      const res = await fetchRetry('/api/congregations/members', { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userId, canLiterature }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setMembers(prev => prev.map(m => m.id === userId ? { ...m, canLiterature: data.user.canLiterature } : m));

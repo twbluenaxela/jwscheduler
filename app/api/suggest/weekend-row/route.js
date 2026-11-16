@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
@@ -58,6 +59,6 @@ export async function POST(request) {
     const suggestion = suggestWeekendRow(normalPeople, scheduleRows, existing, refDate, allHistory);
     return NextResponse.json({ suggestion });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }

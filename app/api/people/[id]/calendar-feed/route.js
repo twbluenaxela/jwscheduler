@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { ensureCalendarFeed, calendarLinks } from '../../../../lib/calendarFeed.mjs';
 import db from '../../../../lib/db';
@@ -20,12 +21,12 @@ export async function POST(request, context) {
     const feed = await ensureCalendarFeed(db, person);
     const links = calendarLinks(publicOrigin(request), feed.token, person.name);
     return Response.json({ url: links.ics, page: links.page });
-  } catch (error) { return Response.json({ error: error.message }, { status: 403 }); }
+  } catch (error) { return dbErrorResponse(error, 403); }
 }
 export async function DELETE(request, context) {
   try {
     const person = await authorize(request, context);
     await db.calendarFeed.deleteMany({ where: { personId: person.id, congregationId: person.congregationId } });
     return Response.json({ ok: true });
-  } catch (error) { return Response.json({ error: error.message }, { status: 403 }); }
+  } catch (error) { return dbErrorResponse(error, 403); }
 }

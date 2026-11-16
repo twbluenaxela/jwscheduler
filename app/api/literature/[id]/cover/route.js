@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
@@ -27,7 +28,7 @@ async function update(request, context, remove) {
       return tx.publication.update({ where: { id }, data: { coverToken: remove ? null : randomUUID() } });
     }, { timeout: 60000, maxWait: 10000 });
     return NextResponse.json({ publication: mapPublication(publication) });
-  } catch (err) { return NextResponse.json({ error: err.message }, { status: 500 }); }
+  } catch (err) { return dbErrorResponse(err); }
 }
 export async function PUT(request, context) { return update(request, context, false); }
 export async function DELETE(request, context) { return update(request, context, true); }

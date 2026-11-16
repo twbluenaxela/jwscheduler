@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
@@ -19,6 +20,6 @@ export async function PATCH(request) {
 
     return NextResponse.json({ user: { id: user.id, displayName: user.displayName, email: user.email, role: user.role, canLiterature: user.canLiterature, congregationId: user.congregationId } });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }

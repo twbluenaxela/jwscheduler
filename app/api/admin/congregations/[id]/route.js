@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../../lib/firebase-admin';
@@ -26,7 +27,7 @@ export async function PATCH(request, context) {
     });
     return NextResponse.json({ congregation });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }
 
@@ -40,6 +41,6 @@ export async function DELETE(request, context) {
     await db.congregation.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }

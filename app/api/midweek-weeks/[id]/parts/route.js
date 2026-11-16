@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
@@ -183,6 +184,6 @@ export async function POST(request, context) {
     const status = err.message === '找不到週次或無權限' ? 404
       : err.message === '插入位置已變更，請重新整理後再試' ? 409
       : 500;
-    return NextResponse.json({ error: err.message }, { status });
+    return dbErrorResponse(err, status);
   }
 }

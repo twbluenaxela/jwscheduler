@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
@@ -25,6 +26,6 @@ export async function POST(request) {
     return NextResponse.json({ user });
   } catch (err) {
     console.error('[auth/sync] error:', err.message);
-    return NextResponse.json({ error: err.message }, { status: 401 });
+    return dbErrorResponse(err, 401);
   }
 }

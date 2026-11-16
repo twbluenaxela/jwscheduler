@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../lib/firebase-admin';
@@ -16,6 +17,6 @@ export async function POST(request) {
     const { status, body } = await applyMidweekAssignment(db, user, slotId, name);
     return NextResponse.json(body, { status });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }

@@ -1,4 +1,5 @@
 'use client';
+import { fetchRetry } from '../lib/fetchRetry.mjs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { withCoverFallback } from '../lib/literature.mjs';
 import CatalogView from './literature/CatalogView';
@@ -16,7 +17,7 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
   const [loadError, setLoadError] = useState('');
   const request = useCallback(async (path, init = {}) => {
     const token = await firebaseUser.getIdToken();
-    const response = await fetch(path, {
+    const response = await fetchRetry(path, {
       ...init,
       headers: { ...init.headers, Authorization: `Bearer ${token}` },
     });
