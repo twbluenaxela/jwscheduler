@@ -24,6 +24,9 @@ model Congregation {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
+  serviceCategories ServiceCategory[]
+  serviceAssignments ServiceAssignment[]
+  fieldServiceMeetings FieldServiceMeeting[]
   users           User[]
   weeks           MidweekWeek[]
   weekendRows     WeekendRow[]
@@ -77,6 +80,8 @@ model Person {
   literatureRequests LiteratureRequest[]
   literatureFormSubmissions LiteratureFormSubmission[]
   literatureDeliveries LiteratureDelivery[]
+  serviceAssignments ServiceAssignment[]
+  fieldServiceMeetings FieldServiceMeeting[]
   calendarFeed CalendarFeed?
 
   @@unique([congregationId, name])
@@ -382,4 +387,65 @@ model CalendarFeed {
   token String @unique
   createdAt DateTime @default(now())
   lastFetchedAt DateTime?
+}
+
+model ServiceCategory {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  key String
+  name String
+  kind String
+  positions String[]
+  notes String?
+  sortOrder Int @default(0)
+  active Boolean @default(true)
+  assignments ServiceAssignment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([congregationId, key])
+}
+
+model ServiceAssignment {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  categoryId Int
+  category ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  date String
+  position String
+  personId Int?
+  person Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  text String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([categoryId, date, position])
+  @@index([congregationId, date])
+}
+
+model FieldServiceMeeting {
+  id Int @id @default(autoincrement())
+  congregationId Int
+  congregation Congregation @relation(fields: [congregationId], references: [id], onDelete: Cascade)
+  date String
+  time String
+  place String
+  leaderId Int?
+  leader Person? @relation(fields: [leaderId], references: [id], onDelete: SetNull)
+  territory String?
+  note String?
+  images FieldServiceImage[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([congregationId, date])
+}
+
+model FieldServiceImage {
+  id Int @id @default(autoincrement())
+  meetingId Int
+  meeting FieldServiceMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  mime String
+  data Bytes
+  token String @unique
+  createdAt DateTime @default(now())
 }

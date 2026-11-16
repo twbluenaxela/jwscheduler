@@ -4,6 +4,8 @@
 // file owns signature verification, the real reply call, and HTTP plumbing.
 
 import { ensureCalendarFeed, calendarLinks } from './calendarFeed.mjs';
+import { serviceEventsForPerson } from './services.mjs';
+import { toIsoDate } from './cnDate.mjs';
 import { collectAssignments } from './assignments.mjs';
 
 export const QUERY_KEYWORDS = ['我的安排', '查詢安排', '安排查詢', '節目查詢'];
@@ -89,7 +91,7 @@ export async function handleMessage(event, { db, reply, now, origin }) {
       const links = calendarLinks(origin, feed.token, linked.name);
       await reply(event.replyToken, `📅 ${linked.name}，點這個連結就能把你的安排加到手機行事曆，之後有變動會自動更新：\n${links.page}`);
     } else if (isQuery) {
-      const [weeks, weekendRows] = await Promise.all([
+      const [weeks, weekendRows, categories, serviceAssignments, fieldMeetings] = await Promise.all([
         db.midweekWeek.findMany({
           where: { congregationId: linked.congregationId },
           orderBy: { id: 'asc' },
@@ -99,13 +101,17 @@ export async function handleMessage(event, { db, reply, now, origin }) {
           where: { congregationId: linked.congregationId },
           orderBy: { sortOrder: 'asc' },
         }),
+        db.serviceCategory.findMany({ where: { congregationId: linked.congregationId } }),
+        db.serviceAssignment.findMany({ where: { congregationId: linked.congregationId } }),
+        db.fieldServiceMeeting.findMany({ where: { congregationId: linked.congregationId } }),
       ]);
       const items = collectAssignments(linked.name, weeks, weekendRows, { skipSuspended: true, now });
-      if (!items.length) {
+      const duties = serviceEventsForPerson({ person: linked, categories, assignments: serviceAssignments, fieldMeetings, weeks, weekendRows }).filter(item => item.isoDate >= toIsoDate(now || new Date())).sort((a, b) => a.isoDate.localeCompare(b.isoDate));
+      if (!items.length && !duties.length) {
         await reply(event.replyToken, `${linked.name}，目前你沒有排定的安排。`);
       } else {
-        const list = items.map((i) => `▸ ${i.date}  ${i.role}`).join('\n');
-        await reply(event.replyToken, `${linked.name}，你目前的安排（共 ${items.length} 項）：\n\n${list}`);
+        const list = [...items.map((i) => `▸ ${i.date}  ${i.role}`), ...duties.map(i => `▸ ${i.isoDate}${i.time ? ` ${i.time}` : ''}  ${i.label}`)].join('\n');
+        await reply(event.replyToken, `${linked.name}，你目前的安排（共 ${items.length + duties.length} 項）：\n\n${list}`);
       }
     } else {
       await reply(event.replyToken, `✓ 你已連結為「${linked.name}」（${linked.congregation.name}）。\n\n傳送「我的安排」查詢排班，或傳送「說明」查看可用指令。`);

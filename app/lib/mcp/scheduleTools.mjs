@@ -9,6 +9,7 @@ import { buildPastHistory } from '../pastHistory.mjs';
 import { buildCandidates } from '../candidates.mjs';
 import { buildPairIndex, collectMidweekPairs, counterpartName } from '../pairHistory.mjs';
 import { applyMidweekAssignment, applyWeekendPatch } from '../mutations.mjs';
+import { meetingDatesInMonth, serviceEventsForPerson } from '../services.mjs';
 
 const todayTaipei = () => parseIsoDate(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date()));
 const monday = (date) => { const d = new Date(date); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; };
@@ -98,6 +99,41 @@ const selectedWeeks = (c, count) => {
     return resolveWeek(toIsoDate(date), c.weeks, c.weekendRows);
   });
 };
+async function loadServices(ctx, from, to) {
+  const date = { gte: from, ...(to ? { lte: to } : {}) };
+  const [categories, assignments, fieldMeetings] = await Promise.all([
+    ctx.db.serviceCategory.findMany({ where: { congregationId: ctx.congregationId }, orderBy: { sortOrder: 'asc' } }),
+    ctx.db.serviceAssignment.findMany({ where: { congregationId: ctx.congregationId, date }, include: { person: { select: { name: true } } } }),
+    ctx.db.fieldServiceMeeting.findMany({ where: { congregationId: ctx.congregationId, date }, include: { leader: { select: { name: true } } }, orderBy: [{ date: 'asc' }, { time: 'asc' }] }),
+  ]);
+  return { categories, assignments, fieldMeetings };
+}
+function resolveCategory(query, categories) {
+  const matches = categories.filter(c => c.key === query || c.name === query);
+  if (matches.length !== 1) throw new Error(`找不到或無法確定服務類別，請指定：${categories.map(c => `${c.name}（${c.key}）`).join('、')}`);
+  return matches[0];
+}
+async function personItems(ctx, c, person, cutoff, end) {
+  const from = toIsoDate(cutoff);
+  const services = await loadServices(ctx, `${from.slice(0, 7)}-01`, end);
+  const items = [];
+  for (const [rows, midweek] of [[c.weeks, true], [c.weekendRows, false]]) {
+    for (const row of rows) {
+      if (midweek && isMidweekSuspended(row)) continue;
+      const date = resolveRowDate(row);
+      if (!date) continue;
+      for (const item of collectAssignments(person.name, midweek ? [row] : [], midweek ? [] : [row], { today: cutoff, skipSuspended: true })) {
+        items.push({ ...item, isoDate: toIsoDate(date), label: item.role, time: midweek ? (row.weekdayPill?.match(/\d{1,2}:\d{2}/)?.[0] || '19:30') : '10:00', kind: midweek ? 'midweek' : 'weekend' });
+      }
+    }
+  }
+  items.push(...serviceEventsForPerson({ person, ...services, weeks: c.weeks, weekendRows: c.weekendRows }).map(item => ({ ...item, time: item.time || item.weekdayPill?.match(/\d{1,2}:\d{2}/)?.[0] || (item.kind === 'weekend' ? '10:00' : '19:30') })));
+  return items.filter(item => item.isoDate >= from && (!end || item.isoDate <= end)).sort((a, b) => a.isoDate.localeCompare(b.isoDate) || a.time.localeCompare(b.time));
+}
+function formatPersonItem(item) {
+  const date = parseIsoDate(item.isoDate);
+  return `${date.getMonth() + 1}/${date.getDate()}（${'日一二三四五六'[date.getDay()]}）${item.time} ${item.label}`;
+}
 const datePart = { date: str('日期或這週、下週'), part: str('節目編號、標題或主席、禱告'), role: str('角色或 0、1') };
 export const scheduleTools = [
   definition('get_week_schedule', '查詢一週聚會安排', { date: str('日期') }, [], async (ctx, a) => {
@@ -121,8 +157,55 @@ export const scheduleTools = [
     const person = resolvePerson(a.person, c.people);
     const cutoff = todayTaipei();
     if (a.include_past) cutoff.setMonth(cutoff.getMonth() - 3);
-    const items = collectAssignments(person.name, c.weeks.filter((w) => !isMidweekSuspended(w)), c.weekendRows, { today: cutoff, skipSuspended: true });
-    return result(`${person.name}：\n${items.map((i) => `${i.date} ${i.role}`).join('\n') || '沒有安排'}`, { person: person.name, assignments: items });
+    const items = await personItems(ctx, c, person, cutoff);
+    return result(`${person.name}：\n${items.map(formatPersonItem).join('\n') || '沒有安排'}`, { person: person.name, assignments: items });
+  }),
+  definition('get_my_assignments', '查詢我自己最近的委派（聚會節目＋服務）', { weeks: num('往後幾週，預設 8') }, [], async (ctx, a) => {
+    const count = span(a.weeks ?? 8);
+    const c = await load(ctx);
+    const name = ctx.user?.displayName;
+    let matches = typeof name === 'string' && name ? c.people.filter(p => p.name === name) : [];
+    if (!matches.length && typeof name === 'string' && name.trim()) matches = c.people.filter(p => p.name.trim() === name.trim());
+    if (matches.length !== 1) return result('無法確定您的姓名，請問您是哪一位？請使用 get_person_assignments 指定姓名查詢。', { matches: matches.map(p => p.name) });
+    const person = matches[0];
+    const today = todayTaipei();
+    const last = new Date(today);
+    last.setDate(last.getDate() + count * 7 - 1);
+    const items = await personItems(ctx, c, person, today, toIsoDate(last));
+    const feed = await ensureCalendarFeed(ctx.db, person);
+    const page = calendarLinks(ctx.origin, feed.token, person.name).page;
+    return result(`${person.name}：\n${items.map(formatPersonItem).join('\n') || '沒有安排'}\n行事曆訂閱：${page}\n訂閱後會自動出現在行事曆`, { person: person.name, assignments: items, page });
+  }),
+  definition('get_service_schedule', '查詢服務安排（麥克風、影音、招待、講台、打掃、帶頭傳道）', { month: str('YYYY-MM，預設本月'), category: str('類別名稱或 key，可省略') }, [], async (ctx, a) => {
+    const month = a.month ?? toIsoDate(todayTaipei()).slice(0, 7);
+    if (!parseIsoDate(`${month}-01`) || toIsoDate(parseIsoDate(`${month}-01`)) !== `${month}-01`) throw new Error('月份格式錯誤');
+    const c = await load(ctx);
+    const services = await loadServices(ctx, `${month}-01`, `${month}-31`);
+    const categories = a.category ? [resolveCategory(a.category, services.categories)] : services.categories;
+    const dates = meetingDatesInMonth(month, c.weeks, c.weekendRows);
+    const lines = categories.map(category => {
+      let rows;
+      if (category.kind === 'field') rows = services.fieldMeetings.map(m => `${m.date} ${m.time} ${m.place}｜帶領：${m.leader?.name || '（空）'}｜地區：${m.territory || '（空）'}`);
+      else if (category.kind === 'groups') rows = services.assignments.filter(x => x.categoryId === category.id).map(x => `${month}：${x.text || x.person?.name || '（空）'}`);
+      else rows = dates.map(d => `${d.iso}：${category.positions.map(position => {
+        const assignment = services.assignments.find(x => x.categoryId === category.id && x.date === d.iso && x.position === position);
+        return `${position} → ${assignment?.person?.name || assignment?.text || '（空）'}`;
+      }).join('；')}`);
+      return `${category.name}\n${rows.join('\n') || '沒有安排'}`;
+    });
+    return result(lines.join('\n\n') || '沒有服務類別', { month, categories, dates, assignments: services.assignments, fieldMeetings: services.fieldMeetings });
+  }),
+  definition('set_service_assignment', '修改服務委派', { category: str('類別名稱或 key'), date: str('YYYY-MM-DD'), position: str('位置'), person: str('姓名，留空以清除') }, ['category', 'date', 'position', 'person'], async (ctx, a) => {
+    if (!parseIsoDate(a.date) || toIsoDate(parseIsoDate(a.date)) !== a.date) throw new Error('日期格式錯誤');
+    const c = await load(ctx);
+    const categories = await ctx.db.serviceCategory.findMany({ where: { congregationId: ctx.congregationId } });
+    const category = resolveCategory(a.category, categories);
+    if (category.kind === 'field' || (category.kind === 'slots' && !category.positions.includes(a.position)) || (category.kind === 'groups' && (a.position !== '小組' || !a.date.endsWith('-01')))) throw new Error('此類別的位置或日期無效');
+    const person = a.person.trim() ? resolvePerson(a.person, c.people) : null;
+    const where = { categoryId: category.id, date: a.date, position: a.position, congregationId: ctx.congregationId };
+    if (person) await ctx.db.serviceAssignment.upsert({ where: { categoryId_date_position: { categoryId: category.id, date: a.date, position: a.position } }, create: { ...where, personId: person.id, text: null }, update: { personId: person.id, text: null } });
+    else await ctx.db.serviceAssignment.deleteMany({ where });
+    return result(`已將 ${a.date} ${category.name}（${a.position}）改為 ${person?.name || '（空）'}`, { ...where, person: person?.name ?? null });
   }),
   definition('list_vacancies', '查詢空缺', { weeks: num('週數 1–12') }, [], async (ctx, a) => {
     const c = await load(ctx);

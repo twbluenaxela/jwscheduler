@@ -148,3 +148,11 @@ test('行事曆指令建立並重用個人連結，也支援簡體及英文', as
     assert.ok(text.endsWith(`https://example.com/cal/${token}`));
   }
 });
+
+test('我的安排 includes service duties after meeting parts', async () => {
+  const db = makeFakeDb({ ...baseSeed, serviceCategories: [{ id: 1, congregationId: 1, kind: 'slots', name: '講台服務', positions: ['講台'] }], serviceAssignments: [{ congregationId: 1, categoryId: 1, date: '2026-06-03', position: '講台', personId: 7 }] });
+  const { replies, reply } = replySpy();
+  await handleMessage(msg('U-wang', '我的安排'), { db, reply, now: NOW });
+  assert.match(replies[0].text, /共 3 項/);
+  assert.match(replies[0].text, /2026-06-03  講台服務/);
+});

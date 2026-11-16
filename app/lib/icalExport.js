@@ -2,7 +2,7 @@
 // Produces RFC-5545 VCALENDAR output for one person's upcoming assignments.
 // Taiwan Standard Time (UTC+8) is hardcoded — no DST.
 
-import { resolveRowDate } from './cnDate.mjs';
+import { resolveRowDate, parseIsoDate } from './cnDate.mjs';
 
 // Prefers an item's stored isoDate; otherwise infers the year from the year-less
 // display string via the shared parser. A wrong year here writes a wrong date
@@ -57,15 +57,17 @@ export function generateIcal(assignments, personName, congCode = 'jwscheduler') 
     if (!parsed) continue;
 
     const weekend = isWeekendSlot(a.date, a.weekdayPill);
-    const { hour, min } = weekend ? { hour: 10, min: 0 } : extractTime(a.weekdayPill);
-    const end = addMinutes(hour, min, DURATION);
+    const { hour, min } = a.time ? extractTime(a.time) : weekend ? { hour: 10, min: 0 } : extractTime(a.weekdayPill);
+    const end = addMinutes(hour, min, a.time ? 60 : DURATION);
 
     const dtStart = icalDateTime(parsed.year, parsed.month, parsed.day, hour, min);
-    const dtEnd   = icalDateTime(parsed.year, parsed.month, parsed.day, end.hour, end.min);
+    const endDate = parseIsoDate(`${parsed.year}-${String(parsed.month).padStart(2, '0')}-${String(parsed.day).padStart(2, '0')}`);
+    if (hour * 60 + min + (a.time ? 60 : DURATION) >= 1440) endDate.setDate(endDate.getDate() + 1);
+    const dtEnd = icalDateTime(endDate.getFullYear(), endDate.getMonth() + 1, endDate.getDate(), end.hour, end.min);
 
     const uidBase = `${parsed.year}${String(parsed.month).padStart(2,'0')}${String(parsed.day).padStart(2,'0')}-${encodeURIComponent(a.label)}-${encodeURIComponent(personName)}@${congCode}`;
     const summary = escapeIcal(a.label);
-    const desc = a.context ? escapeIcal(`${a.label} — ${a.context}`) : summary;
+    const desc = a.description != null ? escapeIcal(a.description) : a.context ? escapeIcal(`${a.label} — ${a.context}`) : summary;
 
     lines.push(
       'BEGIN:VEVENT',
@@ -74,6 +76,7 @@ export function generateIcal(assignments, personName, congCode = 'jwscheduler') 
       `DTEND;TZID=Asia/Taipei:${dtEnd}`,
       `SUMMARY:${summary}`,
       `DESCRIPTION:${desc}`,
+      ...(a.location ? [`LOCATION:${escapeIcal(a.location)}`] : []),
       'END:VEVENT',
     );
   }

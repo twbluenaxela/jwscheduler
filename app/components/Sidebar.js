@@ -36,6 +36,10 @@ export default function Sidebar({ page, setPage, congName, scheduleStats, role, 
       ),
     },
     {
+      id: 'services', label: '服務',
+      icon: <svg viewBox="0 0 24 24" className="navicon"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6M9 10h6M9 14h6M9 18h4" /></svg>,
+    },
+    {
       id: 'literature', label: '書刊',
       icon: <svg viewBox="0 0 24 24" className="navicon"><path d="M4 5.5C7 4 10 4.5 12 6v14c-2-1.5-5-2-8-.5zM20 5.5C17 4 14 4.5 12 6v14c2-1.5 5-2 8-.5z" /></svg>,
     },

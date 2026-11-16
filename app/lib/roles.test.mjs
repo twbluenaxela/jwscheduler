@@ -64,3 +64,12 @@ test('literature permission is explicit except for sysadmins', async () => {
   assert.equal(canLiterature({ role: 'ADMIN' }), false);
   assert.equal(canLiterature(null), false);
 });
+
+test('service writes use the shared canEdit authorization', () => {
+  const shared = readFileSync(new URL('../api/services/_shared.js', import.meta.url), 'utf8');
+  assert.ok(shared.includes('canEdit(user.role)'));
+  for (const rel of ['route.js', 'categories/[id]/route.js', 'assignments/route.js', 'field/route.js', 'field/[id]/route.js', 'field/[id]/images/route.js', 'field/images/[token]/route.js', 'field/copy-month/route.js']) {
+    const src = readFileSync(new URL(`../api/services/${rel}`, import.meta.url), 'utf8');
+    assert.ok(src.includes('authorize(request, true)'), `${rel} must guard writes`);
+  }
+});

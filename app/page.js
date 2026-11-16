@@ -10,6 +10,7 @@ import MeetingsPage from './components/MeetingsPage';
 import OverviewPage from './components/OverviewPage';
 import PeoplePage from './components/PeoplePage';
 import LiteraturePage from './components/LiteraturePage';
+import ServicesPage from './components/ServicesPage';
 import ImportPage from './components/ImportPage';
 import SettingsPage from './components/SettingsPage';
 import AssignSheet from './components/AssignSheet';
@@ -761,6 +762,7 @@ export default function App() {
               canEdit={canEdit}
             />
           )}
+          {page === 'services' && <ServicesPage firebaseUser={firebaseUser} canEdit={canEdit} people={people} />}
           {page === 'literature' && canLiterature && <LiteraturePage firebaseUser={firebaseUser} people={people} />}
           {page === 'settings' && (
             <SettingsPage
