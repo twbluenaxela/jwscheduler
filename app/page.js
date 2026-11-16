@@ -1,4 +1,5 @@
 'use client';
+import { fetchRetry } from './lib/fetchRetry.mjs';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth, getToken } from './lib/auth-context';
 import { useRouter } from 'next/navigation';
@@ -95,7 +96,7 @@ function OnboardingScreen() {
     (async () => {
       try {
         const token = await getToken();
-        const res = await fetch('/api/congregations/list', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetchRetry('/api/congregations/list', { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
         if (res.ok) setCongregations(data.congregations);
       } catch {}
@@ -109,7 +110,7 @@ function OnboardingScreen() {
     setError(''); setLoading(true);
     try {
       const token = await getToken();
-      const res = await fetch('/api/congregations/join', {
+      const res = await fetchRetry('/api/congregations/join', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -189,6 +190,10 @@ export default function App() {
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
 
   useEffect(() => {
+    void fetch('/api/health').catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const saved = localStorage.getItem('jwscheduler_congSettings');
     if (saved) try { setCongSettings(JSON.parse(saved)); } catch {}
   }, []);
@@ -227,7 +232,7 @@ export default function App() {
       setWorkspaceLoading(true);
       try {
         const token = await getToken();
-        const res = await fetch('/api/congregations/data', {
+        const res = await fetchRetry('/api/congregations/data', {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
@@ -332,7 +337,7 @@ export default function App() {
         ...(weekObj.ministry ?? []),
         ...(weekObj.living ?? []),
       ];
-      const res = await fetch(`/api/midweek-weeks/${weekObj.id}`, {
+      const res = await fetchRetry(`/api/midweek-weeks/${weekObj.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -366,7 +371,7 @@ export default function App() {
     if (!weekObj?.id || !(await saveMidweekWeek(weekObj))) return null;
     try {
       const token = await getToken();
-      const res = await fetch(`/api/midweek-weeks/${weekObj.id}/parts`, {
+      const res = await fetchRetry(`/api/midweek-weeks/${weekObj.id}/parts`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(partDraft),
@@ -386,7 +391,7 @@ export default function App() {
     setWeek((prev) => Math.max(0, prev > idx ? prev - 1 : prev));
     try {
       const token = await getToken();
-      const res = await fetch(`/api/midweek-weeks/${weekId}`, {
+      const res = await fetchRetry(`/api/midweek-weeks/${weekId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -420,7 +425,7 @@ export default function App() {
     setWeekendRows(prev => [...prev, optimistic]);
     try {
       const token = await getToken();
-      const res = await fetch('/api/weekend-rows', {
+      const res = await fetchRetry('/api/weekend-rows', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ type, date: defaultDate, isoDate: defaultIso }),
@@ -439,7 +444,7 @@ export default function App() {
     if (String(rowId).startsWith('temp-')) return;
     try {
       const token = await getToken();
-      const res = await fetch(`/api/weekend-rows/${rowId}`, {
+      const res = await fetchRetry(`/api/weekend-rows/${rowId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -453,7 +458,7 @@ export default function App() {
     if (String(rowId).startsWith('temp-')) return;
     try {
       const token = await getToken();
-      const res = await fetch(`/api/weekend-rows/${rowId}`, {
+      const res = await fetchRetry(`/api/weekend-rows/${rowId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value }),
@@ -481,7 +486,7 @@ export default function App() {
     if (!canEdit) return;
     try {
       const token = await getToken();
-      const res = await fetch('/api/congregations/settings', {
+      const res = await fetchRetry('/api/congregations/settings', {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -499,7 +504,7 @@ export default function App() {
 
   const saveImportedWeeks = useCallback(async (weeks) => {
     const token = await getToken();
-    const res = await fetch('/api/midweek-weeks/import', {
+    const res = await fetchRetry('/api/midweek-weeks/import', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ weeks }),
@@ -520,7 +525,7 @@ export default function App() {
       const weMatch = slotId.match(/^we(\d+)_(.+)$/);
       if (weMatch) {
         const [, rowId, field] = weMatch;
-        const res = await fetch(`/api/weekend-rows/${rowId}`, {
+        const res = await fetchRetry(`/api/weekend-rows/${rowId}`, {
           method: 'PATCH',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ [field]: name }),
@@ -529,7 +534,7 @@ export default function App() {
         updateWeekendRow(Number(rowId), field, name);
         return;
       }
-      const res = await fetch('/api/assignments', {
+      const res = await fetchRetry('/api/assignments', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ slotId, name }),
@@ -612,7 +617,7 @@ export default function App() {
       const token = await getToken();
       // Pass the row's own date so recency/past-only is measured from that meeting.
       const rowDate = weekendRows.find(r => r._id === rowId)?.date;
-      const res = await fetch('/api/suggest/weekend-row', {
+      const res = await fetchRetry('/api/suggest/weekend-row', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ existing, date: rowDate }),
@@ -637,7 +642,7 @@ export default function App() {
       const weekAssignments = Object.fromEntries(
         Object.entries(assignments).filter(([k]) => k.startsWith(prefix))
       );
-      const res = await fetch('/api/suggest/midweek-week', {
+      const res = await fetchRetry('/api/suggest/midweek-week', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ weekId, assignments: weekAssignments }),

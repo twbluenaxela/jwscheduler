@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { dbErrorResponse } from './apiErrors.mjs';
 import { verifyIdToken } from './firebase-admin';
 import db from './db';
 import { canLiterature } from './roles.mjs';
@@ -11,7 +11,8 @@ export async function auth(request) {
   return user.congregationId;
 }
 export function fail(error) {
-  return NextResponse.json({ error: error.code === 'P2002' ? '資料已存在' : error.message }, { status: error.status || (error.code === 'P2002' ? 409 : 500) });
+  if (error.code === 'P2002') return Response.json({ error: '資料已存在' }, { status: 409 });
+  return dbErrorResponse(error, error.status || 500);
 }
 export function invalid(message = '輸入資料無效') { throw Object.assign(new Error(message), { status: 400 }); }
 export function id(value) {

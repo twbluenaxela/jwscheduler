@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
@@ -22,7 +23,7 @@ export async function DELETE(request, context) {
     await db.weekendRow.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }
 
@@ -44,6 +45,6 @@ export async function PATCH(request, context) {
     const { status, body: resBody } = await applyWeekendPatch(db, user, existing, body);
     return NextResponse.json(resBody, { status });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }

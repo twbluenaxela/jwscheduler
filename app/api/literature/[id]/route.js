@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
@@ -17,7 +18,7 @@ async function update(request, context, remove) {
     try { data = remove ? { active: false } : publicationPayload(await request.json(), true); } catch (err) { return NextResponse.json({ error: err.message }, { status: 400 }); }
     const publication = await db.publication.update({ where: { id }, data });
     return NextResponse.json({ publication: mapPublication(publication) });
-  } catch (err) { return NextResponse.json({ error: err.code === 'P2002' ? '已有相同代號、語言與格式的書刊' : err.message }, { status: err.code === 'P2002' ? 409 : 500 }); }
+  } catch (err) { return err.code === 'P2002' ? NextResponse.json({ error: '已有相同代號、語言與格式的書刊' }, { status: 409 }) : dbErrorResponse(err); }
 }
 export async function PATCH(request, context) { return update(request, context, false); }
 export async function DELETE(request, context) { return update(request, context, true); }

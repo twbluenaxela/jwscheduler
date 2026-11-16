@@ -1,4 +1,5 @@
 'use client';
+import { fetchRetry } from '../lib/fetchRetry.mjs';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { getToken } from '../lib/auth-context';
 import { generateIcal, downloadIcal } from '../lib/icalExport';
@@ -141,10 +142,10 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
       const url = `/api/people/${selectedPerson.id}/calendar-feed`;
       const headers = { Authorization: `Bearer ${token}` };
       if (reset) {
-        const response = await fetch(url, { method: 'DELETE', headers });
+        const response = await fetchRetry(url, { method: 'DELETE', headers });
         if (!response.ok) throw new Error('無法重設連結');
       }
-      const response = await fetch(url, { method: 'POST', headers });
+      const response = await fetchRetry(url, { method: 'POST', headers });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '無法取得連結');
       await navigator.clipboard.writeText(data.page);
@@ -201,7 +202,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     const personId = person.id;
     const run = async () => {
       const token = await getToken();
-      const res = await fetch(`/api/people/${personId}`, {
+      const res = await fetchRetry(`/api/people/${personId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(changes),
@@ -246,7 +247,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     setError('');
     try {
       const token = await getToken();
-      const res = await fetch(`/api/people/${person.id}`, {
+      const res = await fetchRetry(`/api/people/${person.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -272,7 +273,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     setQuery('');
     try {
       const token = await getToken();
-      const res = await fetch('/api/people', {
+      const res = await fetchRetry('/api/people', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(fresh),

@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../lib/firebase-admin';
@@ -52,7 +53,7 @@ export async function GET(request) {
 
     return NextResponse.json({ people: people.map(mapPerson) });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return dbErrorResponse(err);
   }
 }
 
@@ -73,6 +74,6 @@ export async function POST(request) {
     return NextResponse.json({ person: mapPerson(person) });
   } catch (err) {
     const status = err.code === 'P2002' ? 409 : 500;
-    return NextResponse.json({ error: err.code === 'P2002' ? '人員姓名已存在' : err.message }, { status });
+    return err.code === 'P2002' ? NextResponse.json({ error: '人員姓名已存在' }, { status }) : dbErrorResponse(err, status);
   }
 }

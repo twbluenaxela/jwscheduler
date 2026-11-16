@@ -1,4 +1,5 @@
 'use client';
+import { fetchRetry } from './fetchRetry.mjs';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase-client';
@@ -26,7 +27,7 @@ export function AuthProvider({ children }) {
       setSyncError(null);
       try {
         const token = await fbUser.getIdToken();
-        const res = await fetch('/api/auth/sync', {
+        const res = await fetchRetry('/api/auth/sync', {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: fbUser.email, displayName: fbUser.displayName }),

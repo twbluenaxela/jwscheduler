@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../lib/firebase-admin';
@@ -21,7 +22,7 @@ export async function GET(request) {
     ]);
     const formToken = congregation?.literatureFormToken || null;
     return NextResponse.json({ publications: sortPublications(publications).map(mapPublication), formToken, formUrl: formToken ? `${publicOrigin(request)}/r/${formToken}` : null });
-  } catch (err) { return NextResponse.json({ error: err.message }, { status: 500 }); }
+  } catch (err) { return dbErrorResponse(err); }
 }
 export async function POST(request) {
   try {
@@ -33,5 +34,5 @@ export async function POST(request) {
     try { data = publicationPayload(await request.json()); } catch (err) { return NextResponse.json({ error: err.message }, { status: 400 }); }
     const publication = await db.publication.create({ data: { ...data, congregationId: user.congregationId } });
     return NextResponse.json({ publication: mapPublication(publication) });
-  } catch (err) { return NextResponse.json({ error: err.code === 'P2002' ? '已有相同代號、語言與格式的書刊' : err.message }, { status: err.code === 'P2002' ? 409 : 500 }); }
+  } catch (err) { return err.code === 'P2002' ? NextResponse.json({ error: '已有相同代號、語言與格式的書刊' }, { status: 409 }) : dbErrorResponse(err); }
 }

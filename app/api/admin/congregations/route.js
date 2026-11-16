@@ -1,3 +1,4 @@
+import { dbErrorResponse } from '../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
@@ -24,6 +25,6 @@ export async function POST(request) {
     return NextResponse.json({ congregation });
   } catch (err) {
     const dup = err.code === 'P2002';
-    return NextResponse.json({ error: dup ? '代碼已存在' : err.message }, { status: dup ? 409 : 500 });
+    return dup ? NextResponse.json({ error: '代碼已存在' }, { status: 409 }) : dbErrorResponse(err);
   }
 }
