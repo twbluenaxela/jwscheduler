@@ -31,13 +31,8 @@ test('inventory update uses S-28 labels', () => {
   assert.doesNotMatch(text, /期初|收到|發出/);
 });
 
-test('order checklist distinguishes no arrival from an actual zero difference', () => {
-  const rows = [
-    { series: 'w', language: 'CHT', subscribed: 10, issueCode: null, lastReceived: 0, diff: -10 },
-    { series: 'mwb', language: 'CHT', subscribed: 5, issueCode: 'mwb27.01', lastReceived: 5, diff: 0 },
-  ];
+test('order checklist formats standing order changes', () => {
+  const rows = [{ label: '守望台研讀版中文', now: 10, last: 5, diff: 5 }];
   const text = formatResult('order_checklist', '定期訂單核對', rows);
-  assert.match(text, /守望台研讀版 中文：訂閱 10，尚無到貨記錄/);
-  assert.doesNotMatch(text, /差額 -10/);
-  assert.match(text, /聚會手冊 中文：訂閱 5，最新 mwb27.01 收到 5，差額 \+0/);
+  assert.match(text, /守望台研讀版中文：現在 10 本，上次到 5 本，改成 10/);
 });

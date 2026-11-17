@@ -82,11 +82,17 @@ export function formatResult(name, summary, data) {
       lines = data.map((r) => `${series(r.series)} ${language(r.language)}：×${r.subscribed}`);
       break;
     case 'order_checklist':
-      lines = data.map((r) => {
-        const prefix = `${series(r.series)} ${language(r.language)}：訂閱 ${r.subscribed}，`;
-        if (!r.issueCode) return `${prefix}尚無到貨記錄`;
-        return `${prefix}最新 ${r.issueCode} 收到 ${r.lastReceived}，差額 ${r.diff >= 0 ? '+' : ''}${r.diff}`;
-      });
+      lines = data.map((row) => `${row.label}：現在 ${row.now} 本，上次到 ${row.last} 本，改成 ${row.now}`);
+      break;
+    case 'get_order_list':
+      lines = [
+        '要訂：',
+        ...data.toOrder.map((row) => `${row.hubCode} ×${row.order}（需要 ${row.need}，庫存 ${row.stock}）`),
+        '庫存夠，直接發：',
+        ...data.fromStock.map((row) => `${row.hubCode} ×${row.need}`),
+        '定期要調整：',
+        ...data.standing.map((row) => `${row.label}：現在 ${row.now} 本，上次到 ${row.last} 本，改成 ${row.now}`),
+      ];
       break;
     case 'list_shipments':
       lines = data.map((s) => `裝箱單 ${s.slipNumber}｜${date(s.shippedAt || s.createdAt)}｜` +
