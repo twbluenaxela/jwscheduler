@@ -2,6 +2,7 @@ import { matchPublications } from '../literature.mjs';
 import { localizedName } from '../publicForm.mjs';
 import { allocateShipment, seriesOf } from '../literatureShipments.mjs';
 import { isCountable } from '../literatureInventory.mjs';
+import { buildOrderList, standingOrders } from '../literatureOrders.mjs';
 import { resolvePerson, resolvePublication } from './resolution.mjs';
 
 export function createTools({ countData, refreshLines, validateMonth, nonnegative, quantity, note, status, id }) {
@@ -185,19 +186,21 @@ return [
     return output(`已開始 ${month} 庫存清點`, count);
   }),
   definition('order_checklist', '核對定期訂單 order checklist standing orders', {}, [], async (ctx) => {
-    const rows = await totals(ctx);
-    const shipments = await ctx.db.shipment.findMany({
-      where: { congregationId: ctx.congregationId }, include: { lines: { include: { publication: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
-    const result = rows.filter((x) => ['w', 'wlp', 'mwb'].includes(x.series)).map((row) => {
-      const lines = shipments.flatMap((s) => s.lines).filter((l) => seriesOf(l.publication.code) === row.series && l.publication.language === row.language);
-      lines.sort((a, b) => (b.publication.issue || '').localeCompare(a.publication.issue || ''));
-      const latest = lines[0];
-      const received = latest ? lines.filter((l) => l.publicationId === latest.publicationId).reduce((sum, l) => sum + l.quantity, 0) : 0;
-      return { ...row, lastReceived: received, issueCode: latest?.publication.code ?? null, diff: received - row.subscribed };
-    });
-    return output('定期訂單核對', result);
+    const [subscriptions, shipments] = await Promise.all([
+      ctx.db.literatureSubscription.findMany({ where: { congregationId: ctx.congregationId } }),
+      ctx.db.shipment.findMany({ where: { congregationId: ctx.congregationId }, include: { lines: { include: { publication: true } } } }),
+    ]);
+    return output('定期訂單核對', standingOrders({ subscriptions, shipments }));
+  }),
+  definition('get_order_list', '訂購清單 order list what to order JW Hub', {}, [], async (ctx) => {
+    const [requests, pubs, count, subscriptions, shipments] = await Promise.all([
+      ctx.db.literatureRequest.findMany({ where: { congregationId: ctx.congregationId, status: { in: ['pending', 'received'] } }, include: { person: true } }),
+      publications(ctx),
+      ctx.db.inventoryCount.findFirst({ where: { congregationId: ctx.congregationId }, orderBy: { month: 'desc' }, include: { lines: true } }),
+      ctx.db.literatureSubscription.findMany({ where: { congregationId: ctx.congregationId } }),
+      ctx.db.shipment.findMany({ where: { congregationId: ctx.congregationId }, include: { lines: { include: { publication: true } } } }),
+    ]);
+    return output('訂購清單', buildOrderList({ requests, publications: pubs, countLines: count?.lines || [], subscriptions, shipments }));
   }),
 ];
 

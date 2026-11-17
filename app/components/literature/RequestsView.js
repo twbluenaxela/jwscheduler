@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Icon from './Icon';
 import Menu from './Menu';
 import FormLinkSheet from './FormLinkSheet';
+import OrderList from './OrderList';
 import { matchPublications } from '../../lib/literature.mjs';
 import { localizedName } from '../../lib/publicForm.mjs';
 import PubThumb, { GROUPS, LANGUAGES, SERIES, Sheet, groupOf, issueLabel, sameId, seriesPublication } from './PubThumb';
@@ -101,6 +102,10 @@ export default function RequestsView({ people, items, request }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [guestName, setGuestName] = useState(null);
   const [snack, setSnack] = useState(null);
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [orderData, setOrderData] = useState(null);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderError, setOrderError] = useState('');
   const [notes, setNotes] = useState({});
   const [noteSaved, setNoteSaved] = useState(false);
   useEffect(() => {
@@ -120,6 +125,36 @@ export default function RequestsView({ people, items, request }) {
   useEffect(() => {
     load();
   }, [load]);
+  const loadOrders = useCallback(async () => {
+    setOrderLoading(true);
+    try {
+      setOrderData(await request('/api/literature/order-list'));
+      setOrderError('');
+    } catch (err) {
+      setOrderError(err.message);
+    } finally {
+      setOrderLoading(false);
+    }
+  }, [request]);
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders, data]);
+  async function markOrders(rows, status) {
+    setBusy(true);
+    try {
+      const result = await request('/api/literature/order-list/mark', json('POST', {
+        requestIds: rows.map((row) => row.requestId),
+        status,
+      }));
+      await load();
+      await loadOrders();
+      if (result.requestIds.length && status !== 'pending') setSnack({ ids: result.requestIds, label: status === 'ordered' ? '已訂' : '已到' });
+    } catch (err) {
+      setOrderError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   const subscriptionsFor = (id) => data.subscriptions.filter((s) => sameId(s.personId, id));
   const requestsFor = (id) => data.requests.filter((r) => sameId(r.personId, id) && open(r));
   const publication = (id) => {
@@ -178,6 +213,12 @@ export default function RequestsView({ people, items, request }) {
   );
   return (
     <div>
+      {orderData && (orderData.toOrder.length > 0 || orderData.fromStock.length > 0) && (
+        <button className="lit-order-summary" onClick={() => setOrderOpen(true)}>
+          <span>訂購清單 · 要訂 {orderData.toOrder.length} 項 · {orderData.toOrder.reduce((sum, row) => sum + row.order, 0)} 本</span>
+          <Icon name="chevronRight" />
+        </button>
+      )}
       <div className="lit-search">
         <input
           className="field__input"
@@ -185,7 +226,7 @@ export default function RequestsView({ people, items, request }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <Menu items={[{ label: '申請連結（給大家用的表單）', onSelect: () => setLinkOpen(true) }]} />
+        <Menu items={[{ label: '訂購清單', onSelect: () => setOrderOpen(true) }, { label: '申請連結（給大家用的表單）', onSelect: () => setLinkOpen(true) }]} />
         <button className="btn btn--primary lit-add" aria-label="新增申請" onClick={() => add(null)}>
           ＋
         </button>
@@ -279,13 +320,18 @@ export default function RequestsView({ people, items, request }) {
           close={() => setGuestName(null)}
         />
       )}
+      {orderOpen && <OrderList data={orderData} loading={orderLoading} error={orderError} reload={loadOrders} close={() => setOrderOpen(false)} mark={markOrders} busy={busy} />}
       {linkOpen && <FormLinkSheet request={request} close={() => setLinkOpen(false)} onNoteSaved={updateNote} />}
       {snack && (
         <div className="lit-handout-snack" role="status">
-          已封存{' '}
+          {snack.ids ? `已標 ${snack.ids.length} 筆為${snack.label}` : '已封存'}{' '}
           <button
             onClick={() => {
-              mutate(`/api/literature/requests/${snack.id}`, json('PATCH', { status: snack.status }));
+              if (snack.ids) {
+                markOrders(snack.ids.map((requestId) => ({ requestId })), 'pending');
+              } else {
+                mutate(`/api/literature/requests/${snack.id}`, json('PATCH', { status: snack.status }));
+              }
               setSnack(null);
             }}
           >
