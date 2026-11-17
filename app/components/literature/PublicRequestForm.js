@@ -102,7 +102,7 @@ function NameStep({ groups, person, query, setQuery, choose, openGuest }) {
   );
 }
 
-function CatalogStep({ publications, cart, query, setQuery, view, setView, section, setSection, sub, setSub, openItem }) {
+function CatalogStep({ publications, allPublications, cart, query, setQuery, view, setView, section, setSection, sub, setSub, openItem }) {
   const searching = Boolean(query.trim());
   const sections = PUBLIC_SECTIONS.filter((entry) => publications.some((p) => p.section === entry.key));
   const tabs = MAGAZINE_TABS.filter((tab) => publications.some((p) => p.section === 'magazines' && p.sub === tab.key));
@@ -118,7 +118,7 @@ function CatalogStep({ publications, cart, query, setQuery, view, setView, secti
     };
     flat.sort((a, b) => issueNumber(b) - issueNumber(a));
   }
-  const filtered = editionGroups(flat, publications);
+  const filtered = editionGroups(flat, allPublications);
   function changeView(value) {
     setView(value);
     try {
@@ -558,8 +558,11 @@ export default function PublicRequestForm({ token }) {
   }
 
   const catalog = data?.publications || [];
-  const publications = withCoverFallback(catalog.map((p) => ({ ...p, active: true, name: localizedName(p, catalog) })));
-  const publication = (id) => publications.find((p) => String(p.id) === String(id));
+  const allPublications = withCoverFallback(catalog.map((p) => ({ ...p, active: true, name: localizedName(p, catalog) })));
+  // Generic series cards stay in the catalog data as the 英/日/大字 fallback
+  // source, but aren't offered as their own card in the form.
+  const publications = allPublications.filter((p) => p.code !== 'w' && p.code !== 'mwb' && p.code !== 'wlp');
+  const publication = (id) => allPublications.find((p) => String(p.id) === String(id));
   const subscription = selected && subs.find((s) => s.series === selected.series && s.language === selected.language);
   if (!data) return <main className="public-message">{error || '正在載入…'}</main>;
 
@@ -595,6 +598,7 @@ export default function PublicRequestForm({ token }) {
       {step === 2 && (
         <CatalogStep
           publications={publications}
+          allPublications={allPublications}
           cart={cart}
           query={query}
           setQuery={setQuery}
