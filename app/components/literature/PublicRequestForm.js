@@ -102,7 +102,7 @@ function NameStep({ groups, person, query, setQuery, choose, openGuest }) {
   );
 }
 
-function CatalogStep({ publications, query, setQuery, view, setView, section, setSection, sub, setSub, openItem }) {
+function CatalogStep({ publications, cart, query, setQuery, view, setView, section, setSection, sub, setSub, openItem }) {
   const searching = Boolean(query.trim());
   const sections = PUBLIC_SECTIONS.filter((entry) => publications.some((p) => p.section === entry.key));
   const tabs = MAGAZINE_TABS.filter((tab) => publications.some((p) => p.section === 'magazines' && p.sub === tab.key));
@@ -181,12 +181,35 @@ function CatalogStep({ publications, query, setQuery, view, setView, section, se
       ) : (
         <div className="public-section-enter" key={`${section}-${currentSub}-${view}-${searching}`}>
           <div className={`public-publications public-publications--${view}`}>
-            {filtered.map((p) => (
-              <button className="public-publication" key={p.id} onClick={() => openItem(p)}>
-                <PubThumb publication={p} size={view === 'grid' ? 'large' : 'mini'} />
-                <span><strong>{p.name}</strong>{view === 'list' && <small>{p.code}</small>}</span>
-              </button>
-            ))}
+            {filtered.map((p) => {
+              const total = cart
+                .filter((item) => item.publicationId === p.id)
+                .reduce((sum, item) => sum + item.quantity, 0);
+              const badge = total > 0 && (
+                <span className="public-publication__badge" aria-hidden="true">
+                  <Icon name="check" />
+                  ×{total}
+                </span>
+              );
+              return (
+                <button
+                  className="public-publication"
+                  key={p.id}
+                  aria-label={total > 0 ? `${p.name}，已加入 ${total} 本` : p.name}
+                  onClick={() => openItem(p)}
+                >
+                  <span className="public-publication__cover">
+                    <PubThumb publication={p} size={view === 'grid' ? 'large' : 'mini'} fallback="title" />
+                    {view === 'grid' && badge}
+                  </span>
+                  <span className="public-publication__text">
+                    <strong>{p.name}</strong>
+                    {view === 'list' && <small>{p.code}</small>}
+                  </span>
+                  {view === 'list' && badge}
+                </button>
+              );
+            })}
           </div>
           {!filtered.length && <p>找不到符合的書刊。</p>}
         </div>
@@ -531,6 +554,7 @@ export default function PublicRequestForm({ token }) {
       {step === 2 && (
         <CatalogStep
           publications={publications}
+          cart={cart}
           query={query}
           setQuery={setQuery}
           view={view}

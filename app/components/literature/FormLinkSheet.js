@@ -43,7 +43,10 @@ function SubmissionRow({ row, archived, archive, request, onNoteSaved }) {
         {row.items.map((item, index) => (
           <div className="public-submission-item" key={`${item.publicationId}:${item.kind}:${index}`}>
             <PubThumb publication={item} size="mini" />
-            <span>{item.name} ×{item.quantity}</span>
+            <span>
+              {item.name} ×{item.quantity}
+              {item.code && <small className="public-submission-item__code">{item.code}</small>}
+            </span>
             {item.kind === 'standing' && <small className="lit-badge">定期</small>}
           </div>
         ))}

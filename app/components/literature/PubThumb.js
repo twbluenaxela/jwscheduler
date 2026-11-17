@@ -22,7 +22,7 @@ export function issueLabel(code) {
   return `${match[1]}年${Number(match[2])}${unit}`;
 }
 
-export default function PubThumb({ publication, code, name, size = 'mini', language, format }) {
+export default function PubThumb({ publication, code, name, size = 'mini', language, format, fallback }) {
   const coverCode = code || publication?.code || '書刊';
   const label = name || publication?.name || coverCode;
   const series = seriesOf(coverCode);
@@ -35,7 +35,9 @@ export default function PubThumb({ publication, code, name, size = 'mini', langu
     coverLanguage === 'ENG' ? '英' : coverLanguage === 'JPN' ? '日' : ''].filter(Boolean);
   return (
     <span className={`lit-cover lit-cover--${category} lit-cover--${size}`} aria-label={label}>
-      {publication?.coverUrl ? <img src={publication.coverUrl} alt="" loading="lazy" /> : (
+      {publication?.coverUrl ? <img src={publication.coverUrl} alt="" loading="lazy" /> : fallback === 'title' ? (
+        <span className="lit-cover__title"><span>{label}</span></span>
+      ) : (
         <span className="lit-cover__print">
           <span className={`lit-cover__code${size === 'mini' && displayCode.length > 4 ? ' lit-cover__code--long' : ''}`}>
             {size === 'mini' ? displayCode : displayCode.split(/(?<=[.-])/).map((part, index) => (
