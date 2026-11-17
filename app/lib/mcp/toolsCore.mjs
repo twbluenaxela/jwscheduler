@@ -1,4 +1,5 @@
 import { matchPublications } from '../literature.mjs';
+import { localizedName } from '../publicForm.mjs';
 import { allocateShipment, seriesOf } from '../literatureShipments.mjs';
 import { isCountable } from '../literatureInventory.mjs';
 import { resolvePerson, resolvePublication } from './resolution.mjs';
@@ -40,8 +41,9 @@ async function sorting(ctx, slip) {
 }
 return [
   definition('search_publications', '搜尋書刊 search publications catalog', { query: string('搜尋文字'), limit: number('最多筆數') }, ['query'], async (ctx, a) => {
-    const rows = matchPublications(a.query, await publications(ctx), { limit: Math.min(100, Math.max(1, a.limit ?? 20)) });
-    const data = rows.map(({ id, code, name, language, format, category, itemNumber }) => ({ id, code, name, language, format, category, itemNumber }));
+    const all = await publications(ctx);
+    const rows = matchPublications(a.query, all, { limit: Math.min(100, Math.max(1, a.limit ?? 20)) });
+    const data = rows.map((p) => ({ id: p.id, code: p.code, name: localizedName(p, all), language: p.language, format: p.format, category: p.category, itemNumber: p.itemNumber }));
     return output(`找到 ${data.length} 筆書刊`, data);
   }),
   definition('find_people', '尋找會眾成員 find people group', { query: string('姓名'), group: string('小組') }, [], async (ctx, a) => {

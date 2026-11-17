@@ -4,6 +4,7 @@ import Icon from './Icon';
 import Menu from './Menu';
 import FormLinkSheet from './FormLinkSheet';
 import { matchPublications } from '../../lib/literature.mjs';
+import { localizedName } from '../../lib/publicForm.mjs';
 import PubThumb, { GROUPS, LANGUAGES, SERIES, Sheet, groupOf, issueLabel, sameId, seriesPublication } from './PubThumb';
 
 const STATUS = { pending: '待訂', ordered: '已訂', received: '已到', delivered: '已發', cancelled: '已取消' };
@@ -121,7 +122,10 @@ export default function RequestsView({ people, items, request }) {
   }, [load]);
   const subscriptionsFor = (id) => data.subscriptions.filter((s) => sameId(s.personId, id));
   const requestsFor = (id) => data.requests.filter((r) => sameId(r.personId, id) && open(r));
-  const publication = (id) => items.find((p) => sameId(p.id, id));
+  const publication = (id) => {
+    const p = items.find((row) => sameId(row.id, id));
+    return p && { ...p, name: localizedName(p, items) };
+  };
   function add(selected) {
     setError('');
     setPersonQuery(selected?.name || '');
@@ -514,18 +518,18 @@ export default function RequestsView({ people, items, request }) {
                 </label>
                 {!form.publicationId && pubQuery && (
                   <div className="lit-picker lit-pub-picker">
-                    {matchPublications(pubQuery, items).map((p) => (
+                    {matchPublications(pubQuery, items.filter((p) => !['w', 'mwb', 'wlp'].includes(p.code))).map((p) => (
                       <button
                         type="button"
                         key={p.id}
                         onClick={() => {
                           setForm({ ...form, publicationId: p.id });
-                          setPubQuery(p.name);
+                          setPubQuery(localizedName(p, items));
                         }}
                       >
                         <PubThumb publication={p} />
                         <span>
-                          {p.name} · {issueLabel(p.code)}
+                          {localizedName(p, items)} · {issueLabel(p.code)}
                         </span>
                       </button>
                     ))}

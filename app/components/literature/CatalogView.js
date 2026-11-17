@@ -1,4 +1,5 @@
 'use client';
+import { localizedName } from '../../lib/publicForm.mjs';
 import Icon from './Icon';
 import { useMemo, useState } from 'react';
 import Toast from '../Toast';
@@ -231,7 +232,7 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
       {p.coverUrl && <PubThumb publication={p} size="card" />}
       <span className="lit-card__body">
         {!p.coverUrl && <span className="lit-card__placeholder-code">{p.code}</span>}
-        <strong className="lit-card__name">{p.note && <span className="lit-note-dot" />}{p.name}</strong>
+        <strong className="lit-card__name">{p.note && <span className="lit-note-dot" />}{localizedName(p, items)}</strong>
         {p.coverUrl ? <span className="lit-code">{p.code}</span> : <span className="lit-code">{[FORMAT_LABELS[p.format], LANGUAGE_LABELS[p.language]].filter(Boolean).join(' · ')}</span>}
       </span>
     </button>

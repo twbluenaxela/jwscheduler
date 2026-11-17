@@ -3,6 +3,7 @@ import Icon from './Icon';
 import Menu from './Menu';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPublications } from '../../lib/literature.mjs';
+import { localizedName } from '../../lib/publicForm.mjs';
 import { distributed, expected, hubReportRows, s28Rows } from '../../lib/literatureInventory.mjs';
 import PubThumb, { Sheet } from './PubThumb';
 
@@ -25,6 +26,7 @@ export default function CountSheet({ id, items, request, onBack }) {
   const [saving, setSaving] = useState({});
   const timers = useRef({});
   const pending = useRef({});
+  const nameOf = (p) => p && localizedName(p, items);
 
   const load = useCallback(async () => {
     try {
@@ -134,7 +136,7 @@ export default function CountSheet({ id, items, request, onBack }) {
             {rows.map((row) => (
               <tr key={row.id}>
                 <td>{row.publication.itemNumber}</td>
-                <td>{row.publication.name}</td>
+                <td>{nameOf(row.publication)}</td>
                 <td>{row.publication.code}</td>
                 <td>{row.opening}</td>
                 <td>{row.received}</td>
@@ -175,7 +177,7 @@ export default function CountSheet({ id, items, request, onBack }) {
                   checked={!!checked[r.id]}
                   onChange={(e) => setChecked({ ...checked, [r.id]: e.target.checked })}
                 />
-                <span>{r.publication.code} · {r.publication.name}</span>
+                <span>{r.publication.code} · {nameOf(r.publication)}</span>
                 <strong>{r.onHand}</strong>
               </label>
             ))}
@@ -235,7 +237,7 @@ export default function CountSheet({ id, items, request, onBack }) {
           <article className="lit-count-row" key={line.id}>
             <PubThumb publication={line.publication} />
             <div className={`lit-count-meta${line.onHand !== null ? ' lit-count-meta--counted' : ''}`}>
-              <strong className={expected(line) === 0 && !line.onHand ? 'lit-count-empty' : ''} title={line.publication.name}>{line.publication.name}</strong>
+              <strong className={expected(line) === 0 && !line.onHand ? 'lit-count-empty' : ''} title={nameOf(line.publication)}>{nameOf(line.publication)}</strong>
               <span>{line.publication.code} · {done ? `原有 ${line.opening}` : <button className="lit-opening" onClick={() => {
                 const value = window.prompt('原有數量', line.opening);
                 if (value !== null && /^\d+$/.test(value)) change(line, { opening: Number(value) });
@@ -248,7 +250,7 @@ export default function CountSheet({ id, items, request, onBack }) {
                 {line.onHand !== null && line.onHand === expected(line) && <span className="lit-count-equal" role="img" aria-label="與應有相同"><Icon name="check" /></span>}
                 {!done && line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}><Icon name="check" /></button>}
                 {done ? <strong className="lit-count-readonly">{line.onHand ?? '—'}</strong> : <input
-                  aria-label={`${line.publication.name} 現有`}
+                  aria-label={`${nameOf(line.publication)} 現有`}
                   type="number"
                   inputMode="numeric"
                   min="0"
@@ -280,12 +282,12 @@ export default function CountSheet({ id, items, request, onBack }) {
           />
           {matchPublications(
             addQuery,
-            items.filter((p) => !lines.some((l) => l.publicationId === p.id)),
+            items.filter((p) => !['w', 'mwb', 'wlp'].includes(p.code) && !lines.some((l) => l.publicationId === p.id)),
             { limit: 100 },
           ).map((p) => (
             <button className="lit-preview-line" key={p.id} onClick={() => add(p)}>
               <PubThumb publication={p} />
-              <span>{p.name} · {p.code}</span>
+              <span>{nameOf(p)} · {p.code}</span>
             </button>
           ))}
         </Sheet>
