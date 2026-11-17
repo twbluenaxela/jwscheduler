@@ -2579,3 +2579,123 @@ button.service-month-card { cursor: pointer; }
     }
   }
 }
+
+.lit-review-heading {
+  margin: 20px 0 4px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+.lit-review-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.lit-review-row > .lit-cover {
+  flex: none;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .14);
+}
+.lit-review-row.is-inactive {
+  opacity: .6;
+}
+.lit-review-content {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.lit-review-text {
+  flex: 1 1 110px;
+  min-width: 0;
+}
+.lit-review-name {
+  display: -webkit-box;
+  flex: 1 1 110px;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.lit-review-meta {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.lit-review-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.lit-review-controls select {
+  width: auto;
+  min-height: 44px;
+}
+.lit-review-quantity,
+.lit-review-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 44px;
+  font-size: 13px;
+}
+.lit-review-quantity input {
+  min-height: 44px;
+}
+.lit-review-active {
+  padding: 0 6px;
+}
+.lit-review-empty {
+  margin: 20px 0;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.lit-review-add {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 20px;
+}
+.lit-guest-review-content {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.lit-guest-review-content strong,
+.lit-guest-review-content > span {
+  flex: 1 1 100%;
+}
+.lit-handout-covers {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+}
+.lit-handout-covers .lit-cover--mini {
+  flex: none;
+  width: 28px;
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+.lit-handout-covers .lit-cover--mini + .lit-cover--mini {
+  margin-left: -6px;
+}
+.lit-handout-covers > span:last-child:not(.lit-cover) {
+  margin-left: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.lit-handout-copy > .lit-handout-summary {
+  font-size: 12px;
+}
+.lit-handout-done .lit-handout-covers {
+  opacity: .6;
+}
