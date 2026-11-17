@@ -59,7 +59,7 @@ return [
         include: { publication: true, shipment: true },
       }),
     ]);
-    return output(`${p.name}的書刊資料`, { person: p.name, group: p.serviceGroup, subscriptions, requests, deliveries });
+    return output(`${p.name}的書刊資料`, { person: p.name, group: p.serviceGroup, literatureNote: p.literatureNote, subscriptions, requests, deliveries });
   }),
   definition('add_request', '新增書刊申請 add request order',
     { ...personField, ...pubFields, quantity: number('數量'), note: string('備註') }, ['person'], async (ctx, a) => {

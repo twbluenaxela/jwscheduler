@@ -1,8 +1,23 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Sheet } from './PubThumb';
+import PubThumb, { Sheet } from './PubThumb';
 
-function SubmissionRow({ row, archived, archive }) {
+function SubmissionRow({ row, archived, archive, request, onNoteSaved }) {
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  async function saveNote() {
+    try {
+      const result = await request(`/api/literature/people/${row.personId}/note`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ append: row.note }),
+      });
+      onNoteSaved(row.personId, result.literatureNote);
+      setSaved(true);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
   const time = new Date(row.createdAt).toLocaleString('zh-TW', {
     month: 'numeric',
     day: 'numeric',
@@ -11,16 +26,28 @@ function SubmissionRow({ row, archived, archive }) {
     hour12: false,
     timeZone: 'Asia/Taipei',
   });
-  const summary = row.items
-    .map((item) => `${item.name} ×${item.quantity}${item.kind === 'standing' ? ' 定期' : ''}`)
-    .join(' · ');
   return (
     <div className="public-submission">
       <strong>
         {row.personName} {!row.personId && <small className="lit-badge">名單外</small>}
       </strong>
+      {row.note && <blockquote className="public-submission-note">{row.note}</blockquote>}
+      {row.note && row.personId && (
+        <button className="btn btn--sm" disabled={saved} onClick={saveNote}>
+          {saved ? '已存' : '存到他的備註'}
+        </button>
+      )}
+      {error && <span className="imp-error" role="alert">{error}</span>}
       <small>{time}</small>
-      <span>{summary}</span>
+      <div className="public-submission-items">
+        {row.items.map((item, index) => (
+          <div className="public-submission-item" key={`${item.publicationId}:${item.kind}:${index}`}>
+            <PubThumb publication={item} size="mini" />
+            <span>{item.name} ×{item.quantity}</span>
+            {item.kind === 'standing' && <small className="lit-badge">定期</small>}
+          </div>
+        ))}
+      </div>
       {row.flagged && (
         <span className="public-flag">
           <span className="public-flag-dot" aria-hidden="true" />
@@ -76,7 +103,7 @@ function LinkControls({ url, copied, copy, link }) {
   );
 }
 
-export default function FormLinkSheet({ request, close }) {
+export default function FormLinkSheet({ request, close, onNoteSaved }) {
   const [url, setUrl] = useState('');
   const [rows, setRows] = useState([]);
   const [archived, setArchived] = useState(false);
@@ -144,7 +171,7 @@ export default function FormLinkSheet({ request, close }) {
         </label>
         {!rows.length && <p>沒有申請紀錄。</p>}
         {rows.map((row) => (
-          <SubmissionRow key={row.id} row={row} archived={archived} archive={archive} />
+          <SubmissionRow key={row.id} row={row} archived={archived} archive={archive} request={request} onNoteSaved={onNoteSaved} />
         ))}
         {error && (
           <p className="imp-error" role="alert">

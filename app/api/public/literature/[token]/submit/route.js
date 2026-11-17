@@ -90,6 +90,7 @@ export async function POST(request, context) {
             personId: normalized.personId,
             guestName: normalized.guestName,
             guestNote: normalized.guestNote,
+            note: normalized.note,
             items,
             ...flags,
           },

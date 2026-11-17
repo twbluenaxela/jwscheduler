@@ -2249,3 +2249,150 @@ button.service-month-card { cursor: pointer; }
 .tabbar-more__row .navicon { width: 24px; height: 24px; flex: none; }
 .tabbar-more__text { display: flex; flex: 1; flex-direction: column; font-size: 14px; font-weight: 700; }
 .tabbar-more__text small { color: var(--ink-3); font-size: 12px; font-weight: 400; }
+
+/* Public catalog sections and literature notes */
+.public-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.public-section-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 88px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.public-section-tile svg {
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+.public-section-tile span {
+  display: grid;
+  gap: 4px;
+}
+.public-section-tile small {
+  color: var(--ink-2);
+}
+.public-section-heading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.public-section-heading h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.public-section-heading .lit-back {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.public-magazine-tabs {
+  width: 100%;
+  margin: 12px 0 0;
+}
+.public-magazine-tabs button {
+  padding: 4px;
+  font-size: .85rem;
+}
+.public-section-enter {
+  animation: public-section-enter 160ms var(--ease-out);
+}
+@keyframes public-section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.public-cart-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.public-cart-covers {
+  display: flex;
+  align-items: center;
+  padding-left: 2px;
+}
+.public-cart-covers .lit-cover {
+  width: 25px;
+  height: 34px;
+  flex: none;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.public-cart-covers .lit-cover + .lit-cover {
+  margin-left: -10px;
+}
+.public-cart-note, .lit-person-note {
+  margin: 16px 0;
+}
+.lit-person-note textarea {
+  overflow: hidden;
+  resize: none;
+}
+.public-submission-note {
+  margin: 2px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  white-space: pre-wrap;
+}
+.public-submission-items {
+  display: grid;
+  gap: 6px;
+}
+.public-submission-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.public-submission-item .lit-cover {
+  width: 25px;
+  height: 34px;
+  flex: none;
+}
+.lit-note-icon {
+  display: inline-flex;
+  vertical-align: middle;
+}
+.lit-note-icon svg {
+  width: 16px;
+  height: 16px;
+}
+@media (min-width: 600px) {
+  .public-section-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .public-section-tile:hover {
+    background: var(--surface-2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes public-section-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

@@ -1,6 +1,36 @@
 import { sortPublications, mapPublication } from './literature.mjs';
 import { seriesOf } from './literatureShipments.mjs';
 
+export const PUBLIC_SECTIONS = [
+  { key: 'book', label: '書籍', icon: 'book' },
+  { key: 'brochure', label: '冊子', icon: 'booklet' },
+  { key: 'tracts', label: '傳單和邀請函', icon: 'tract' },
+  { key: 'magazines', label: '雜誌', icon: 'magazine' },
+  { key: 'workbook', label: '聚會手冊', icon: 'workbook' },
+  { key: 'bible', label: '聖經', icon: 'bible' },
+  { key: 'toolbox', label: '教導工具箱', icon: 'toolbox' },
+  { key: 'other', label: '其他', icon: 'other' },
+];
+
+export const MAGAZINE_TABS = [
+  { key: 'wp', label: '守望台公眾版' },
+  { key: 'g', label: '警醒！' },
+  { key: 'study', label: '守望台研讀版' },
+];
+
+export function publicSection(p) {
+  const series = seriesOf(p.code || '');
+  if (series === 'wp' || series === 'g') return { section: 'magazines', sub: series };
+  if (series === 'w' || series === 'wlp') return { section: 'magazines', sub: 'study' };
+  if (series === 'mwb') return { section: 'workbook' };
+  if (p.category === 'toolbox') {
+    return { section: /^(?:T-\d+|inv|jwcd)/i.test(p.code || '') ? 'tracts' : 'toolbox' };
+  }
+  if (p.category === 'magazine') return { section: 'magazines', sub: 'wp' };
+  if (p.category === 'study') return { section: 'magazines', sub: 'study' };
+  return { section: ['book', 'brochure', 'bible'].includes(p.category) ? p.category : 'other' };
+}
+
 export const STANDING_SERIES = ['w', 'wlp', 'mwb'];
 export const isStanding = (publication) => STANDING_SERIES.includes(seriesOf(publication.code));
 
@@ -24,7 +54,7 @@ export function publicCatalog(publications) {
   }
   return sortPublications(candidates.filter(p => !seriesOf(p.code) || allowed.has(String(p.id)))).map(p => {
     const { id, code, name, category, language, format, coverUrl } = mapPublication(p);
-    return { id, code, name, category, language, format, coverUrl, series: seriesOf(code), standing: isStanding(p) };
+    return { id, code, name, category, language, format, coverUrl, ...publicSection(p), series: seriesOf(code), standing: isStanding(p) };
   });
 }
 
@@ -39,6 +69,10 @@ export function groupPeople(people) {
 
 export function validateSubmission({ body, people, publications, guest = body?.guest }) {
   if (!body || typeof body !== 'object') throw new Error('輸入資料無效');
+  if (body.note != null && (typeof body.note !== 'string' || body.note.trim().length > 300)) {
+    throw new Error('備註不可超過 300 個字');
+  }
+  const note = body.note?.trim() || null;
   const hasPerson = body.personId != null && body.personId !== '';
   if (hasPerson === (guest != null)) throw new Error('請選擇一位成員或填寫訪客資料');
   let personId = null, guestName = null, guestNote = null;
@@ -66,7 +100,7 @@ export function validateSubmission({ body, people, publications, guest = body?.g
     if (quantity > 20) throw new Error('合併後數量不可超過 20');
     merged.set(key, { publicationId: pub.id, quantity, kind: item.kind });
   }
-  return { personId, guestName, guestNote, items: [...merged.values()] };
+  return { personId, guestName, guestNote, note, items: [...merged.values()] };
 }
 
 export function flagSubmission({ items, previousSubs = [], recentCount = 0, guest = false }) {
