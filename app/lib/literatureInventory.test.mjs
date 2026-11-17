@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { isCountable, previousMonth, receivedByPublication, buildCountLines, distributed, parseHubInventoryReport } from './literatureInventory.mjs';
+import { countSection, groupCountLines, isCountable, previousMonth, receivedByPublication, buildCountLines, distributed, parseHubInventoryReport } from './literatureInventory.mjs';
 
 test('both PDF extraction layouts contain the complete report', async () => {
   for (const suffix of ['', '.unpdf']) {
@@ -76,6 +76,7 @@ test('report import batches inserts and preserves previous balances for matched 
     },
     publication: {
       findMany: async () => [...publications],
+      update: async (args) => operations.push({ type: 'updatePublication', ...args }),
       createMany: async ({ data, skipDuplicates }) => {
         operations.push({ type: 'publications', data, skipDuplicates });
         publications.push(...data.map((p) => ({ ...p, id: 2, active: true })));
@@ -94,12 +95,14 @@ test('report import batches inserts and preserves previous balances for matched 
     },
   };
   const report = { month: '2026-10', language: 'CHT', items: [
-    { code: 'be', name: 'Book', quantity: 4 },
-    { code: 'T-new', name: 'New', quantity: 12 },
+    { code: 'be', name: 'Book', quantity: 4, section: '書籍' },
+    { code: 'T-new', name: 'New', quantity: 12, section: '傳單' },
   ] };
   assert.equal((await importHubReport(1, report, { db: client })).id, 10);
   assert.equal(operations.filter((op) => op.type === 'publications').length, 1);
   assert.equal(operations.find((op) => op.type === 'publications').data[0].category, 'toolbox');
+  assert.deepEqual(operations.filter((op) => op.type === 'updatePublication').map((op) => op.data.hubGroup), ['書籍', '傳單']);
+  assert.equal(operations.find((op) => op.type === 'publications').data[0].hubGroup, '傳單');
   const inserts = operations.find((op) => op.type === 'createLines');
   assert.equal(inserts.skipDuplicates, true);
   assert.ok(inserts.data.some((line) => line.publicationId === 1 && line.opening === 9 && line.onHand === 4));
@@ -140,4 +143,51 @@ test('count coverage uses completion time, Taipei deadline, or now', async () =>
   assert.equal(receivedBetween(shipments, countCoveredUntil(fallback), now).get(1), 12);
   assert.equal(receivedBetween(shipments, countCoveredUntil(completed), new Date('2026-12-31')).get(1), 9);
   assert.equal(receivedBetween(shipments, countCoveredUntil({ status: 'draft' }, now), now).size, 0);
+});
+
+
+test('count sections use the Hub group first and classify self-recorded publications', () => {
+  const examples = [
+    ['nwtls', 'bible', '聖經'],
+    ['gwt1', 'book', '書籍'],
+    ['es27', 'other', '書籍'],
+    ['jwcd1', 'toolbox', '表格和用品'],
+    ['T-dth', 'toolbox', '傳單'],
+    ['inv', 'toolbox', '傳單'],
+    ['lff', 'toolbox', '書籍'],
+    ['lffi', 'toolbox', '冊子'],
+    ['g20.1', 'magazine', '公眾版雜誌'],
+    ['wp23.1', 'magazine', '公眾版雜誌'],
+    ['S-24', 'form', '表格和用品'],
+  ];
+  for (const [code, category, group] of examples) {
+    assert.deepEqual(countSection({ code, category }), { group, hub: false }, code);
+  }
+  assert.deepEqual(countSection({ code: 'nwtls', category: 'bible', hubGroup: '冊子' }), {
+    group: '冊子',
+    hub: true,
+  });
+});
+
+test('count sections fold zeros and sort Hub publications naturally before self-recorded items', () => {
+  const publications = [
+    { id: 1, code: 'g20.1', category: 'magazine', hubGroup: '公眾版雜誌' },
+    { id: 2, code: 'g18.2', category: 'magazine', hubGroup: '公眾版雜誌' },
+    { id: 3, code: 'g18.1', category: 'magazine', hubGroup: '公眾版雜誌' },
+    { id: 4, code: 'g17.1', category: 'magazine' },
+    { id: 5, code: 'g21.1', category: 'magazine' },
+  ];
+  const lines = publications.map((p) => ({
+    id: p.id,
+    publicationId: p.id,
+    opening: p.id === 5 ? 0 : 1,
+    received: 0,
+    onHand: p.id === 5 ? 0 : null,
+  }));
+  const [section] = groupCountLines(lines, publications);
+  assert.deepEqual(section.lines.map((line) => line.publication.code), ['g18.1', 'g18.2', 'g20.1', 'g17.1']);
+  assert.deepEqual(section.zeros.map((line) => line.publication.code), ['g21.1']);
+  assert.equal(section.counted, 1);
+  assert.equal(section.total, 5);
+  assert.equal(groupCountLines(lines, publications, { 5: true })[0].zeros.length, 0);
 });

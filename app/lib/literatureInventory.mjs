@@ -1,6 +1,46 @@
 import { sortPublications } from './literature.mjs';
 import { seriesOf, standingSeriesOf } from './literatureShipments.mjs';
 
+export const HUB_GROUPS = ['聖經', '書籍', '冊子', '表格和用品', '傳單', '公眾版雜誌'];
+
+export function countSection(publication) {
+  if (publication.hubGroup) return { group: publication.hubGroup, hub: true };
+  const code = publication.code || '';
+  let group = '書籍';
+  if (/^jwcd/i.test(code) || publication.category === 'form') group = '表格和用品';
+  else if (/^T-/i.test(code) || /^inv$/i.test(code)) group = '傳單';
+  else if (/^(g|wp)\d/i.test(code)) group = '公眾版雜誌';
+  else if (publication.category === 'bible') group = '聖經';
+  else if (publication.category === 'brochure') group = '冊子';
+  else if (publication.category === 'toolbox') group = /^lff$/i.test(code) ? '書籍' : '冊子';
+  else if (publication.category === 'magazine') group = '公眾版雜誌';
+  return { group, hub: false };
+}
+
+export function groupCountLines(lines, publications, edited = {}) {
+  const byId = new Map(publications.map((publication) => [String(publication.id), publication]));
+  const sections = HUB_GROUPS.map((group) => ({ group, lines: [], zeros: [], counted: 0, total: 0 }));
+  for (const line of lines) {
+    const publication = byId.get(String(line.publicationId));
+    if (!publication) continue;
+    const { group, hub } = countSection(publication);
+    const section = sections.find((entry) => entry.group === group);
+    if (!section) continue;
+    const row = { ...line, publication, hub };
+    const visible = expected(line) > 0 || line.received > 0 || line.onHand > 0 || edited[line.id];
+    section[visible ? 'lines' : 'zeros'].push(row);
+    section.total += 1;
+    if (line.onHand !== null) section.counted += 1;
+  }
+  const compare = (a, b) => Number(b.hub) - Number(a.hub) ||
+    a.publication.code.localeCompare(b.publication.code, undefined, { numeric: true, sensitivity: 'base' });
+  for (const section of sections) {
+    section.lines.sort(compare);
+    section.zeros.sort(compare);
+  }
+  return sections.filter((section) => section.total > 0);
+}
+
 export function isCountable(p) {
   if (typeof p.countable === 'boolean') return p.countable;
   const series = seriesOf(p.code) ?? standingSeriesOf(p.code);

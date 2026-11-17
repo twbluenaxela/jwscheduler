@@ -4,7 +4,7 @@ import Menu from './Menu';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { matchPublications } from '../../lib/literature.mjs';
 import { localizedName } from '../../lib/publicForm.mjs';
-import { distributed, expected, hubReportRows, s28Rows } from '../../lib/literatureInventory.mjs';
+import { countSection, distributed, expected, groupCountLines, hubReportRows, s28Rows } from '../../lib/literatureInventory.mjs';
 import PubThumb, { Sheet } from './PubThumb';
 
 const json = (method, body) => ({
@@ -19,7 +19,8 @@ export default function CountSheet({ id, items, request, onBack }) {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [addQuery, setAddQuery] = useState('');
-  const [filter, setFilter] = useState('stock');
+  const [edited, setEdited] = useState({});
+  const [expanded, setExpanded] = useState({});
   const [report, setReport] = useState('');
   const [adding, setAdding] = useState(false);
   const [checked, setChecked] = useState({});
@@ -51,7 +52,8 @@ export default function CountSheet({ id, items, request, onBack }) {
     }
   }
 
-  function change(line, patch) {
+  function change(line, patch, markEdited = true) {
+    if (markEdited) setEdited((current) => ({ ...current, [line.id]: true }));
     setData((d) => ({
       ...d,
       lines: d.lines.map((l) => l.id === line.id ? { ...l, ...patch } : l),
@@ -87,12 +89,9 @@ export default function CountSheet({ id, items, request, onBack }) {
   const counted = lines.filter((line) => line.onHand !== null).length;
   const rows = s28Rows(items, lines);
   const matches = new Set(matchPublications(query, items, { limit: items.length }).map((p) => p.id));
-  const visible = rows.filter((row) => (
-    (filter === 'all' || (filter === 'uncounted' ? row.onHand === null : expected(row) > 0 || row.onHand > 0)) &&
-    (!query || matches.has(row.publication.id))
-  ));
+  const sections = groupCountLines(lines, items, edited);
+  const visible = rows.filter((row) => !query || matches.has(row.publication.id));
   const hub = hubReportRows(items, lines);
-  const stockCount = rows.filter((row) => expected(row) > 0 || row.onHand > 0).length;
   const monthLabel = `${Number(count.month.slice(5, 7))}月清點`;
   const done = count.status === 'done';
 
@@ -101,7 +100,6 @@ export default function CountSheet({ id, items, request, onBack }) {
     await flush();
     try {
       await request(`/api/literature/inventory/${id}`, json('PATCH', { status: 'done' }));
-      setFilter('stock');
       await load();
     } catch (err) {
       setError(err.message);
@@ -187,6 +185,47 @@ export default function CountSheet({ id, items, request, onBack }) {
     );
   }
 
+  function renderRow(line) {
+    const amount = distributed(line);
+    return (
+      <article className="lit-count-row" key={line.id}>
+        <PubThumb publication={line.publication} />
+        <div className={`lit-count-meta${line.onHand !== null ? ' lit-count-meta--counted' : ''}`}>
+          <strong className={expected(line) === 0 && !line.onHand ? 'lit-count-empty' : ''} title={nameOf(line.publication)}>
+            {nameOf(line.publication)}
+            {!countSection(line.publication).hub && <span className="lit-count-self">自記</span>}
+          </strong>
+          <span>{line.publication.code} · {done ? `原有 ${line.opening}` : <button className="lit-opening" onClick={() => {
+            const value = window.prompt('原有數量', line.opening);
+            if (value !== null && /^\d+$/.test(value)) change(line, { opening: Number(value) });
+          }}>原有 {line.opening}</button>} <span className={line.received > 0 ? "lit-received" : ""}>＋收 {line.received}</span></span>
+        </div>
+        <div className="lit-count-value">
+          {saving[line.id] === '儲存失敗' && <small className="lit-count-error" role="status">儲存失敗</small>}
+          {!done && line.onHand === null && <span>應有 {expected(line)}</span>}
+          <div>
+            {line.onHand !== null && line.onHand === expected(line) && <span className="lit-count-equal" role="img" aria-label="與應有相同"><Icon name="check" /></span>}
+            {!done && line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}><Icon name="check" /></button>}
+            {done ? <strong className="lit-count-readonly">{line.onHand ?? '—'}</strong> : <input
+              aria-label={`${nameOf(line.publication)} 現有`}
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={line.onHand ?? ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '' || /^\d+$/.test(value)) {
+                  change(line, { onHand: value === '' ? null : Number(value) });
+                }
+              }}
+            />}
+          </div>
+          {amount !== null && <span className={amount < 0 ? 'lit-count-error' : amount === 0 ? 'lit-count-zero' : ''}>{amount < 0 ? `多 ${Math.abs(amount)}` : `發 ${amount}`}</span>}
+        </div>
+      </article>
+    );
+  }
+
   return (
     <div className="lit-detail">
       <button
@@ -214,11 +253,21 @@ export default function CountSheet({ id, items, request, onBack }) {
         <p>已完成 · {lines.length} 項</p>
       </div>}
       <div className="lit-count-filter-row">
-        <div className="lit-segment lit-count-filters" aria-label="清點篩選">
-          <button aria-pressed={filter === 'stock'} onClick={() => setFilter('stock')}>有庫存 ({stockCount})</button>
-          {!done && <button aria-pressed={filter === 'uncounted'} onClick={() => setFilter('uncounted')}>未清點 ({lines.length - counted})</button>}
-          <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>全部 ({lines.length})</button>
-        </div>
+        <nav className="lit-count-chips" aria-label="清點分區">
+          {sections.map((section) => (
+            <button key={section.group} onClick={() => {
+              setSearching(false);
+              setQuery('');
+              requestAnimationFrame(() => {
+                const target = document.getElementById(`count-section-${section.group}`);
+                const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                target?.scrollIntoView({ behavior: reduced ? 'instant' : 'smooth', block: 'start' });
+              });
+            }}>
+              {section.group} {section.total === section.counted ? '✓' : section.total - section.counted}
+            </button>
+          ))}
+        </nav>
         <button className="lit-search-toggle" aria-label="搜尋" aria-expanded={searching} onClick={() => {
           setSearching(!searching);
           if (searching) setQuery('');
@@ -231,41 +280,39 @@ export default function CountSheet({ id, items, request, onBack }) {
         <button aria-label="清除搜尋" onClick={() => setQuery('')}><Icon name="close" /></button>
       </div>}
       {error && <div className="imp-error" role="alert">{error}</div>}
-      {visible.map((line) => {
-        const amount = distributed(line);
+      {searching ? visible.map(renderRow) : sections.map((section) => {
+        const isExpanded = !!expanded[section.group];
+        const uncountedZeros = section.zeros.filter((line) => line.onHand === null);
         return (
-          <article className="lit-count-row" key={line.id}>
-            <PubThumb publication={line.publication} />
-            <div className={`lit-count-meta${line.onHand !== null ? ' lit-count-meta--counted' : ''}`}>
-              <strong className={expected(line) === 0 && !line.onHand ? 'lit-count-empty' : ''} title={nameOf(line.publication)}>{nameOf(line.publication)}</strong>
-              <span>{line.publication.code} · {done ? `原有 ${line.opening}` : <button className="lit-opening" onClick={() => {
-                const value = window.prompt('原有數量', line.opening);
-                if (value !== null && /^\d+$/.test(value)) change(line, { opening: Number(value) });
-              }}>原有 {line.opening}</button>} <span className={line.received > 0 ? "lit-received" : ""}>＋收 {line.received}</span></span>
-            </div>
-            <div className="lit-count-value">
-              {saving[line.id] === '儲存失敗' && <small className="lit-count-error" role="status">儲存失敗</small>}
-              {!done && line.onHand === null && <span>應有 {expected(line)}</span>}
-              <div>
-                {line.onHand !== null && line.onHand === expected(line) && <span className="lit-count-equal" role="img" aria-label="與應有相同"><Icon name="check" /></span>}
-                {!done && line.onHand === null && <button className="lit-count-check" aria-label="與應有相同" onClick={() => change(line, { onHand: expected(line) })}><Icon name="check" /></button>}
-                {done ? <strong className="lit-count-readonly">{line.onHand ?? '—'}</strong> : <input
-                  aria-label={`${nameOf(line.publication)} 現有`}
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  value={line.onHand ?? ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '' || /^\d+$/.test(value)) {
-                      change(line, { onHand: value === '' ? null : Number(value) });
-                    }
-                  }}
-                />}
+          <section className="lit-count-section" id={`count-section-${section.group}`} key={section.group}>
+            <h2 className="lit-count-section-heading">
+              <span>{section.group}</span>
+              <span>{section.counted}/{section.total}</span>
+            </h2>
+            {section.lines.map(renderRow)}
+            {section.zeros.length > 0 && <>
+              <div className="lit-count-fold">
+                <button
+                  className="lit-count-fold-toggle"
+                  aria-expanded={isExpanded}
+                  aria-controls={`count-zeros-${section.group}`}
+                  onClick={() => setExpanded((current) => ({ ...current, [section.group]: !isExpanded }))}
+                >
+                  {uncountedZeros.length ? `另有 ${section.zeros.length} 項為 0` : `${section.zeros.length} 項 0 已確認`}
+                </button>
+                {!done && <button
+                  className="lit-count-fold-confirm"
+                  disabled={!uncountedZeros.length}
+                  onClick={() => uncountedZeros.forEach((line) => change(line, { onHand: 0 }, false))}
+                >
+                  全部確認為 0
+                </button>}
               </div>
-              {amount !== null && <span className={amount < 0 ? 'lit-count-error' : amount === 0 ? 'lit-count-zero' : ''}>{amount < 0 ? `多 ${Math.abs(amount)}` : `發 ${amount}`}</span>}
-            </div>
-          </article>
+              <div className="lit-count-fold-content" data-expanded={isExpanded} id={`count-zeros-${section.group}`} inert={!isExpanded}>
+                <div>{section.zeros.map(renderRow)}</div>
+              </div>
+            </>}
+          </section>
         );
       })}
       {!done && <div className="lit-count-footer">
