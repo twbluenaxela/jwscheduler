@@ -14,7 +14,21 @@ function Check({ done = false }) {
   );
 }
 
-function PersonRow({ person, pending, onMark, onSelect }) {
+function CoverStrip({ person, items }) {
+  return (
+    <span className="lit-handout-covers" aria-hidden="true">
+      {person.items.slice(0, 4).map((item, index) => (
+        <PubThumb
+          key={item.key || index}
+          publication={items.find((publication) => String(publication.id) === String(item.publicationId)) || item}
+        />
+      ))}
+      {person.items.length > 4 && <span>+{person.items.length - 4}</span>}
+    </span>
+  );
+}
+
+function PersonRow({ person, items, pending, onMark, onSelect }) {
   return (
     <div className="lit-handout-row" aria-busy={pending || undefined}>
       <button
@@ -26,7 +40,8 @@ function PersonRow({ person, pending, onMark, onSelect }) {
         <Check />
         <span className="lit-handout-copy">
           <strong>{person.name} {person.guest && <small className="lit-badge">名單外</small>}</strong>
-          <span>
+          <CoverStrip person={person} items={items} />
+          <span className="lit-handout-summary">
             {handoutSummary(person.items)}{' '}
             {person.items.some(item => item.source === 'request') && <small>單次</small>}{' '}
             {person.items.some(item => item.short) && <small className="lit-short">不足</small>}
@@ -45,7 +60,7 @@ function PersonRow({ person, pending, onMark, onSelect }) {
   );
 }
 
-function DeliveredRow({ person, pending, onUndo }) {
+function DeliveredRow({ person, items, pending, onUndo }) {
   return (
     <button
       className="lit-handout-main lit-handout-done"
@@ -57,7 +72,8 @@ function DeliveredRow({ person, pending, onUndo }) {
       <Check done />
       <span className="lit-handout-copy">
         <strong>{person.name} {person.guest && <small className="lit-badge">名單外</small>}</strong>
-        <span>{handoutSummary(person.items)}</span>
+        <CoverStrip person={person} items={items} />
+        <span className="lit-handout-summary">{handoutSummary(person.items)}</span>
       </span>
       <time>
         {new Date(person.deliveredAt).toLocaleTimeString('zh-TW', {
@@ -314,6 +330,7 @@ export default function HandoutView({ items, request, reloadCatalog }) {
               <PersonRow
                 key={person.guestKey || person.personId}
                 person={person}
+                items={items}
                 pending={pending.has(person.guestKey || person.personId)}
                 onMark={mark}
                 onSelect={setSelected}
@@ -325,6 +342,7 @@ export default function HandoutView({ items, request, reloadCatalog }) {
           <DeliveredRow
             key={person.guestKey || person.personId}
             person={person}
+            items={items}
             pending={pending.has(person.guestKey || person.personId)}
             onUndo={undo}
           />

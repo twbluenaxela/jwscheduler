@@ -51,7 +51,9 @@ function GuestRequestsSheet({ name, requests, people, publication, mutate, setSn
   return (
     <Sheet title={name} close={close}>
       {guestRequests.map((row) => (
-        <div className="lit-edit-row" key={row.id}>
+        <div className="lit-review-row lit-review-row--guest" key={row.id}>
+          <PubThumb publication={publication(row.publicationId)} />
+          <div className="lit-guest-review-content">
           <strong>
             {publication(row.publicationId)?.name} ×{row.quantity}
           </strong>
@@ -78,6 +80,7 @@ function GuestRequestsSheet({ name, requests, people, publication, mutate, setSn
               ))}
             </select>
           </label>
+          </div>
         </div>
       ))}
     </Sheet>
@@ -310,95 +313,113 @@ export default function RequestsView({ people, items, request }) {
               }}
               onBlur={(event) => savePersonNote(event.target.value)} />
           </label>
-          <button className="btn btn--primary" onClick={() => add(person)}>
+          {subscriptionsFor(person.id).length > 0 && <h3 className="lit-review-heading">定期</h3>}
+          {subscriptionsFor(person.id).map((s) => (
+            <div className={`lit-review-row${s.active ? '' : ' is-inactive'}`} key={s.id}>
+              <PubThumb
+                publication={seriesPublication(items, s.series, s.language)}
+                code={s.series}
+                language={s.language}
+              />
+              <div className="lit-review-content">
+                <strong className="lit-review-name">
+                  {SERIES[s.series]} · {LANGUAGES[s.language] || s.language}
+                </strong>
+                <div className="lit-review-controls">
+                  <label className="lit-review-quantity">
+                    數量
+                    <input
+                      className="field__input lit-number"
+                      type="number"
+                      min="1"
+                      defaultValue={s.quantity}
+                      key={`${s.id}-${s.quantity}`}
+                      onBlur={(e) => {
+                        const quantity = Number(e.target.value);
+                        if (quantity > 0 && quantity !== s.quantity)
+                          mutate(`/api/literature/subscriptions/${s.id}`, json('PATCH', { quantity }));
+                      }}
+                    />
+                  </label>
+                  <label className="lit-review-active">
+                    <input
+                      type="checkbox"
+                      checked={s.active}
+                      disabled={busy}
+                      onChange={(e) =>
+                        mutate(`/api/literature/subscriptions/${s.id}`, json('PATCH', { active: e.target.checked }))
+                      }
+                    />
+                    啟用
+                  </label>
+                  <Menu items={[{
+                    label: '刪除',
+                    danger: true,
+                    onSelect: () => {
+                      if (!busy && window.confirm('確定刪除這項定期申請？'))
+                        mutate(`/api/literature/subscriptions/${s.id}`, { method: 'DELETE' });
+                    },
+                  }]} />
+                </div>
+              </div>
+            </div>
+          ))}
+          {requestsFor(person.id).length > 0 && <h3 className="lit-review-heading">單次申請</h3>}
+          {requestsFor(person.id).map((r) => {
+            const pub = publication(r.publicationId);
+            const details = [pub?.code, pub?.code && issueLabel(pub.code)].filter(Boolean).join(' · ');
+            return (
+              <div className="lit-review-row" key={r.id}>
+                <PubThumb publication={pub} />
+                <div className="lit-review-content">
+                  <div className="lit-review-text">
+                    <strong className="lit-review-name">{pub?.name || '書刊'}</strong>
+                    <span className="lit-review-meta">
+                      {details}{details && ' '}×{r.quantity} {r.source === 'form' && <small className="lit-badge">表單</small>}
+                    </span>
+                  </div>
+                  <div className="lit-review-controls">
+                    <select
+                      className="field__input"
+                      value={r.status}
+                      disabled={busy}
+                      aria-label={`${pub?.name || '書刊'}狀態`}
+                      onChange={(e) => mutate(`/api/literature/requests/${r.id}`, json('PATCH', { status: e.target.value }))}
+                    >
+                      {Object.entries(STATUS)
+                        .filter(([key]) => key !== 'cancelled')
+                        .map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                    </select>
+                    <Menu items={[
+                      {
+                        label: '封存',
+                        onSelect: async () => {
+                          if (await mutate(`/api/literature/requests/${r.id}`, json('PATCH', { status: 'cancelled' })))
+                            setSnack({ id: r.id, status: r.status });
+                        },
+                      },
+                      {
+                        label: '取消申請',
+                        danger: true,
+                        onSelect: () => {
+                          if (!busy && window.confirm('確定取消這項申請？'))
+                            mutate(`/api/literature/requests/${r.id}`, { method: 'DELETE' });
+                        },
+                      },
+                    ]} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {!subscriptionsFor(person.id).length && !requestsFor(person.id).length && (
+            <p className="lit-review-empty">還沒有申請</p>
+          )}
+          <button className="btn lit-review-add" onClick={() => add(person)}>
             ＋新增
           </button>
-          <h3>定期</h3>
-          {subscriptionsFor(person.id).map((s) => (
-            <div className="lit-edit-row" key={s.id}>
-              <strong>
-                {SERIES[s.series]} · {LANGUAGES[s.language] || s.language}
-              </strong>
-              <label>
-                數量{' '}
-                <input
-                  className="field__input lit-number"
-                  type="number"
-                  min="1"
-                  defaultValue={s.quantity}
-                  key={`${s.id}-${s.quantity}`}
-                  onBlur={(e) => {
-                    const quantity = Number(e.target.value);
-                    if (quantity > 0 && quantity !== s.quantity)
-                      mutate(`/api/literature/subscriptions/${s.id}`, json('PATCH', { quantity }));
-                  }}
-                />
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={s.active}
-                  disabled={busy}
-                  onChange={(e) =>
-                    mutate(`/api/literature/subscriptions/${s.id}`, json('PATCH', { active: e.target.checked }))
-                  }
-                />{' '}
-                啟用
-              </label>
-              <button
-                className="btn btn--danger btn--sm"
-                disabled={busy}
-                onClick={() => {
-                  if (window.confirm('確定刪除這項定期申請？'))
-                    mutate(`/api/literature/subscriptions/${s.id}`, { method: 'DELETE' });
-                }}
-              >
-                刪除
-              </button>
-            </div>
-          ))}
-          <h3>單次申請</h3>
-          {requestsFor(person.id).map((r) => (
-            <div className="lit-edit-row" key={r.id}>
-              <strong>
-                {publication(r.publicationId)?.name || '書刊'} · {issueLabel(publication(r.publicationId)?.code)} ×
-                {r.quantity} {r.source === 'form' && <small className="lit-badge">表單</small>}
-              </strong>
-              <button
-                className="btn btn--sm"
-                onClick={async () => {
-                  if (await mutate(`/api/literature/requests/${r.id}`, json('PATCH', { status: 'cancelled' })))
-                    setSnack({ id: r.id, status: r.status });
-                }}
-              >
-                封存
-              </button>
-              <select
-                className="field__input"
-                value={r.status}
-                disabled={busy}
-                onChange={(e) => mutate(`/api/literature/requests/${r.id}`, json('PATCH', { status: e.target.value }))}
-              >
-                {Object.entries(STATUS)
-                  .filter(([key]) => key !== 'cancelled')
-                  .map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-              </select>
-              <button
-                className="btn btn--danger btn--sm"
-                disabled={busy}
-                onClick={() => {
-                  if (window.confirm('確定取消這項申請？'))
-                    mutate(`/api/literature/requests/${r.id}`, { method: 'DELETE' });
-                }}
-              >
-                取消申請
-              </button>
-            </div>
-          ))}
           {error && <div className="imp-error">{error}</div>}
         </Sheet>
       )}
