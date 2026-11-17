@@ -16,7 +16,7 @@ export async function GET(request) {
     ]);
     const latest = shipments[0];
     const latestDeliveries = latest ? deliveries.filter((delivery) => String(delivery.shipmentId) === String(latest.id)) : [];
-    const allocation = latest ? allocateShipment({ lines: latest.lines, publications, subscriptions, requests, deliveries: latestDeliveries, people }) : [];
+    const allocation = latest ? allocateShipment({ lines: latest.lines, shippedAt: latest.shippedAt ?? latest.createdAt, publications, subscriptions, requests, deliveries: latestDeliveries, people }) : [];
     return NextResponse.json({ shipments: mapped(shipments.map(({ lines, ...shipment }, index) => ({
       ...shipment,
       lineCount: lines.length,

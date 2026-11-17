@@ -52,7 +52,12 @@ export function matchShipmentLines(lines, publications) {
     return { ...line, publicationId: null, action: 'create', createData: { ...data, code: line.code, language: line.language, format, aliases: [] } };
   });
 }
-export function allocateShipment({ lines, publications, subscriptions, requests, deliveries, people }) {
+const taipeiDate = (value) => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date(value));
+
+export function allocateShipment({ lines, publications, subscriptions, requests, deliveries, people, shippedAt }) {
+  const shippedDate = shippedAt == null ? null : taipeiDate(shippedAt);
   const same = (a, b) => String(a) === String(b);
   return lines.map(line => {
     const publication = publications.find(p => same(p.id, line.publicationId));
@@ -66,7 +71,15 @@ export function allocateShipment({ lines, publications, subscriptions, requests,
       const deliveredQuantity = matches.reduce((sum, d) => sum + d.quantity, 0);
       recipients.push({ personId: person.id, name: person.name, serviceGroup: person.serviceGroup, quantity: item.quantity, source, ...(source === 'request' ? { requestId: item.id } : {}), delivered: matches.length > 0, deliveredQuantity });
     };
-    requests.filter(r => (['pending', 'ordered', 'received'].includes(r.status) || (r.status === 'delivered' && deliveries.some(d => same(d.requestId, r.id) && same(d.shipmentId, line.shipmentId)))) && same(r.publicationId, publication.id)).forEach(r => add(r, 'request'));
+    requests.filter(request => {
+      if (!same(request.publicationId, publication.id)) return false;
+      if (request.status === 'delivered') {
+        return deliveries.some(delivery =>
+          same(delivery.requestId, request.id) && same(delivery.shipmentId, line.shipmentId));
+      }
+      if (!['pending', 'ordered', 'received'].includes(request.status)) return false;
+      return shippedDate === null || request.createdAt == null || taipeiDate(request.createdAt) <= shippedDate;
+    }).forEach(request => add(request, 'request'));
     subscriptions.filter(s => s.active && s.series === seriesOf(publication.code) && s.language === publication.language).forEach(s => add(s, 'subscription'));
     recipients.sort((a, b) => (a.source === b.source ? 0 : a.source === 'request' ? -1 : 1) || (a.serviceGroup || 'Z').localeCompare(b.serviceGroup || 'Z') || a.name.localeCompare(b.name));
     let allocated = 0;

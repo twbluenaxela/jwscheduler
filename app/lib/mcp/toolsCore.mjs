@@ -36,7 +36,7 @@ async function sorting(ctx, slip) {
     ctx.db.literatureRequest.findMany({ where: { congregationId: ctx.congregationId } }),
     ctx.db.literatureDelivery.findMany({ where: { congregationId: ctx.congregationId, shipmentId: shipment.id } }),
   ]);
-  return { shipment, allocations: allocateShipment({ lines: shipment.lines, publications: pubs, people: persons, subscriptions, requests, deliveries }) };
+  return { shipment, allocations: allocateShipment({ lines: shipment.lines, shippedAt: shipment.shippedAt ?? shipment.createdAt, publications: pubs, people: persons, subscriptions, requests, deliveries }) };
 }
 return [
   definition('search_publications', '搜尋書刊 search publications catalog', { query: string('搜尋文字'), limit: number('最多筆數') }, ['query'], async (ctx, a) => {
