@@ -12,7 +12,7 @@ export async function GET(request, context) {
       db.literatureSubscription.findMany({ where: { congregationId } }), db.literatureRequest.findMany({ where: { congregationId } }),
       db.literatureDelivery.findMany({ where: { congregationId, shipmentId: shipment.id } }), db.person.findMany({ where: { congregationId } }),
     ]);
-    return NextResponse.json(mapped({ shipment, lines, allocation: allocateShipment({ lines, publications, subscriptions, requests, deliveries, people }) }));
+    return NextResponse.json(mapped({ shipment, lines, allocation: allocateShipment({ lines, shippedAt: shipment.shippedAt ?? shipment.createdAt, publications, subscriptions, requests, deliveries, people }) }));
   } catch (error) { return fail(error); }
 }
 export async function DELETE(request, context) {

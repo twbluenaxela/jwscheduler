@@ -43,6 +43,29 @@ test('allocates requests before subscriptions and records shortages and deliveri
   assert.equal(result.remainder, 0);
 });
 
+test('allocates open requests by Taipei shipment date while preserving delivered requests', () => {
+  const data = {
+    lines: [{ publicationId: 1, shipmentId: 9, quantity: 10 }],
+    publications: [{ id: 1, code: 'w27.01', language: 'CHT' }],
+    people: Array.from({ length: 6 }, (_, index) => ({ id: index + 1, name: String(index + 1) })),
+    requests: [
+      { id: 1, personId: 1, publicationId: 1, quantity: 1, status: 'pending', createdAt: '2026-11-16T00:00:00Z' },
+      { id: 2, personId: 2, publicationId: 1, quantity: 1, status: 'ordered', createdAt: '2026-10-10T00:00:00Z' },
+      { id: 3, personId: 3, publicationId: 1, quantity: 1, status: 'received', createdAt: '2026-10-15T15:59:59Z' },
+      { id: 4, personId: 4, publicationId: 1, quantity: 1, status: 'delivered', createdAt: '2026-11-16T00:00:00Z' },
+      { id: 5, personId: 5, publicationId: 1, quantity: 1, status: 'pending' },
+      { id: 6, personId: 6, publicationId: 1, quantity: 1, status: 'pending', createdAt: '2026-10-15T16:00:00Z' },
+    ],
+    subscriptions: [],
+    deliveries: [{ personId: 4, publicationId: 1, shipmentId: 9, requestId: 4, quantity: 1 }],
+  };
+  const recipientIds = shippedAt => allocateShipment({ ...data, shippedAt })[0].recipients.map(r => r.requestId);
+  assert.deepEqual(recipientIds(new Date('2026-10-15T00:00:00Z')), [2, 3, 4, 5]);
+  assert.deepEqual(recipientIds('2026-10-15'), [2, 3, 4, 5]);
+  assert.deepEqual(recipientIds(null), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(allocateShipment(data)[0].recipients.map(r => r.requestId), [1, 2, 3, 4, 5, 6]);
+});
+
 test('counts distinct people with an undelivered recipient entry', () => {
   const allocation = [
     { publication: { id: 10 }, recipients: [{ personId: 1 }, { personId: '1', requestId: 5 }, { personId: 2 }] },

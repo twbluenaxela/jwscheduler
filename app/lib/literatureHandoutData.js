@@ -24,7 +24,7 @@ export async function loadHandoutData(congregationId) {
     new Date(b.shippedAt || b.createdAt) - new Date(a.shippedAt || a.createdAt));
   const allocations = new Map(shipments.map(shipment => [
     shipment.id,
-    allocateShipment({ lines: shipment.lines, publications, subscriptions, requests, deliveries, people }),
+    allocateShipment({ lines: shipment.lines, shippedAt: shipment.shippedAt ?? shipment.createdAt, publications, subscriptions, requests, deliveries, people }),
   ]));
   return { shipments, publications, subscriptions, requests, deliveries, people, allocations };
 }
