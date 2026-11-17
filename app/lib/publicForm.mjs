@@ -64,6 +64,17 @@ export function publicCatalog(publications) {
   });
 }
 
+// 英/日 rows in the catalog carry Chinese issue names; show the language's own
+// title from its generic series card, keeping the issue label for dating.
+export function localizedName(p, all = []) {
+  if (!p || p.language === 'CHT') return p?.name;
+  const series = p.series || seriesOf(p.code || '');
+  const generic = all.find((x) => x.code === series && x.language === p.language && x.format === 'standard');
+  const base = generic?.name || p.name;
+  const issue = /^(?:wlp|w|mwb)(\d{2})\.(\d{1,2})$/.exec(p.code || '');
+  return issue ? `${base} ${2000 + Number(issue[1])}年${Number(issue[2])}月` : base;
+}
+
 const ISSUE_CODE = /^(?:wlp|w)(\d{2}\.\d{2})$/;
 const cardKey = (p) => {
   const issue = ISSUE_CODE.exec(p.code)?.[1];
@@ -93,7 +104,7 @@ export function editionGroups(list, all = list) {
         if (!p && base.series) {
           const generic = all.find((x) => x.code === base.series && x.language === language && x.format === 'standard');
           if (generic)
-            p = { ...generic, name: base.name, code: base.code, coverUrl: base.coverUrl, series: base.series, standing: true, synthetic: true };
+            p = { ...generic, name: localizedName({ ...generic, code: base.code }, all), code: base.code, coverUrl: base.coverUrl, series: base.series, standing: true, synthetic: true };
         }
         if (p && p !== base) options.push({ label, language, publication: p });
       }

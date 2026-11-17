@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicCatalog, groupPeople, validateSubmission, flagSubmission, isStanding, defaultKind, editionGroups } from './publicForm.mjs';
+import { publicCatalog, groupPeople, validateSubmission, flagSubmission, isStanding, defaultKind, editionGroups, localizedName } from './publicForm.mjs';
 
 const pub = (id, code, extra = {}) => ({ id, code, name: code, category: 'study', language: 'CHT', format: 'standard', active: true, ...extra });
 const publications = [pub(1, 'w26.01'), pub(2, 'w26.02'), pub(3, 'w26.03'), pub(4, 'w26.04'), pub(5, 'book'), pub(6, 'form', { category: 'form' }), pub(7, 'off', { requestable: false }), pub(8, 'inactive', { active: false })];
@@ -38,7 +38,9 @@ test('edition cards: 中文 is the card, 英/日/大字 are alternatives', () =>
   const all = publicCatalog([
     pub(1, 'w26.11', { language: 'CHT', coverToken: 'a' }),
     pub(9, 'wlp26.11', { language: 'CHT', format: 'large' }),
-    pub(2, 'w', { language: 'CHT' }), pub(3, 'w', { language: 'ENG' }), pub(4, 'w', { language: 'JPN' }),
+    pub(2, 'w', { language: 'CHT' }),
+    pub(3, 'w', { language: 'ENG', name: 'The Watchtower (Study Edition)' }),
+    pub(4, 'w', { language: 'JPN', name: 'ものみの塔（研究用）' }),
     pub(5, 'wcg', { language: 'CHT', category: 'book' }), pub(6, 'wcg', { language: 'ENG', category: 'book' }),
     pub(7, 'nwt', { language: 'CHT', category: 'bible' }),
   ]);
@@ -49,11 +51,27 @@ test('edition cards: 中文 is the card, 英/日/大字 are alternatives', () =>
   assert.deepEqual(study.options.map((o) => o.label), ['英', '日', '大字']);
   assert.equal(study.options[0].publication.language, 'ENG');
   assert.equal(study.options[0].publication.code, 'w26.11');
+  assert.equal(study.options[0].publication.name, 'The Watchtower (Study Edition) 2026年11月');
+  assert.equal(study.options[1].publication.name, 'ものみの塔（研究用） 2026年11月');
   assert.equal(study.options[0].publication.synthetic, true);
   assert.equal(study.options[2].publication.code, 'wlp26.11');
   assert.deepEqual(groups.find((g) => g.key === 'wcg|standard').options.map((o) => o.label), ['英']);
   assert.deepEqual(groups.find((g) => g.key === 'nwt|standard').options, []);
   assert.equal(groups.filter((g) => g.key === 'wlp26.11').length, 0);
+});
+test('localized names keep the language title and the issue date', () => {
+  const all = [
+    pub(1, 'w', { language: 'ENG', name: 'The Watchtower (Study Edition)' }),
+    pub(2, 'w', { language: 'JPN', name: 'ものみの塔（研究用）' }),
+    pub(3, 'wlp', { language: 'ENG', format: 'large', name: 'The Watchtower (Study Edition, Large Print)' }),
+  ];
+  assert.equal(localizedName(pub(4, 'w27.01', { language: 'ENG', name: '守望台研讀版 2027年1月' }), all),
+    'The Watchtower (Study Edition) 2027年1月');
+  assert.equal(localizedName(pub(5, 'w26.11', { language: 'JPN', name: '守望台研讀版 2026年11月' }), all),
+    'ものみの塔（研究用） 2026年11月');
+  assert.equal(localizedName(pub(6, 'wlp27.01', { language: 'CHT', format: 'large', name: '守望台研讀版（大字版） 2027年1月' }), all),
+    '守望台研讀版（大字版） 2027年1月');
+  assert.equal(localizedName(all[2], all), 'The Watchtower (Study Edition, Large Print)');
 });
 test('groups include active people and ungrouped people in order', () => {
   const groups = groupPeople([...people, { id: 3, name: '丙', serviceGroup: null }]);

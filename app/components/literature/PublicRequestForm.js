@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { matchPublications, withCoverFallback, LANGUAGE_LABELS } from '../../lib/literature.mjs';
-import { PUBLIC_SECTIONS, MAGAZINE_TABS, defaultKind, editionGroups } from '../../lib/publicForm.mjs';
+import { PUBLIC_SECTIONS, MAGAZINE_TABS, defaultKind, editionGroups, localizedName } from '../../lib/publicForm.mjs';
 import PubThumb, { Sheet } from './PubThumb';
 import Icon from './Icon';
 
@@ -557,7 +557,8 @@ export default function PublicRequestForm({ token }) {
     }
   }
 
-  const publications = withCoverFallback((data?.publications || []).map((p) => ({ ...p, active: true })));
+  const catalog = data?.publications || [];
+  const publications = withCoverFallback(catalog.map((p) => ({ ...p, active: true, name: localizedName(p, catalog) })));
   const publication = (id) => publications.find((p) => String(p.id) === String(id));
   const subscription = selected && subs.find((s) => s.series === selected.series && s.language === selected.language);
   if (!data) return <main className="public-message">{error || '正在載入…'}</main>;
