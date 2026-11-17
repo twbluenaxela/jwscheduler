@@ -31,6 +31,7 @@ function OrderRow({ row, stock, mark, busy }) {
       </div>
       <div className={`lit-order-details${expanded ? ' is-open' : ''}`}>
         <div>
+          {row.stockDetail?.fromShipments > 0 && <p className="lit-order-hint">庫存＝清點 {row.stockDetail.base} ＋ 裝箱單剩 {row.stockDetail.fromShipments}</p>}
           {row.requests.map((item) => <p key={item.requestId}>{item.personName || item.guestName || '訪客'} ×{item.quantity}</p>)}
         </div>
       </div>

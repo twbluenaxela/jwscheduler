@@ -1,5 +1,5 @@
 import db from './db.js';
-import { buildCountLines, missingReceivedLines, receivedByPublication } from './literatureInventory.mjs';
+import { buildCountLines, countCoverageStart, missingReceivedLines, receivedBetween, receivedByPublication } from './literatureInventory.mjs';
 function invalid(message = '輸入資料無效') {
   throw Object.assign(new Error(message), { status: 400 });
 }
@@ -22,7 +22,9 @@ export async function countData(congregationId, month) {
     db.inventoryCount.findFirst({ where: { congregationId, month: { lt: month } }, orderBy: { month: 'desc' }, include: { lines: true } }),
     db.shipment.findMany({ where: { congregationId }, include: { lines: true } }),
   ]);
-  const received = receivedByPublication(shipments, month);
+  const from = countCoverageStart(previous ?? { source: 'jwhub-report', month });
+  const toExclusive = countCoverageStart({ source: 'manual', month });
+  const received = receivedBetween(shipments, from, toExclusive);
   return { publications, previousLines: previous?.lines || [], received,
     lines: buildCountLines({ publications, previousLines: previous?.lines || [], received }) };
 }
@@ -46,7 +48,9 @@ export async function refreshLines(count) {
     }),
     db.publication.findMany({ where: { congregationId: count.congregationId } }),
   ]);
-  const received = receivedByPublication(shipments, count.month);
+  const from = countCoverageStart(previous ?? { source: 'jwhub-report', month: count.month });
+  const toExclusive = countCoverageStart({ source: 'manual', month: count.month });
+  const received = receivedBetween(shipments, from, toExclusive);
   const missing = missingReceivedLines({ lines, previousLines: previous?.lines || [], received, publications });
   if (missing.length) {
     await db.inventoryLine.createMany({

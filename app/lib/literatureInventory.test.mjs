@@ -109,3 +109,22 @@ test('late receipts skip non-countable and unknown publications', async () => {
     { publicationId: 1, opening: 0, received: 2, onHand: null },
   ]);
 });
+
+test('count coverage and receipts use Taipei month boundaries', async () => {
+  const { countCoverageStart, receivedBetween } = await import('./literatureInventory.mjs');
+  const report = { source: 'jwhub-report', month: '2026-10' };
+  const manual = { source: 'manual', month: '2026-10' };
+  assert.equal(countCoverageStart(report).toISOString(), '2026-09-30T16:00:00.000Z');
+  assert.equal(countCoverageStart(manual).toISOString(), '2026-10-31T16:00:00.000Z');
+  assert.equal(countCoverageStart({ source: 'manual', month: '2026-12' }).toISOString(), '2026-12-31T16:00:00.000Z');
+  const shipments = [
+    { shippedAt: '2026-09-30T15:59:59Z', lines: [{ publicationId: 1, quantity: 100 }] },
+    { shippedAt: '2026-09-30T16:00:00Z', lines: [{ publicationId: 1, quantity: 3 }] },
+    { shippedAt: '2026-10-15T00:00:00Z', lines: [{ publicationId: 1, quantity: 5 }] },
+    { createdAt: '2026-10-31T16:00:00Z', lines: [{ publicationId: 1, quantity: 7 }] },
+    { shippedAt: '2026-11-30T16:00:00Z', lines: [{ publicationId: 1, quantity: 100 }] },
+  ];
+  const end = countCoverageStart({ source: 'manual', month: '2026-11' });
+  assert.equal(receivedBetween(shipments, countCoverageStart(report), end).get(1), 15);
+  assert.equal(receivedBetween(shipments, countCoverageStart(manual), end).get(1), 7);
+});

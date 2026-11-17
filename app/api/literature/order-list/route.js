@@ -7,15 +7,17 @@ import { buildOrderList } from '../../../lib/literatureOrders.mjs';
 export async function GET(request) {
   try {
     const congregationId = await auth(request);
-    const [requests, publications, count, subscriptions, shipments] = await Promise.all([
-      db.literatureRequest.findMany({ where: { congregationId, status: { in: ['pending', 'received'] } }, include: { person: true } }),
+    const [requests, publications, counts, subscriptions, shipments, deliveries, people] = await Promise.all([
+      db.literatureRequest.findMany({ where: { congregationId }, include: { person: true } }),
       db.publication.findMany({ where: { congregationId } }),
-      db.inventoryCount.findFirst({ where: { congregationId }, orderBy: { month: 'desc' }, include: { lines: true } }),
+      db.inventoryCount.findMany({ where: { congregationId }, include: { lines: true } }),
       db.literatureSubscription.findMany({ where: { congregationId } }),
       db.shipment.findMany({ where: { congregationId }, include: { lines: { include: { publication: true } } }, orderBy: { createdAt: 'desc' } }),
+      db.literatureDelivery.findMany({ where: { congregationId } }),
+      db.person.findMany({ where: { congregationId } }),
     ]);
-    const result = buildOrderList({ requests, publications: withCoverFallback(publications.map(mapPublication)), countLines: count?.lines || [], subscriptions, shipments });
-    return Response.json(mapped({ ...result, hasInventoryCount: Boolean(count) }));
+    const result = buildOrderList({ requests, publications: withCoverFallback(publications.map(mapPublication)), counts, subscriptions, shipments, deliveries, people });
+    return Response.json(mapped({ ...result, hasInventoryCount: counts.length > 0 }));
   } catch (error) {
     return fail(error);
   }
