@@ -76,6 +76,47 @@ test('pendingHandouts groups and sorts undelivered recipients and received reque
   assert.equal(result[1].items[0].shipmentId, null);
 });
 
+test('pendingHandouts lists a request allocated to two shipments only once', async () => {
+  const { pendingHandouts } = await import('./literatureShipments.mjs');
+  const publication = { id: 1, code: 'nwtls', name: '聖經', language: 'CHT', format: 'standard' };
+  const recipient = { personId: 1, requestId: 30, quantity: 1, source: 'request' };
+  const allocations = new Map([
+    [10, [{ publication, recipients: [recipient] }]],
+    [11, [{ publication, recipients: [{ ...recipient, requestId: '30' }] }]],
+  ]);
+  const data = {
+    shipments: [{ id: 10 }, { id: 11 }],
+    allocations,
+    deliveries: [],
+    requests: [{ id: 30, personId: 1, publicationId: 1, status: 'received', publication }],
+    people: [{ id: 1, name: '王小明' }],
+  };
+
+  const result = pendingHandouts(data);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].items.length, 1);
+  assert.equal(result[0].items[0].requestId, 30);
+});
+
+test('pendingHandouts excludes a delivered request allocated to two shipments', async () => {
+  const { pendingHandouts } = await import('./literatureShipments.mjs');
+  const publication = { id: 1, code: 'nwtls', name: '聖經', language: 'CHT', format: 'standard' };
+  const recipient = { personId: 1, requestId: 30, quantity: 1, source: 'request' };
+  const allocations = new Map([
+    [10, [{ publication, recipients: [recipient] }]],
+    [11, [{ publication, recipients: [recipient] }]],
+  ]);
+  const result = pendingHandouts({
+    shipments: [{ id: 10 }, { id: 11 }],
+    allocations,
+    deliveries: [{ personId: 1, publicationId: 1, requestId: 30 }],
+    requests: [{ id: 30, personId: 1, publicationId: 1, status: 'received', publication }],
+    people: [{ id: 1, name: '王小明' }],
+  });
+
+  assert.equal(result.length, 0);
+});
+
 test('handoutSummary merges months in chronological order and combines quantities', async () => {
   const { handoutSummary } = await import('./literatureShipments.mjs');
   assert.equal(handoutSummary([
