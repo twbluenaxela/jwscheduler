@@ -70,6 +70,7 @@ model Person {
   awayNote       String?
   serviceGroup   String?
   groupRole      String?
+  literatureNote String?
   assignmentNote String?
   assignmentIntervalMonths Int @default(0)
   lineUserId     String?
@@ -289,6 +290,7 @@ model LiteratureFormSubmission {
   person Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
   guestName String?
   guestNote String?
+  note String?
   items Json
   flagged Boolean @default(false)
   reason String?

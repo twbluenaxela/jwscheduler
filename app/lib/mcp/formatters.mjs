@@ -16,7 +16,7 @@ const permitted = new Set([
   'deliveredAt', 'shippedAt', 'slipNumber', 'source', 'month', 'opening', 'received', 'onHand', 'distributed', 'counted', 'total',
   'publication', 'person', 'shipment', 'subscriptions', 'requests', 'deliveries', 'lines', 'count', 'groups', 'remainders', 'remainder',
   'subscribed', 'lastReceived', 'issueCode', 'diff', 'delivered', 'deliveredQuantity', 'short', 'rawCode', 'issue', 'lineCount',
-  'totalQuantity', 'data', 'entries',
+  'totalQuantity', 'data', 'entries', 'literatureNote',
 ]);
 export function cleanResult(value, key = '') {
   if (value instanceof Date) return date(value);
@@ -42,7 +42,7 @@ function formatPerson(data) {
     const slip = r.shipment?.slipNumber ? `，裝箱單 ${r.shipment.slipNumber}` : '';
     return `${pub(r.publication)} ×${r.quantity}（${date(r.deliveredAt)}${slip}）`;
   });
-  return [`${data.person}（${data.group || '未分組'}）`, `定期：${empty(subscriptions).join('；')}`,
+  return [`${data.person}（${data.group || '未分組'}）`, ...(data.literatureNote ? [`書刊備註：${data.literatureNote}`] : []), `定期：${empty(subscriptions).join('；')}`,
     `申請：${empty(requests).join('；')}`, `近 60 天已發：${empty(deliveries).join('；')}`];
 }
 function formatSorting(data) {

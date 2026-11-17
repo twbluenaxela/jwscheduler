@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { CATEGORY_LABELS, matchPublications, withCoverFallback } from '../../lib/literature.mjs';
+import { matchPublications, withCoverFallback } from '../../lib/literature.mjs';
+import { PUBLIC_SECTIONS, MAGAZINE_TABS } from '../../lib/publicForm.mjs';
 import PubThumb, { Sheet } from './PubThumb';
 import Icon from './Icon';
 
@@ -101,18 +102,29 @@ function NameStep({ groups, person, query, setQuery, choose, openGuest }) {
   );
 }
 
-function CatalogStep({ publications, query, setQuery, view, setView, category, setCategory, openItem }) {
-  const filtered = matchPublications(
-    query,
-    publications.filter((p) => category === 'all' || p.category === category),
-    { limit: publications.length },
-  );
+function CatalogStep({ publications, query, setQuery, view, setView, section, setSection, sub, setSub, openItem }) {
+  const searching = Boolean(query.trim());
+  const sections = PUBLIC_SECTIONS.filter((entry) => publications.some((p) => p.section === entry.key));
+  const tabs = MAGAZINE_TABS.filter((tab) => publications.some((p) => p.section === 'magazines' && p.sub === tab.key));
+  const currentSub = tabs.some((tab) => tab.key === sub) ? sub : tabs[0]?.key;
+  const candidates = searching ? publications : publications.filter((p) => (
+    p.section === section && (section !== 'magazines' || p.sub === currentSub)
+  ));
+  const filtered = matchPublications(query, candidates, { limit: publications.length });
+  if (!searching && section === 'magazines') {
+    const issueNumber = (item) => {
+      const match = /(\d{2})\.(\d{1,2})$/.exec(item.code);
+      return match ? Number(match[1]) * 100 + Number(match[2]) : 0;
+    };
+    filtered.sort((a, b) => issueNumber(b) - issueNumber(a));
+  }
   function changeView(value) {
     setView(value);
     try {
       localStorage.setItem('litform:view', value);
     } catch {}
   }
+  const showItems = searching || section;
   return (
     <>
       <div className="public-toolbar">
@@ -125,38 +137,60 @@ function CatalogStep({ publications, query, setQuery, view, setView, category, s
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <div className="public-controls">
-          <div className="lit-segment" aria-label="顯示方式">
-            {[
-              ['grid', '格狀'],
-              ['list', '條列'],
-            ].map(([value, label]) => (
-              <button key={value} aria-pressed={view === value} onClick={() => changeView(value)}>
-                <Icon name={value} /> {label}
+        {showItems && (
+          <div className="public-controls">
+            {!searching && (
+              <div className="public-section-heading">
+                <button className="lit-back" aria-label="返回" onClick={() => setSection(null)}>
+                  <Icon name="back" />
+                </button>
+                <h2>{PUBLIC_SECTIONS.find((entry) => entry.key === section)?.label}</h2>
+              </div>
+            )}
+            <div className="lit-segment" aria-label="顯示方式">
+              {[[ 'grid', '格狀' ], [ 'list', '條列' ]].map(([value, label]) => (
+                <button key={value} aria-pressed={view === value} onClick={() => changeView(value)}>
+                  <Icon name={value} /> {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!searching && section === 'magazines' && tabs.length > 0 && (
+          <div className="lit-segment public-magazine-tabs" aria-label="雜誌類型">
+            {tabs.map((tab) => (
+              <button key={tab.key} aria-pressed={currentSub === tab.key} onClick={() => setSub(tab.key)}>
+                {tab.label}
               </button>
             ))}
           </div>
-          <div className="chips lit-chips">
-            {['all', ...new Set(publications.map((p) => p.category))].map((value) => (
-              <button className="chip" key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>
-                {value === 'all' ? '全部' : CATEGORY_LABELS[value] || value}
-              </button>
-            ))}
-          </div>
+        )}
+      </div>
+      {!showItems ? (
+        <div className="public-section-grid public-section-enter">
+          {sections.map((entry) => (
+            <button key={entry.key} className="public-section-tile" onClick={() => {
+              setSection(entry.key);
+              setSub(null);
+            }}>
+              <Icon name={entry.icon} />
+              <span><strong>{entry.label}</strong><small>{publications.filter((p) => p.section === entry.key).length} 項</small></span>
+            </button>
+          ))}
         </div>
-      </div>
-      <div className={`public-publications public-publications--${view}`} key={view}>
-        {filtered.map((p) => (
-          <button className="public-publication" key={p.id} onClick={() => openItem(p)}>
-            <PubThumb publication={p} size={view === 'grid' ? 'large' : 'mini'} />
-            <span>
-              <strong>{p.name}</strong>
-              {view === 'list' && <small>{p.code}</small>}
-            </span>
-          </button>
-        ))}
-      </div>
-      {!filtered.length && <p>找不到符合的書刊。</p>}
+      ) : (
+        <div className="public-section-enter" key={`${section}-${currentSub}-${view}-${searching}`}>
+          <div className={`public-publications public-publications--${view}`}>
+            {filtered.map((p) => (
+              <button className="public-publication" key={p.id} onClick={() => openItem(p)}>
+                <PubThumb publication={p} size={view === 'grid' ? 'large' : 'mini'} />
+                <span><strong>{p.name}</strong>{view === 'list' && <small>{p.code}</small>}</span>
+              </button>
+            ))}
+          </div>
+          {!filtered.length && <p>找不到符合的書刊。</p>}
+        </div>
+      )}
     </>
   );
 }
@@ -210,10 +244,17 @@ function ItemSheet({
   );
 }
 
-function CartBar({ cart, badgeRef, open }) {
+function CartBar({ cart, publication, badgeRef, open }) {
   return (
     <div className="public-cart-bar">
-      <span ref={badgeRef}>申請單 {cart.length} 項</span>
+      <div className="public-cart-summary" ref={badgeRef}>
+        <span className="public-cart-covers" aria-hidden="true">
+          {cart.slice(-3).reverse().map((item) => (
+            <PubThumb key={`${item.publicationId}:${item.kind}`} publication={publication(item.publicationId)} size="mini" />
+          ))}
+        </span>
+        <span>申請單 {cart.length} 項</span>
+      </div>
       <button className="btn btn--primary" onClick={open}>
         查看並送出
       </button>
@@ -221,7 +262,7 @@ function CartBar({ cart, badgeRef, open }) {
   );
 }
 
-function CartSheet({ cart, setCart, publication, back, busy, error, submit }) {
+function CartSheet({ cart, setCart, publication, note, setNote, back, busy, error, submit }) {
   return (
     <div className="public-content">
       <button className="lit-back" onClick={back}>
@@ -254,6 +295,12 @@ function CartSheet({ cart, setCart, publication, back, busy, error, submit }) {
           )
         );
       })}
+      <label className="field public-cart-note">
+        <span className="field__label">備註（選填）</span>
+        <textarea className="field__input" maxLength={300} rows={3}
+          placeholder="例如：每年的天天查考聖經、要紙本…" value={note}
+          onChange={(event) => setNote(event.target.value)} />
+      </label>
       {error && (
         <p className="imp-error" role="alert">
           {error} 再試一次
@@ -303,7 +350,9 @@ export default function PublicRequestForm({ token }) {
   const [step, setStep] = useState(1);
   const [query, setQuery] = useState('');
   const [view, setView] = useState('grid');
-  const [category, setCategory] = useState('all');
+  const [section, setSection] = useState(null);
+  const [sub, setSub] = useState(null);
+  const [note, setNote] = useState('');
   const [guest, setGuest] = useState(false);
   const [selected, setSelected] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -324,6 +373,7 @@ export default function PublicRequestForm({ token }) {
         setStep(2);
       }
       if (Array.isArray(saved.cart)) setCart(saved.cart);
+      if (typeof saved.note === 'string') setNote(saved.note);
       setView(localStorage.getItem('litform:view') === 'list' ? 'list' : 'grid');
     } catch {}
     setReady(true);
@@ -343,9 +393,9 @@ export default function PublicRequestForm({ token }) {
   useEffect(() => {
     if (ready)
       try {
-        localStorage.setItem(`litform:${token}`, JSON.stringify({ person, cart }));
+        localStorage.setItem(`litform:${token}`, JSON.stringify({ person, cart, note }));
       } catch {}
-  }, [ready, token, person, cart]);
+  }, [ready, token, person, cart, note]);
 
   useEffect(() => {
     if (person && !person.guest) {
@@ -428,12 +478,14 @@ export default function PublicRequestForm({ token }) {
         body: JSON.stringify({
           ...(person.guest ? { guest: { name: person.name, note: person.note } } : { personId: person.id }),
           items: cart,
+          note,
         }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       setDone(cart);
       setCart([]);
+      setNote('');
       transition(() => setStep(4));
     } catch (e) {
       setError(e.message || '送出失敗，請再試一次。');
@@ -483,8 +535,10 @@ export default function PublicRequestForm({ token }) {
           setQuery={setQuery}
           view={view}
           setView={setView}
-          category={category}
-          setCategory={setCategory}
+          section={section}
+          setSection={setSection}
+          sub={sub}
+          setSub={setSub}
           openItem={openItem}
         />
       )}
@@ -493,6 +547,8 @@ export default function PublicRequestForm({ token }) {
           cart={cart}
           setCart={setCart}
           publication={publication}
+          note={note}
+          setNote={setNote}
           busy={busy}
           error={error}
           submit={submit}
@@ -511,7 +567,7 @@ export default function PublicRequestForm({ token }) {
         />
       )}
       {step === 2 && cart.length > 0 && (
-        <CartBar cart={cart} badgeRef={badgeRef} open={() => transition(() => setStep(3))} />
+        <CartBar cart={cart} publication={publication} badgeRef={badgeRef} open={() => transition(() => setStep(3))} />
       )}
       {guest && <GuestSheet close={() => setGuest(false)} choose={choose} />}
       {selected && (

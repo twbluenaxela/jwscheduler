@@ -97,6 +97,8 @@ export default function RequestsView({ people, items, request }) {
   const [linkOpen, setLinkOpen] = useState(false);
   const [guestName, setGuestName] = useState(null);
   const [snack, setSnack] = useState(null);
+  const [notes, setNotes] = useState({});
+  const [noteSaved, setNoteSaved] = useState(false);
   useEffect(() => {
     if (snack) {
       const timer = setTimeout(() => setSnack(null), 5000);
@@ -151,6 +153,18 @@ export default function RequestsView({ people, items, request }) {
     const payload = { ...form, quantity: Number(form.quantity) };
     const path = form.type === 'subscription' ? 'subscriptions' : 'requests';
     if (await mutate(`/api/literature/${path}`, json('POST', payload))) setAdding(false);
+  }
+  function updateNote(id, value) {
+    setNotes((current) => ({ ...current, [id]: value || '' }));
+  }
+  async function savePersonNote(value) {
+    try {
+      const result = await request(`/api/literature/people/${person.id}/note`, json('PATCH', { note: value }));
+      updateNote(person.id, result.literatureNote);
+      setNoteSaved(true);
+    } catch (err) {
+      setError(err.message);
+    }
   }
   const visiblePeople = people.filter(
     (p) => p.name.includes(query.trim()) && (subscriptionsFor(p.id).some((s) => s.active) || requestsFor(p.id).length),
@@ -217,12 +231,14 @@ export default function RequestsView({ people, items, request }) {
                     onClick={() => {
                       setError('');
                       setPerson(p);
+                      setNoteSaved(false);
                     }}
                   >
                     {cover && <PubThumb publication={cover} />}
                     <span className="lit-person-content">
                       <span className="lit-person-name">
                         {p.name} {p.groupRole && <small>{p.groupRole === 'overseer' ? '小組監督' : '助手'}</small>}
+                        {(notes[p.id] ?? p.literatureNote) && <span className="lit-note-icon" role="img" aria-label="有備註"><Icon name="note" /></span>}
                         {requests.some((r) => r.status === 'pending') && <span className="lit-pending-dot" />}
                       </span>
                       {summary.length > 0 && (
@@ -256,7 +272,7 @@ export default function RequestsView({ people, items, request }) {
           close={() => setGuestName(null)}
         />
       )}
-      {linkOpen && <FormLinkSheet request={request} close={() => setLinkOpen(false)} />}
+      {linkOpen && <FormLinkSheet request={request} close={() => setLinkOpen(false)} onNoteSaved={updateNote} />}
       {snack && (
         <div className="lit-handout-snack" role="status">
           已封存{' '}
@@ -272,6 +288,28 @@ export default function RequestsView({ people, items, request }) {
       )}
       {person && !adding && (
         <Sheet title={person.name} close={() => setPerson(null)}>
+          <label className="field lit-person-note">
+            <span className="field__label">書刊備註 {noteSaved && <small role="status">已儲存</small>}</span>
+            <textarea className="field__input" rows={2} maxLength={1000}
+              ref={(element) => {
+                if (element) {
+                  element.style.height = 'auto';
+                  element.style.height = `${element.scrollHeight}px`;
+                }
+              }}
+              value={notes[person.id] ?? person.literatureNote ?? ''}
+              onChange={(event) => {
+                updateNote(person.id, event.target.value);
+                setNoteSaved(false);
+                event.target.style.height = 'auto';
+                event.target.style.height = `${event.target.scrollHeight}px`;
+              }}
+              onFocus={(event) => {
+                event.target.style.height = 'auto';
+                event.target.style.height = `${event.target.scrollHeight}px`;
+              }}
+              onBlur={(event) => savePersonNote(event.target.value)} />
+          </label>
           <button className="btn btn--primary" onClick={() => add(person)}>
             ＋新增
           </button>

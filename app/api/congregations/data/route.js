@@ -75,6 +75,7 @@ function mapPerson(person) {
     status: person.status,
     awayNote: person.awayNote ?? '',
     assignmentNote: person.assignmentNote ?? '',
+    literatureNote: person.literatureNote ?? '',
     assignmentIntervalMonths: person.assignmentIntervalMonths ?? 0,
     serviceGroup: person.serviceGroup,
     groupRole: person.groupRole,

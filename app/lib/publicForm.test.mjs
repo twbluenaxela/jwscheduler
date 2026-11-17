@@ -41,3 +41,29 @@ test('flags each reason in order', () => {
   assert.deepEqual(flagSubmission({ items, previousSubs: [{ series: 'w', language: 'CHT', active: true, quantity: 2 }], recentCount: 1, guest: true }), { flagged: true, reason: '數量超過 5、超過 10 項、定期變更、10 分鐘內重複送出、名單外' });
   assert.deepEqual(flagSubmission({ items: [{ quantity: 1, kind: 'once' }] }), { flagged: false, reason: null });
 });
+
+test('public sections classify periodicals, tools and ordinary publications', async () => {
+  const { publicSection } = await import('./publicForm.mjs');
+  for (const [code, category, expected] of [
+    ['T-30', 'toolbox', { section: 'tracts' }],
+    ['inv', 'toolbox', { section: 'tracts' }],
+    ['jwcd1', 'toolbox', { section: 'tracts' }],
+    ['lff', 'toolbox', { section: 'toolbox' }],
+    ['w26.09', 'study', { section: 'magazines', sub: 'study' }],
+    ['wp26.1', 'magazine', { section: 'magazines', sub: 'wp' }],
+    ['g26.1', 'magazine', { section: 'magazines', sub: 'g' }],
+    ['mwb26.11', 'study', { section: 'workbook' }],
+    ['es27', 'book', { section: 'book' }],
+  ]) {
+    assert.deepEqual(publicSection({ code, category }), expected);
+  }
+});
+
+test('submission note is trimmed, optional and limited to 300 characters', () => {
+  const body = { personId: 1, items: [{ publicationId: 4, quantity: 1, kind: 'once' }] };
+  assert.equal(validate(body).note, null);
+  assert.equal(validate({ ...body, note: '  紙本  ' }).note, '紙本');
+  assert.equal(validate({ ...body, note: ' '.repeat(3) }).note, null);
+  assert.throws(() => validate({ ...body, note: '字'.repeat(301) }), /備註不可超過 300 個字/);
+  assert.throws(() => validate({ ...body, note: 2 }), /備註不可超過 300 個字/);
+});
