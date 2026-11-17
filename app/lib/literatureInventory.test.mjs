@@ -110,21 +110,24 @@ test('late receipts skip non-countable and unknown publications', async () => {
   ]);
 });
 
-test('count coverage and receipts use Taipei month boundaries', async () => {
-  const { countCoverageStart, receivedBetween } = await import('./literatureInventory.mjs');
-  const report = { source: 'jwhub-report', month: '2026-10' };
-  const manual = { source: 'manual', month: '2026-10' };
-  assert.equal(countCoverageStart(report).toISOString(), '2026-09-30T16:00:00.000Z');
-  assert.equal(countCoverageStart(manual).toISOString(), '2026-10-31T16:00:00.000Z');
-  assert.equal(countCoverageStart({ source: 'manual', month: '2026-12' }).toISOString(), '2026-12-31T16:00:00.000Z');
+test('count coverage uses completion time, Taipei deadline, or now', async () => {
+  const { countCoveredUntil, receivedBetween } = await import('./literatureInventory.mjs');
+  const now = new Date('2026-12-12T00:00:00Z');
+  const fallback = { status: 'done', source: 'jwhub-report', month: '2026-10' };
+  const manual = { status: 'done', source: 'manual', month: '2026-11' };
+  const completed = { status: 'done', month: '2026-12', completedAt: '2026-12-08T00:00:00Z' };
+  assert.equal(countCoveredUntil(fallback, now).toISOString(), '2026-10-10T15:59:59.999Z');
+  assert.equal(countCoveredUntil(manual, now).toISOString(), '2026-12-10T15:59:59.999Z');
+  assert.equal(countCoveredUntil({ status: 'done', month: '2026-12' }, now).toISOString(), '2027-01-10T15:59:59.999Z');
+  assert.equal(countCoveredUntil(completed, now).toISOString(), completed.completedAt.replace('Z', '.000Z'));
+  assert.equal(countCoveredUntil({ status: 'draft', month: '2026-12' }, now).toISOString(), now.toISOString());
   const shipments = [
-    { shippedAt: '2026-09-30T15:59:59Z', lines: [{ publicationId: 1, quantity: 100 }] },
-    { shippedAt: '2026-09-30T16:00:00Z', lines: [{ publicationId: 1, quantity: 3 }] },
+    { shippedAt: '2026-10-05T00:00:00Z', lines: [{ publicationId: 1, quantity: 100 }] },
     { shippedAt: '2026-10-15T00:00:00Z', lines: [{ publicationId: 1, quantity: 5 }] },
-    { createdAt: '2026-10-31T16:00:00Z', lines: [{ publicationId: 1, quantity: 7 }] },
-    { shippedAt: '2026-11-30T16:00:00Z', lines: [{ publicationId: 1, quantity: 100 }] },
+    { shippedAt: '2026-11-05T00:00:00Z', lines: [{ publicationId: 1, quantity: 7 }] },
+    { shippedAt: '2026-12-20T00:00:00Z', lines: [{ publicationId: 1, quantity: 9 }] },
   ];
-  const end = countCoverageStart({ source: 'manual', month: '2026-11' });
-  assert.equal(receivedBetween(shipments, countCoverageStart(report), end).get(1), 15);
-  assert.equal(receivedBetween(shipments, countCoverageStart(manual), end).get(1), 7);
+  assert.equal(receivedBetween(shipments, countCoveredUntil(fallback), now).get(1), 12);
+  assert.equal(receivedBetween(shipments, countCoveredUntil(completed), new Date('2026-12-31')).get(1), 9);
+  assert.equal(receivedBetween(shipments, countCoveredUntil({ status: 'draft' }, now), now).size, 0);
 });

@@ -56,6 +56,32 @@ export function generateIcal(assignments, personName, congCode = 'jwscheduler') 
     const parsed = parseAssignmentDate(a);
     if (!parsed) continue;
 
+    if (a.allDay) {
+      const start = a.isoDate.replace(/-/g, '');
+      const endDate = parseIsoDate(a.isoDate);
+      endDate.setDate(endDate.getDate() + 1);
+      const end = `${endDate.getFullYear()}${String(endDate.getMonth() + 1).padStart(2, '0')}${String(endDate.getDate()).padStart(2, '0')}`;
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:${a.uid}`,
+        `DTSTART;VALUE=DATE:${start}`,
+        `DTEND;VALUE=DATE:${end}`,
+        `SUMMARY:${escapeIcal(a.label)}`,
+        `DESCRIPTION:${escapeIcal(a.description)}`,
+      );
+      if (a.alarm) {
+        lines.push(
+          'BEGIN:VALARM',
+          `TRIGGER:${a.alarm.trigger}`,
+          'ACTION:DISPLAY',
+          `DESCRIPTION:${escapeIcal(a.label)}`,
+          'END:VALARM',
+        );
+      }
+      lines.push('END:VEVENT');
+      continue;
+    }
+
     const weekend = isWeekendSlot(a.date, a.weekdayPill);
     const { hour, min } = a.time ? extractTime(a.time) : weekend ? { hour: 10, min: 0 } : extractTime(a.weekdayPill);
     const end = addMinutes(hour, min, a.time ? 60 : DURATION);

@@ -1,5 +1,5 @@
 import db from './db.js';
-import { buildCountLines, countCoverageStart, missingReceivedLines, receivedBetween, receivedByPublication } from './literatureInventory.mjs';
+import { buildCountLines, countCoveredUntil, missingReceivedLines, receivedBetween, receivedByPublication } from './literatureInventory.mjs';
 function invalid(message = '輸入資料無效') {
   throw Object.assign(new Error(message), { status: 400 });
 }
@@ -17,14 +17,14 @@ export function nonnegative(value) {
   return value;
 }
 export async function countData(congregationId, month) {
-  const [publications, previous, shipments] = await Promise.all([
+  const [publications, previous, shipments, current] = await Promise.all([
     db.publication.findMany({ where: { congregationId } }),
     db.inventoryCount.findFirst({ where: { congregationId, month: { lt: month } }, orderBy: { month: 'desc' }, include: { lines: true } }),
     db.shipment.findMany({ where: { congregationId }, include: { lines: true } }),
+    db.inventoryCount.findUnique({ where: { congregationId_month: { congregationId, month } } }),
   ]);
-  const from = countCoverageStart(previous ?? { source: 'jwhub-report', month });
-  const toExclusive = countCoverageStart({ source: 'manual', month });
-  const received = receivedBetween(shipments, from, toExclusive);
+  const from = previous ? countCoveredUntil(previous) : null;
+  const received = receivedBetween(shipments, from, current ? countCoveredUntil(current) : new Date());
   return { publications, previousLines: previous?.lines || [], received,
     lines: buildCountLines({ publications, previousLines: previous?.lines || [], received }) };
 }
@@ -48,9 +48,8 @@ export async function refreshLines(count) {
     }),
     db.publication.findMany({ where: { congregationId: count.congregationId } }),
   ]);
-  const from = countCoverageStart(previous ?? { source: 'jwhub-report', month: count.month });
-  const toExclusive = countCoverageStart({ source: 'manual', month: count.month });
-  const received = receivedBetween(shipments, from, toExclusive);
+  const from = previous ? countCoveredUntil(previous) : null;
+  const received = receivedBetween(shipments, from, countCoveredUntil(count));
   const missing = missingReceivedLines({ lines, previousLines: previous?.lines || [], received, publications });
   if (missing.length) {
     await db.inventoryLine.createMany({

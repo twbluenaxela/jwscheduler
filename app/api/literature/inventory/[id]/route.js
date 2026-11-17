@@ -17,7 +17,12 @@ export async function PATCH(request, context) {
     const data = {};
     if ('status' in body) {
       if (!['draft', 'done'].includes(body.status)) invalid('狀態無效');
-      if (count.status === 'draft' && body.status === 'done') await refreshLines(count);
+      if (count.status === 'draft' && body.status === 'done') {
+        await refreshLines(count);
+        data.completedAt = new Date();
+      } else if (count.status === 'done' && body.status === 'draft') {
+        data.completedAt = null;
+      }
       data.status = body.status;
     }
     if ('note' in body) data.note = note(body.note);

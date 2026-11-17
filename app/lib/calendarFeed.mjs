@@ -4,6 +4,7 @@ import { isMidweekSuspended } from './weekType.mjs';
 import { collectAssignments } from './assignments.mjs';
 import { generateIcal } from './icalExport.js';
 import { resolveRowDate, toIsoDate } from './cnDate.mjs';
+import { previousMonth } from './literatureInventory.mjs';
 
 export async function ensureCalendarFeed(db, person) {
   return db.calendarFeed.upsert({
@@ -32,7 +33,7 @@ export function calendarLinks(origin, token, name) {
   };
 }
 
-export async function calendarResponse(db, token) {
+export async function calendarResponse(db, token, { origin = "" } = {}) {
   const feed = await db.calendarFeed.findUnique({ where: { token: token.replace(/\.ics$/, '') }, include: { person: true, congregation: true } });
   if (!feed || feed.person.congregationId !== feed.congregationId) return new Response('找不到行事曆', { status: 404 });
   const cutoff = new Date();
@@ -53,6 +54,28 @@ export async function calendarResponse(db, token) {
     for (const item of items) events.push({
       ...item, label: item.role, isoDate: toIsoDate(resolveRowDate(row)), weekdayPill: isWeek ? row.weekdayPill : undefined,
     });
+  }
+  if (feed.congregation.inventoryReminderPersonId != null && feed.person.id === feed.congregation.inventoryReminderPersonId) {
+    const startMonth = toIsoDate(cutoff).slice(0, 7);
+    const counts = await db.inventoryCount.findMany({
+      where: { congregationId: feed.congregationId, month: { gte: previousMonth(startMonth) } },
+    });
+    const done = new Set(counts.filter((count) => count.status === 'done').map((count) => count.month));
+    const [year, month] = startMonth.split('-').map(Number);
+    for (let offset = 0; offset <= 12; offset++) {
+      const date = new Date(Date.UTC(year, month - 1 + offset, 1));
+      const key = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+      const countMonth = previousMonth(key);
+      const label = done.has(countMonth) ? '✓ 書刊清點完成' : '書刊清點截止';
+      events.push({
+        isoDate: `${key}-10`,
+        label: `${label}（${Number(countMonth.slice(5))}月）`,
+        description: `到書刊 → 清點完成上月清點\n${origin}/literature`,
+        uid: `inventory-${key}@${feed.congregation.code}`,
+        allDay: true,
+        alarm: { trigger: '-P3D' },
+      });
+    }
   }
   await db.calendarFeed.update({ where: { id: feed.id }, data: { lastFetchedAt: new Date() } });
   return new Response(generateIcal(events, feed.person.name, feed.congregation.code), { headers: {

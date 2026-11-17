@@ -22,7 +22,10 @@ export default function LoginPage() {
 
   // Once Firebase reports a signed-in user, leave the login page for the app.
   useEffect(() => {
-    if (firebaseUser) router.replace('/');
+    if (firebaseUser) {
+      const next = new URLSearchParams(window.location.search).get('next');
+      router.replace(next === 'literature' ? '/literature' : '/');
+    }
   }, [firebaseUser, router]);
 
   const handle = async (e) => {
