@@ -76,17 +76,19 @@ export function localizedName(p, all = []) {
 }
 
 const ISSUE_CODE = /^(?:wlp|w)(\d{2}\.\d{2})$/;
-const cardKey = (p) => {
-  const issue = ISSUE_CODE.exec(p.code)?.[1];
-  if (issue) return `w${issue}`;
-  if (p.code === 'w' || p.code === 'wlp') return 'w';
-  return `${p.code}|${p.format}`;
-};
-
 // One card per 書刊／期數: the card itself is the default 中文一般版; 英/日/大字
 // are explicit alternative buttons. 守望台研讀版 merges its 大字 (wlp) issues into
 // the matching w issue; other publications only show alternatives that exist.
 export function editionGroups(list, all = list) {
+  const codes = new Set(all.map((p) => p.code));
+  const cardKey = (p) => {
+    const issue = ISSUE_CODE.exec(p.code)?.[1];
+    if (issue) return `w${issue}`;
+    if (p.code === 'w' || p.code === 'wlp') return 'w';
+    // sjjls / nwtls are the large-print editions of sjj / nwt.
+    if (/ls$/.test(p.code) && codes.has(p.code.slice(0, -2))) return p.code.slice(0, -2);
+    return p.code; // same title in 一般/大字 stays on one card
+  };
   const groups = new Map();
   for (const p of list) {
     const key = cardKey(p);
@@ -97,23 +99,24 @@ export function editionGroups(list, all = list) {
     const base = variants.get('CHT|standard') || [...variants.values()][0];
     if (!base) return [];
     const study = key === 'w' || /^w\d{2}\.\d{2}$/.test(key);
+    const workbook = key === 'mwb' || /^mwb\d{2}\.\d{2}$/.test(key);
     const options = [];
-    if (study || variants.size > 1) {
+    if (study || workbook || variants.size > 1) {
       for (const [language, label] of [['ENG', '英'], ['JPN', '日']]) {
         let p = variants.get(`${language}|standard`);
-        if (!p && base.series) {
-          const generic = all.find((x) => x.code === base.series && x.language === language && x.format === 'standard');
+        if (!p) {
+          const seriesKey = base.series || base.code;
+          const generic = all.find((x) => x.code === seriesKey && x.language === language && x.format === 'standard');
           if (generic)
-            p = { ...generic, name: localizedName({ ...generic, code: base.code }, all), code: base.code, coverUrl: base.coverUrl, series: base.series, standing: true, synthetic: true };
+            p = { ...generic, name: localizedName({ ...generic, code: base.code }, all), code: base.code, coverUrl: base.coverUrl, series: seriesKey, standing: true, synthetic: true };
         }
         if (p && p !== base) options.push({ label, language, publication: p });
       }
     }
-    if (study) {
-      const largeCode = key === 'w' ? 'wlp' : `wlp${key.slice(1)}`;
-      const large = variants.get('CHT|large') || all.find((x) => x.code === largeCode && x.language === 'CHT' && x.format === 'large');
-      if (large && large !== base) options.push({ label: '大字', language: 'CHT', publication: large });
-    }
+    const largeCode = key === 'w' ? 'wlp' : `wlp${key.slice(1)}`;
+    const large = variants.get('CHT|large') ||
+      (study ? all.find((x) => x.code === largeCode && x.language === 'CHT' && x.format === 'large') : null);
+    if (large && large !== base) options.push({ label: '大字', language: 'CHT', publication: large });
     return [{ key, base, options }];
   });
 }

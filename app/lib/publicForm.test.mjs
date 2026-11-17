@@ -41,8 +41,14 @@ test('edition cards: 中文 is the card, 英/日/大字 are alternatives', () =>
     pub(2, 'w', { language: 'CHT' }),
     pub(3, 'w', { language: 'ENG', name: 'The Watchtower (Study Edition)' }),
     pub(4, 'w', { language: 'JPN', name: 'ものみの塔（研究用）' }),
-    pub(5, 'wcg', { language: 'CHT', category: 'book' }), pub(6, 'wcg', { language: 'ENG', category: 'book' }),
+    pub(5, 'wcg', { language: 'CHT', category: 'book' }),
+    pub(10, 'wcg', { language: 'CHT', category: 'book', format: 'large' }),
+    pub(6, 'wcg', { language: 'ENG', category: 'book' }), pub(11, 'wcg', { language: 'JPN', category: 'book' }),
     pub(7, 'nwt', { language: 'CHT', category: 'bible' }),
+    pub(12, 'mwb26.11', { language: 'CHT' }), pub(13, 'mwb', { language: 'CHT' }),
+    pub(14, 'mwb', { language: 'ENG' }), pub(15, 'mwb', { language: 'JPN' }),
+    pub(16, 'sjj', { language: 'CHT', category: 'book' }),
+    pub(17, 'sjjls', { language: 'CHT', category: 'book', format: 'large' }),
   ]);
   const groups = editionGroups(all, all);
   const study = groups.find((g) => g.key === 'w26.11');
@@ -55,9 +61,15 @@ test('edition cards: 中文 is the card, 英/日/大字 are alternatives', () =>
   assert.equal(study.options[1].publication.name, 'ものみの塔（研究用） 2026年11月');
   assert.equal(study.options[0].publication.synthetic, true);
   assert.equal(study.options[2].publication.code, 'wlp26.11');
-  assert.deepEqual(groups.find((g) => g.key === 'wcg|standard').options.map((o) => o.label), ['英']);
-  assert.deepEqual(groups.find((g) => g.key === 'nwt|standard').options, []);
+  assert.deepEqual(groups.find((g) => g.key === 'wcg').options.map((o) => o.label), ['英', '日', '大字']);
+  assert.equal(groups.filter((g) => g.key === 'wcg').length, 1);
+  assert.deepEqual(groups.find((g) => g.key === 'nwt').options, []);
+  assert.deepEqual(groups.find((g) => g.key === 'mwb26.11').options.map((o) => o.label), ['英', '日']);
   assert.equal(groups.filter((g) => g.key === 'wlp26.11').length, 0);
+  const searched = editionGroups(all.filter((p) => p.language === 'CHT'), all);
+  assert.deepEqual(searched.find((g) => g.key === 'wcg').options.map((o) => o.label), ['英', '日', '大字']);
+  assert.deepEqual(groups.find((g) => g.key === 'sjj').options.map((o) => o.label), ['大字']);
+  assert.equal(groups.filter((g) => g.key === 'sjjls').length, 0);
 });
 test('localized names keep the language title and the issue date', () => {
   const all = [
