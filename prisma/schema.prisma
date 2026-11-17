@@ -216,6 +216,7 @@ model Publication {
   code String
   name String
   category String
+  hubGroup String?
   language String @default("CHT")
   format String @default("standard")
   itemNumber String?

@@ -2905,3 +2905,113 @@ button.service-month-card { cursor: pointer; }
     transition: none;
   }
 }
+
+/* Inventory count sections */
+.lit-count-chips {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 10px 0;
+  scrollbar-width: thin;
+}
+.lit-count-chips button {
+  flex: none;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lit-count-section {
+  scroll-margin-top: 104px;
+}
+.lit-count-section-heading {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 42px;
+  margin: 12px 0 0;
+  background: var(--bg);
+  font-size: 16px;
+}
+.lit-count-section-heading span + span {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+.lit-count-self {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 400;
+  vertical-align: middle;
+}
+.lit-count-fold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.lit-count-fold button {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lit-count-fold-toggle {
+  flex: 1;
+  text-align: left;
+}
+.lit-count-fold-confirm {
+  color: var(--accent) !important;
+}
+.lit-count-fold-confirm:disabled {
+  color: var(--ink-3) !important;
+  cursor: default;
+}
+.lit-count-fold-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 180ms ease-out;
+}
+.lit-count-fold-content[data-expanded="true"] {
+  grid-template-rows: 1fr;
+}
+.lit-count-fold-content > div {
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 720px) {
+  .lit-count-section-heading {
+    top: 58px;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .lit-count-chips button:hover,
+  .lit-count-fold button:not(:disabled):hover {
+    background: var(--surface-2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lit-count-fold-content {
+    transition: none;
+  }
+}

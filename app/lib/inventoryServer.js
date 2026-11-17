@@ -104,6 +104,7 @@ export async function importHubReport(congregationId, report, { db: client = db 
       congregationId,
       code: row.code,
       name: row.name,
+      hubGroup: row.section,
       category: /^T-/i.test(row.code) ? 'toolbox' : /^(wp|g)\d/i.test(row.code) ? 'magazine' : 'other',
       language: report.language,
       format: 'standard',
@@ -117,6 +118,12 @@ export async function importHubReport(congregationId, report, { db: client = db 
       }));
     }
     const rows = matchHubReport(report, publications);
+    for (const row of rows) {
+      await tx.publication.update({
+        where: { id: row.publicationId },
+        data: { hubGroup: row.section },
+      });
+    }
     const previousLines = previous?.lines || [];
     const received = receivedByPublication(shipments, report.month);
     const defaultLines = buildCountLines({ publications, previousLines, received });
