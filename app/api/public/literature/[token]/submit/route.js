@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import db from '../../../../../lib/db';
 import { publicCongregation, publicJson, disabled } from '../../../../../lib/publicLiteratureApi';
-import { validateSubmission, flagSubmission } from '../../../../../lib/publicForm.mjs';
+import { validateSubmission, flagSubmission, localizedName } from '../../../../../lib/publicForm.mjs';
 import { standingSeriesOf } from '../../../../../lib/literatureShipments.mjs';
 
 const attempts = new Map();
@@ -40,7 +40,7 @@ export async function POST(request, context) {
         const previousSubs = [];
         for (const item of normalized.items) {
           const pub = publications.find((p) => p.id === item.publicationId);
-          const entry = { ...item, code: pub.code, name: pub.name };
+          const entry = { ...item, code: pub.code, name: localizedName(pub, publications) };
           if (item.kind === 'once') {
             const row = await tx.literatureRequest.create({
               data: {
