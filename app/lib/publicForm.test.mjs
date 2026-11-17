@@ -34,21 +34,26 @@ test('bare periodical cards default to 定期 for members, 單次 for guests', (
   );
   assert.equal(validate({ personId: 1, items: [{ publicationId: 5, quantity: 1 }] }).items[0].kind, 'once');
 });
-test('edition groups give periodicals 中/英/日 via generic cards, other titles only real rows', () => {
+test('edition cards: 中文 is the card, 英/日/大字 are alternatives', () => {
   const all = publicCatalog([
     pub(1, 'w26.11', { language: 'CHT', coverToken: 'a' }),
+    pub(9, 'wlp26.11', { language: 'CHT', format: 'large' }),
     pub(2, 'w', { language: 'CHT' }), pub(3, 'w', { language: 'ENG' }), pub(4, 'w', { language: 'JPN' }),
     pub(5, 'wcg', { language: 'CHT', category: 'book' }), pub(6, 'wcg', { language: 'ENG', category: 'book' }),
     pub(7, 'nwt', { language: 'CHT', category: 'bible' }),
   ]);
   const groups = editionGroups(all, all);
-  const study = groups.find((g) => g.code === 'w26.11');
-  assert.deepEqual(study.variants.map((v) => v.label), ['中', '英', '日']);
-  assert.equal(study.variants[1].publication.language, 'ENG');
-  assert.equal(study.variants[1].publication.code, 'w26.11');
-  assert.equal(study.variants[1].publication.synthetic, true);
-  assert.deepEqual(groups.find((g) => g.code === 'wcg').variants.map((v) => v.label), ['中', '英']);
-  assert.deepEqual(groups.find((g) => g.code === 'nwt').variants.map((v) => v.label), ['中']);
+  const study = groups.find((g) => g.key === 'w26.11');
+  assert.equal(study.base.code, 'w26.11');
+  assert.equal(study.base.language, 'CHT');
+  assert.deepEqual(study.options.map((o) => o.label), ['英', '日', '大字']);
+  assert.equal(study.options[0].publication.language, 'ENG');
+  assert.equal(study.options[0].publication.code, 'w26.11');
+  assert.equal(study.options[0].publication.synthetic, true);
+  assert.equal(study.options[2].publication.code, 'wlp26.11');
+  assert.deepEqual(groups.find((g) => g.key === 'wcg|standard').options.map((o) => o.label), ['英']);
+  assert.deepEqual(groups.find((g) => g.key === 'nwt|standard').options, []);
+  assert.equal(groups.filter((g) => g.key === 'wlp26.11').length, 0);
 });
 test('groups include active people and ungrouped people in order', () => {
   const groups = groupPeople([...people, { id: 3, name: '丙', serviceGroup: null }]);
@@ -89,6 +94,7 @@ test('public sections classify periodicals, tools and ordinary publications', as
     ['wp26.1', 'magazine', { section: 'magazines', sub: 'wp' }],
     ['g26.1', 'magazine', { section: 'magazines', sub: 'g' }],
     ['mwb26.11', 'study', { section: 'workbook' }],
+    ['mwb', 'study', { section: 'workbook' }],
     ['es27', 'book', { section: 'book' }],
   ]) {
     assert.deepEqual(publicSection({ code, category }), expected);

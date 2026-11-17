@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { matchPublications, withCoverFallback } from '../../lib/literature.mjs';
+import { matchPublications, withCoverFallback, LANGUAGE_LABELS } from '../../lib/literature.mjs';
 import { PUBLIC_SECTIONS, MAGAZINE_TABS, defaultKind, editionGroups } from '../../lib/publicForm.mjs';
 import PubThumb, { Sheet } from './PubThumb';
 import Icon from './Icon';
@@ -183,60 +183,64 @@ function CatalogStep({ publications, cart, query, setQuery, view, setView, secti
         <div className="public-section-enter" key={`${section}-${currentSub}-${view}-${searching}`}>
           <div className={`public-publications public-publications--${view}`}>
             {filtered.map((group) => {
-              const total = group.variants.reduce(
-                (sum, v) => sum + cart.filter((item) => item.publicationId === v.publication.id)
-                  .reduce((n, item) => n + item.quantity, 0),
-                0,
-              );
+              const editions = [group.base, ...group.options.map((option) => option.publication)];
+              const inCart = (p) => cart.filter((item) => item.publicationId === p.id)
+                .reduce((n, item) => n + item.quantity, 0);
+              const total = editions.reduce((sum, p) => sum + inCart(p), 0);
               const badge = total > 0 && (
                 <span className="public-publication__badge" aria-hidden="true">
                   <Icon name="check" />
                   ×{total}
                 </span>
               );
-              const primary = group.variants[0]?.publication || group;
               return (
                 <div
                   className="public-publication"
-                  key={`${group.code}|${group.format}`}
+                  key={group.key}
                   role="button"
                   tabIndex={0}
-                  aria-label={total > 0 ? `${group.name}，已加入 ${total} 本` : group.name}
-                  onClick={() => openItem(primary)}
+                  aria-label={total > 0 ? `${group.base.name}，已加入 ${total} 本` : group.base.name}
+                  onClick={() => openItem(group.base)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
-                      openItem(primary);
+                      openItem(group.base);
                     }
                   }}
                 >
                   <span className="public-publication__cover">
-                    <PubThumb publication={group.cover} size={view === 'grid' ? 'large' : 'mini'} fallback="title" />
+                    <PubThumb publication={group.base} size={view === 'grid' ? 'large' : 'mini'} fallback="title" />
                     {view === 'grid' && badge}
                   </span>
                   <span className="public-publication__text">
-                    <strong>{group.name}</strong>
-                    {view === 'list' && <small>{group.code}</small>}
+                    <strong>{group.base.name}</strong>
+                    {view === 'list' && <small>{group.base.code}</small>}
                   </span>
                   {view === 'list' && badge}
-                  {group.variants.length > 1 && (
+                  {group.options.length > 0 && (
                     <span
                       className="public-editions"
                       role="group"
-                      aria-label="語言"
+                      aria-label="其他版本"
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
                     >
-                      {group.variants.map((v) => (
-                        <button
-                          key={v.language}
-                          type="button"
-                          aria-pressed={cart.some((item) => item.publicationId === v.publication.id)}
-                          onClick={() => openItem(v.publication)}
-                        >
-                          {v.label}
-                        </button>
-                      ))}
+                      <span className="public-editions__label">其他版本</span>
+                      {group.options.map((option) => {
+                        const count = inCart(option.publication);
+                        return (
+                          <button
+                            key={option.label}
+                            type="button"
+                            className={count ? 'is-added' : ''}
+                            aria-label={`${option.label}版${count ? `，已加入 ${count} 本` : ''}`}
+                            onClick={() => openItem(option.publication)}
+                          >
+                            {option.label}
+                            {count > 0 && <span className="public-editions__count">{count}</span>}
+                          </button>
+                        );
+                      })}
                     </span>
                   )}
                 </div>
@@ -274,20 +278,23 @@ function ItemSheet({
         <div ref={coverRef} className="public-item-cover">
           <PubThumb publication={selected} size="large" />
         </div>
-        <strong>{selected.name}</strong>
+        <span className="public-item-heading">
+          <strong>{selected.name}</strong>
+          <span className="public-edition-chip">{LANGUAGE_LABELS[selected.language] || selected.language}{selected.format === 'large' ? ' · 大字' : ''}</span>
+        </span>
         <small>{selected.code}</small>
         <Stepper value={quantity} onChange={setQuantity} />
         {selected.standing && !person.guest && (
           <>
             <div className="lit-segment">
-              <button aria-pressed={kind === 'once'} onClick={() => changeKind('once')}>
-                單次
-              </button>
               <button aria-pressed={kind === 'standing'} onClick={() => changeKind('standing')}>
                 定期
               </button>
+              <button aria-pressed={kind === 'once'} onClick={() => changeKind('once')}>
+                單次
+              </button>
             </div>
-            <small>定期：每期都幫你留</small>
+            <small>{kind === 'standing' ? '每期都幫你留，不用再申請' : '只要這一次'}</small>
             {subscription && <small>你目前定期 ×{subscription.quantity}</small>}
           </>
         )}

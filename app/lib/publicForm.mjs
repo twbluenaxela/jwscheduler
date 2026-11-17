@@ -19,7 +19,9 @@ export const MAGAZINE_TABS = [
 ];
 
 export function publicSection(p) {
-  const series = seriesOf(p.code || '');
+  const code = p.code || '';
+  if (/^mwb(?:\d{2}\.\d{2})?$/.test(code)) return { section: 'workbook' };
+  const series = seriesOf(code);
   if (series === 'wp' || series === 'g') return { section: 'magazines', sub: series };
   if (series === 'w' || series === 'wlp') return { section: 'magazines', sub: 'study' };
   if (series === 'mwb') return { section: 'workbook' };
@@ -62,33 +64,46 @@ export function publicCatalog(publications) {
   });
 }
 
-export const EDITION_LABELS = { CHT: '中', ENG: '英', JPN: '日' };
+const ISSUE_CODE = /^(?:wlp|w)(\d{2}\.\d{2})$/;
+const cardKey = (p) => {
+  const issue = ISSUE_CODE.exec(p.code)?.[1];
+  if (issue) return `w${issue}`;
+  if (p.code === 'w' || p.code === 'wlp') return 'w';
+  return `${p.code}|${p.format}`;
+};
 
-// One card per 書刊／期數／格式 with a language button per edition. Periodicals
-// (w / wlp / mwb) always get 中/英/日 via the generic series cards; other
-// publications only get buttons when more than one language row really exists.
+// One card per 書刊／期數: the card itself is the default 中文一般版; 英/日/大字
+// are explicit alternative buttons. 守望台研讀版 merges its 大字 (wlp) issues into
+// the matching w issue; other publications only show alternatives that exist.
 export function editionGroups(list, all = list) {
   const groups = new Map();
   for (const p of list) {
-    const key = `${p.code}|${p.format}`;
-    if (!groups.has(key))
-      groups.set(key, {
-        code: p.code, format: p.format, name: p.name, coverUrl: p.coverUrl,
-        series: p.series, standing: p.standing, section: p.section, sub: p.sub, variants: new Map(),
-      });
-    groups.get(key).variants.set(p.language, p);
+    const key = cardKey(p);
+    if (!groups.has(key)) groups.set(key, new Map());
+    groups.get(key).set(`${p.language}|${p.format}`, p);
   }
-  return [...groups.values()].map((group) => {
-    const variants = Object.entries(EDITION_LABELS).flatMap(([language, label]) => {
-      let p = group.variants.get(language);
-      if (!p && group.series) {
-        const generic = all.find((x) => x.code === group.series && x.language === language && x.format === group.format);
-        if (generic)
-          p = { ...generic, name: group.name, code: group.code, coverUrl: group.coverUrl, series: group.series, standing: true, synthetic: true };
+  return [...groups.entries()].flatMap(([key, variants]) => {
+    const base = variants.get('CHT|standard') || [...variants.values()][0];
+    if (!base) return [];
+    const study = key === 'w' || /^w\d{2}\.\d{2}$/.test(key);
+    const options = [];
+    if (study || variants.size > 1) {
+      for (const [language, label] of [['ENG', '英'], ['JPN', '日']]) {
+        let p = variants.get(`${language}|standard`);
+        if (!p && base.series) {
+          const generic = all.find((x) => x.code === base.series && x.language === language && x.format === 'standard');
+          if (generic)
+            p = { ...generic, name: base.name, code: base.code, coverUrl: base.coverUrl, series: base.series, standing: true, synthetic: true };
+        }
+        if (p && p !== base) options.push({ label, language, publication: p });
       }
-      return p ? [{ language, label, publication: p }] : [];
-    });
-    return { ...group, variants, cover: variants[0]?.publication || group };
+    }
+    if (study) {
+      const largeCode = key === 'w' ? 'wlp' : `wlp${key.slice(1)}`;
+      const large = variants.get('CHT|large') || all.find((x) => x.code === largeCode && x.language === 'CHT' && x.format === 'large');
+      if (large && large !== base) options.push({ label: '大字', language: 'CHT', publication: large });
+    }
+    return [{ key, base, options }];
   });
 }
 
