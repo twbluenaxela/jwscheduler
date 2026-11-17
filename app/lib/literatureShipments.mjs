@@ -111,6 +111,7 @@ export function pendingHandouts({ shipments, allocations, deliveries, requests, 
   const grouped = new Map();
   const guests = [];
   const covered = new Set();
+  const addedRequests = new Set();
   const add = (person, item) => {
     const key = String(person.id);
     if (!grouped.has(key)) grouped.set(key, { personId: person.id, name: person.name, serviceGroup: person.serviceGroup, groupRole: person.groupRole, items: [] });
@@ -124,8 +125,12 @@ export function pendingHandouts({ shipments, allocations, deliveries, requests, 
       if (!entry.publication) continue;
       for (const recipient of entry.recipients) {
         if (recipient.requestId) covered.add(String(recipient.requestId));
+        if (recipient.requestId && addedRequests.has(String(recipient.requestId))) continue;
         const person = people.find(p => sameHandoutId(p.id, recipient.personId));
-        if (person && !delivered(person.id, entry.publication.id, recipient.requestId)) add(person, handoutItem(entry.publication, recipient, shipment.id));
+        if (person && !delivered(person.id, entry.publication.id, recipient.requestId)) {
+          add(person, handoutItem(entry.publication, recipient, shipment.id));
+          if (recipient.requestId) addedRequests.add(String(recipient.requestId));
+        }
       }
     }
   }
