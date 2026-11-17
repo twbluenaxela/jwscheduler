@@ -164,31 +164,34 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
     setPeriod({
       kind: 'w',
       format: 'standard',
-      language: 'CHT',
+      languages: ['CHT', 'ENG', 'JPN'],
       year: next.getFullYear(),
       month: next.getMonth() + 1,
     });
   }
   async function savePeriod(e) {
     e.preventDefault();
+    if (!period.languages.length) return;
     setBusy(true);
     setError('');
     try {
       const entry = periodicalEntry(period.kind, Number(period.year), Number(period.month), {
         format: period.format,
       });
-      const data = await request('/api/literature', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...entry,
-          language: period.language,
-          format: period.kind === 'w' ? period.format : 'standard',
-        }),
-      });
-      updateItem(data.publication);
+      for (const language of period.languages) {
+        const data = await request('/api/literature', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...entry,
+            language,
+            format: period.kind === 'w' ? period.format : 'standard',
+          }),
+        });
+        updateItem(data.publication);
+      }
       setPeriod(null);
-      setToast({ msg: '期數已新增' });
+      setToast({ msg: `期數已新增（${period.languages.length} 個語別）` });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -427,16 +430,24 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
                   </label>
                 )}
                 <label className="field">
-                  <span className="field__label">語言</span>
-                  <select
-                    className="field__input field__select"
-                    value={period.language}
-                    onChange={(e) => setPeriod({ ...period, language: e.target.value })}
-                  >
-                    <option value="CHT">中文</option>
-                    <option value="ENG">英文</option>
-                    <option value="JPN">日文</option>
-                  </select>
+                  <span className="field__label">語言（可複選，一次建立所有語別）</span>
+                  <span className="lit-segment" role="group" aria-label="語言">
+                    {[['CHT', '中'], ['ENG', '英'], ['JPN', '日']].map(([language, label]) => (
+                      <button
+                        key={language}
+                        type="button"
+                        aria-pressed={period.languages.includes(language)}
+                        onClick={() => setPeriod((current) => ({
+                          ...current,
+                          languages: current.languages.includes(language)
+                            ? current.languages.filter((x) => x !== language)
+                            : [...current.languages, language],
+                        }))}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </span>
                 </label>
                 <label className="field">
                   <span className="field__label">年份</span>
@@ -469,7 +480,7 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
                     {error}
                   </div>
                 )}
-                <button className="btn btn--primary" disabled={busy}>
+                <button className="btn btn--primary" disabled={busy || !period.languages.length}>
                   {busy ? '新增中…' : '新增'}
                 </button>
               </form>

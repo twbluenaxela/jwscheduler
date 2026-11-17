@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicCatalog, groupPeople, validateSubmission, flagSubmission, isStanding, defaultKind } from './publicForm.mjs';
+import { publicCatalog, groupPeople, validateSubmission, flagSubmission, isStanding, defaultKind, editionGroups } from './publicForm.mjs';
 
 const pub = (id, code, extra = {}) => ({ id, code, name: code, category: 'study', language: 'CHT', format: 'standard', active: true, ...extra });
 const publications = [pub(1, 'w26.01'), pub(2, 'w26.02'), pub(3, 'w26.03'), pub(4, 'w26.04'), pub(5, 'book'), pub(6, 'form', { category: 'form' }), pub(7, 'off', { requestable: false }), pub(8, 'inactive', { active: false })];
@@ -33,6 +33,22 @@ test('bare periodical cards default to 定期 for members, 單次 for guests', (
     [{ publicationId: 23, quantity: 3, kind: 'standing' }],
   );
   assert.equal(validate({ personId: 1, items: [{ publicationId: 5, quantity: 1 }] }).items[0].kind, 'once');
+});
+test('edition groups give periodicals 中/英/日 via generic cards, other titles only real rows', () => {
+  const all = publicCatalog([
+    pub(1, 'w26.11', { language: 'CHT', coverToken: 'a' }),
+    pub(2, 'w', { language: 'CHT' }), pub(3, 'w', { language: 'ENG' }), pub(4, 'w', { language: 'JPN' }),
+    pub(5, 'wcg', { language: 'CHT', category: 'book' }), pub(6, 'wcg', { language: 'ENG', category: 'book' }),
+    pub(7, 'nwt', { language: 'CHT', category: 'bible' }),
+  ]);
+  const groups = editionGroups(all, all);
+  const study = groups.find((g) => g.code === 'w26.11');
+  assert.deepEqual(study.variants.map((v) => v.label), ['中', '英', '日']);
+  assert.equal(study.variants[1].publication.language, 'ENG');
+  assert.equal(study.variants[1].publication.code, 'w26.11');
+  assert.equal(study.variants[1].publication.synthetic, true);
+  assert.deepEqual(groups.find((g) => g.code === 'wcg').variants.map((v) => v.label), ['中', '英']);
+  assert.deepEqual(groups.find((g) => g.code === 'nwt').variants.map((v) => v.label), ['中']);
 });
 test('groups include active people and ungrouped people in order', () => {
   const groups = groupPeople([...people, { id: 3, name: '丙', serviceGroup: null }]);

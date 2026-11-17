@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { matchPublications, withCoverFallback } from '../../lib/literature.mjs';
-import { PUBLIC_SECTIONS, MAGAZINE_TABS, defaultKind } from '../../lib/publicForm.mjs';
+import { PUBLIC_SECTIONS, MAGAZINE_TABS, defaultKind, editionGroups } from '../../lib/publicForm.mjs';
 import PubThumb, { Sheet } from './PubThumb';
 import Icon from './Icon';
 
@@ -110,14 +110,15 @@ function CatalogStep({ publications, cart, query, setQuery, view, setView, secti
   const candidates = searching ? publications : publications.filter((p) => (
     p.section === section && (section !== 'magazines' || p.sub === currentSub)
   ));
-  const filtered = matchPublications(query, candidates, { limit: publications.length });
+  const flat = matchPublications(query, candidates, { limit: publications.length });
   if (!searching && section === 'magazines') {
     const issueNumber = (item) => {
       const match = /(\d{2})\.(\d{1,2})$/.exec(item.code);
       return match ? Number(match[1]) * 100 + Number(match[2]) : 0;
     };
-    filtered.sort((a, b) => issueNumber(b) - issueNumber(a));
+    flat.sort((a, b) => issueNumber(b) - issueNumber(a));
   }
+  const filtered = editionGroups(flat, publications);
   function changeView(value) {
     setView(value);
     try {
@@ -181,33 +182,64 @@ function CatalogStep({ publications, cart, query, setQuery, view, setView, secti
       ) : (
         <div className="public-section-enter" key={`${section}-${currentSub}-${view}-${searching}`}>
           <div className={`public-publications public-publications--${view}`}>
-            {filtered.map((p) => {
-              const total = cart
-                .filter((item) => item.publicationId === p.id)
-                .reduce((sum, item) => sum + item.quantity, 0);
+            {filtered.map((group) => {
+              const total = group.variants.reduce(
+                (sum, v) => sum + cart.filter((item) => item.publicationId === v.publication.id)
+                  .reduce((n, item) => n + item.quantity, 0),
+                0,
+              );
               const badge = total > 0 && (
                 <span className="public-publication__badge" aria-hidden="true">
                   <Icon name="check" />
                   ×{total}
                 </span>
               );
+              const primary = group.variants[0]?.publication || group;
               return (
-                <button
+                <div
                   className="public-publication"
-                  key={p.id}
-                  aria-label={total > 0 ? `${p.name}，已加入 ${total} 本` : p.name}
-                  onClick={() => openItem(p)}
+                  key={`${group.code}|${group.format}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={total > 0 ? `${group.name}，已加入 ${total} 本` : group.name}
+                  onClick={() => openItem(primary)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openItem(primary);
+                    }
+                  }}
                 >
                   <span className="public-publication__cover">
-                    <PubThumb publication={p} size={view === 'grid' ? 'large' : 'mini'} fallback="title" />
+                    <PubThumb publication={group.cover} size={view === 'grid' ? 'large' : 'mini'} fallback="title" />
                     {view === 'grid' && badge}
                   </span>
                   <span className="public-publication__text">
-                    <strong>{p.name}</strong>
-                    {view === 'list' && <small>{p.code}</small>}
+                    <strong>{group.name}</strong>
+                    {view === 'list' && <small>{group.code}</small>}
                   </span>
                   {view === 'list' && badge}
-                </button>
+                  {group.variants.length > 1 && (
+                    <span
+                      className="public-editions"
+                      role="group"
+                      aria-label="語言"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                    >
+                      {group.variants.map((v) => (
+                        <button
+                          key={v.language}
+                          type="button"
+                          aria-pressed={cart.some((item) => item.publicationId === v.publication.id)}
+                          onClick={() => openItem(v.publication)}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </div>
               );
             })}
           </div>

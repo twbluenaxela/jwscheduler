@@ -62,6 +62,36 @@ export function publicCatalog(publications) {
   });
 }
 
+export const EDITION_LABELS = { CHT: '中', ENG: '英', JPN: '日' };
+
+// One card per 書刊／期數／格式 with a language button per edition. Periodicals
+// (w / wlp / mwb) always get 中/英/日 via the generic series cards; other
+// publications only get buttons when more than one language row really exists.
+export function editionGroups(list, all = list) {
+  const groups = new Map();
+  for (const p of list) {
+    const key = `${p.code}|${p.format}`;
+    if (!groups.has(key))
+      groups.set(key, {
+        code: p.code, format: p.format, name: p.name, coverUrl: p.coverUrl,
+        series: p.series, standing: p.standing, section: p.section, sub: p.sub, variants: new Map(),
+      });
+    groups.get(key).variants.set(p.language, p);
+  }
+  return [...groups.values()].map((group) => {
+    const variants = Object.entries(EDITION_LABELS).flatMap(([language, label]) => {
+      let p = group.variants.get(language);
+      if (!p && group.series) {
+        const generic = all.find((x) => x.code === group.series && x.language === language && x.format === group.format);
+        if (generic)
+          p = { ...generic, name: group.name, code: group.code, coverUrl: group.coverUrl, series: group.series, standing: true, synthetic: true };
+      }
+      return p ? [{ language, label, publication: p }] : [];
+    });
+    return { ...group, variants, cover: variants[0]?.publication || group };
+  });
+}
+
 export function groupPeople(people) {
   return ['A', 'B', 'C', 'D', 'E', '未分組'].map(group => ({
     group,
