@@ -193,14 +193,16 @@ return [
     return output('定期訂單核對', standingOrders({ subscriptions, shipments }));
   }),
   definition('get_order_list', '訂購清單 order list what to order JW Hub', {}, [], async (ctx) => {
-    const [requests, pubs, count, subscriptions, shipments] = await Promise.all([
-      ctx.db.literatureRequest.findMany({ where: { congregationId: ctx.congregationId, status: { in: ['pending', 'received'] } }, include: { person: true } }),
+    const [requests, pubs, counts, subscriptions, shipments, deliveries, people] = await Promise.all([
+      ctx.db.literatureRequest.findMany({ where: { congregationId: ctx.congregationId }, include: { person: true } }),
       publications(ctx),
-      ctx.db.inventoryCount.findFirst({ where: { congregationId: ctx.congregationId }, orderBy: { month: 'desc' }, include: { lines: true } }),
+      ctx.db.inventoryCount.findMany({ where: { congregationId: ctx.congregationId }, include: { lines: true } }),
       ctx.db.literatureSubscription.findMany({ where: { congregationId: ctx.congregationId } }),
       ctx.db.shipment.findMany({ where: { congregationId: ctx.congregationId }, include: { lines: { include: { publication: true } } } }),
+      ctx.db.literatureDelivery.findMany({ where: { congregationId: ctx.congregationId } }),
+      ctx.db.person.findMany({ where: { congregationId: ctx.congregationId } }),
     ]);
-    return output('訂購清單', buildOrderList({ requests, publications: pubs, countLines: count?.lines || [], subscriptions, shipments }));
+    return output('訂購清單', buildOrderList({ requests, publications: pubs, counts, subscriptions, shipments, deliveries, people }));
   }),
 ];
 
