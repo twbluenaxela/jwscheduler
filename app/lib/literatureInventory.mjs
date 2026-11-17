@@ -1,8 +1,10 @@
 import { sortPublications } from './literature.mjs';
+import { seriesOf, standingSeriesOf } from './literatureShipments.mjs';
 
 export function isCountable(p) {
   if (typeof p.countable === 'boolean') return p.countable;
-  return p.active !== false && p.category !== 'study' && !/^(nwtls|gwt.*|ic|dpa)$/i.test(p.code);
+  const series = seriesOf(p.code) ?? standingSeriesOf(p.code);
+  return p.active !== false && p.category !== 'study' && !['w', 'wlp', 'mwb'].includes(series);
 }
 export function monthOf(date) {
   const d = new Date(date);
