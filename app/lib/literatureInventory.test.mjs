@@ -18,8 +18,17 @@ test('both PDF extraction layouts contain the complete report', async () => {
 test('count defaults, receipts and opening balances', () => {
   const p = { id: 1, code: 'other-book', category: 'book', active: true };
   assert.equal(isCountable(p), true);
-  assert.equal(isCountable({ ...p, code: 'gwt1' }), false);
+  for (const code of ['nwtls', 'gwt1', 'ic', 'dpa', 'T-dth', 'wp25.1']) {
+    assert.equal(isCountable({ ...p, code }), true, code);
+  }
+  for (const code of ['w', 'wlp', 'mwb', 'w27.01', 'wlp27.01', 'mwb27.03']) {
+    assert.equal(isCountable({ ...p, code }), false, code);
+  }
+  assert.equal(isCountable({ ...p, category: 'study' }), false);
+  assert.equal(isCountable({ ...p, active: false }), false);
+  assert.equal(isCountable({ ...p, countable: false }), false);
   assert.equal(isCountable({ ...p, category: 'study', countable: true }), true);
+  assert.equal(isCountable({ ...p, code: 'w27.01', active: false, countable: true }), true);
   assert.equal(previousMonth('2026-01'), '2025-12');
   const received = receivedByPublication([{ shippedAt: '2026-10-01', lines: [{ publicationId: 1, quantity: 3 }] }], '2026-10');
   const [line] = buildCountLines({ publications: [p], previousLines: [{ publicationId: 1, onHand: 5 }], received });
@@ -107,6 +116,7 @@ test('late receipts skip non-countable and unknown publications', async () => {
   const received = new Map([[1, 2], [2, 3], [3, 4], [4, 5]]);
   assert.deepEqual(missingReceivedLines({ lines: [], previousLines: [], received, publications }), [
     { publicationId: 1, opening: 0, received: 2, onHand: null },
+    { publicationId: 3, opening: 0, received: 4, onHand: null },
   ]);
 });
 

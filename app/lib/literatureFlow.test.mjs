@@ -187,10 +187,13 @@ test('8. 十一月清點：both slips feed opening, receipts and distribution', 
   assert.deepEqual([book.opening, book.received, expected(book)], [0, 20, 20]);
   assert.equal(lines.find(line => line.publicationId === 4).opening, 9);
   assert.equal(isCountable(pub('w27.01')), false);
-  assert.equal(isCountable(pub('nwtls')), false);
-  assert.equal(lines.some(line => [6, 7].includes(line.publicationId)), false);
+  assert.equal(isCountable(pub('nwtls')), true);
+  assert.equal(lines.some(line => line.publicationId === 6), false);
+  assert.equal(lines.some(line => line.publicationId === 7), true);
   assert.deepEqual(missingReceivedLines({ lines: [], previousLines: counts[0].lines,
-    received: new Map([[6, 12], [7, 3]]), publications }), []);
+    received: new Map([[6, 12], [7, 3]]), publications }), [
+    { publicationId: 7, opening: 0, received: 3, onHand: null },
+  ]);
   book.onHand = 16;
   assert.equal(distributed(book), 4);
   draft.lines = lines;
