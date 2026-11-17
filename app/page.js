@@ -173,14 +173,14 @@ function OnboardingScreen() {
   );
 }
 
-export default function App() {
+export default function App({ initialPage = 'meetings' }) {
   const { firebaseUser, dbUser, dbSyncing, syncError } = useAuth();
   const router = useRouter();
   const role = dbUser?.role;
   const isSysadmin = role === 'SYSADMIN';
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const canLiterature = dbUser?.role === 'SYSADMIN' || dbUser?.canLiterature === true;
-  const [page, setPage] = useState('meetings');
+  const [page, setPage] = useState(initialPage);
   const [midweekWeeks, setMidweekWeeks] = useState([]);
   const [view, setView] = useState('midweek');
   const [week, setWeek] = useState(0);
@@ -201,13 +201,14 @@ export default function App() {
 
   // Viewers are read-only: they can't open the import/export or 人員 pages.
   useEffect(() => {
+    if (!dbUser) return;
     if ((!canEdit && (page === 'import' || page === 'people')) || (page === 'literature' && !canLiterature)) setPage('meetings');
-  }, [canEdit, canLiterature, page]);
+  }, [canEdit, canLiterature, dbUser, page]);
 
   // Auth-driven navigation — must run in an effect, never during render.
   useEffect(() => {
     if (firebaseUser === undefined || dbSyncing) return;
-    if (!firebaseUser) { router.replace('/login'); return; }
+    if (!firebaseUser) { router.replace(initialPage === 'literature' ? '/login?next=literature' : '/login'); return; }
     if (dbUser && !dbUser.congregationId && isSysadmin) router.replace('/admin');
   }, [firebaseUser, dbSyncing, dbUser, isSysadmin, router]);
 

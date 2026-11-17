@@ -1,5 +1,5 @@
 import { CATEGORY_ORDER } from './literature.mjs';
-import { countCoverageStart } from './literatureInventory.mjs';
+import { countCoveredUntil } from './literatureInventory.mjs';
 import { allocateShipment, issueOf, seriesOf } from './literatureShipments.mjs';
 
 const seriesNames = { w: '守望台研讀版', wlp: '守望台研讀版（大字版）', mwb: '聚會手冊' };
@@ -60,7 +60,7 @@ export function buildOrderList({ requests, publications, counts, subscriptions, 
   for (const count of counts) {
     for (const line of count.lines) {
       if (line.onHand == null) continue;
-      const date = countCoverageStart(count);
+      const date = countCoveredUntil(count);
       const key = String(line.publicationId);
       if (!stock.has(key) || date > stock.get(key).date ||
           (date.getTime() === stock.get(key).date.getTime() && count.month > stock.get(key).month)) {
@@ -78,12 +78,12 @@ export function buildOrderList({ requests, publications, counts, subscriptions, 
       const key = String(allocation.line.publicationId);
       const detail = stock.get(key) || { base: 0, date: null, fromShipments: 0 };
       const date = new Date(shippedAt);
-      if (detail.date && date < detail.date) continue;
-      detail.fromShipments += allocation.remainder;
-      stock.set(key, detail);
       for (const recipient of allocation.recipients) {
         if (recipient.requestId != null) allocatedRequests.add(String(recipient.requestId));
       }
+      if (detail.date && date <= detail.date) continue;
+      detail.fromShipments += allocation.remainder;
+      stock.set(key, detail);
     }
   }
   for (const request of requests) {
@@ -97,7 +97,7 @@ export function buildOrderList({ requests, publications, counts, subscriptions, 
     const key = String(delivery.publicationId);
     const detail = stock.get(key);
     const date = new Date(delivery.deliveredAt);
-    if (detail?.date && date < detail.date) continue;
+    if (detail?.date && date <= detail.date) continue;
     handedOut.set(key, (handedOut.get(key) || 0) + delivery.quantity);
   }
   const toOrder = [];

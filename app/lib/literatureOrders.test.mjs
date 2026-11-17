@@ -13,7 +13,7 @@ const make = (overrides = {}) => buildOrderList({ requests: [], publications, co
 test('subtracts stock and quantities promised to received requests', () => {
   const result = make({
     requests: [request(1, 1, 5), request(2, 1, 1, 'received')],
-    counts: [{ source: 'manual', month: '2026-10', lines: [{ publicationId: 1, onHand: 3, updatedAt: '2026-10-01T00:00:00Z' }] }],
+    counts: [{ source: 'manual', status: 'done', month: '2026-10', lines: [{ publicationId: 1, onHand: 3, updatedAt: '2026-10-01T00:00:00Z' }] }],
   });
   assert.equal(result.toOrder[0].stock, 2);
   assert.equal(result.toOrder[0].order, 3);
@@ -23,7 +23,7 @@ test('subtracts stock and quantities promised to received requests', () => {
 test('fully covered requests come from stock and language codes use Hub suffixes', () => {
   const result = make({
     requests: [request(1, 1, 2), request(2, 2, 1), request(3, 3, 1)],
-    counts: [{ source: 'manual', month: '2026-10', lines: [{ publicationId: 1, onHand: 2, updatedAt: '2026-10-01T00:00:00Z' }] }],
+    counts: [{ source: 'manual', status: 'done', month: '2026-10', lines: [{ publicationId: 1, onHand: 2, updatedAt: '2026-10-01T00:00:00Z' }] }],
   });
   assert.equal(result.fromStock[0].hubCode, 'gwt2-CH');
   assert.deepEqual(result.toOrder.map((row) => row.hubCode).sort(), ['es-J', 'rk-E']);
@@ -72,7 +72,7 @@ test('standing orders sum the newest publication across shipments', () => {
   assert.equal(standingOrders({ subscriptions, shipments })[0].last, 5);
 });
 
-const reportCount = { source: 'jwhub-report', month: '2026-10', lines: [{ publicationId: 1, onHand: 0 }] };
+const reportCount = { source: 'jwhub-report', status: 'done', month: '2026-10', lines: [{ publicationId: 1, onHand: 0 }] };
 const shipment = (quantity, date = '2026-10-15T00:00:00Z') => ({
   id: 10, shippedAt: date, lines: [{ shipmentId: 10, publicationId: 1, quantity, publication: publications[0] }],
 });
@@ -83,11 +83,11 @@ test('opening report includes subsequent shipment remainder', () => {
   assert.equal(result.fromStock[0].stockDetail.fromShipments, 1200);
 });
 
-test('manual count excludes shipments in its month and includes later shipments', () => {
+test('done count excludes earlier shipments and includes later shipments', () => {
   const result = make({
     requests: [request(1, 1, 5)],
-    counts: [{ source: 'manual', month: '2026-11', lines: [{ publicationId: 1, onHand: 2, updatedAt: '2026-12-20T00:00:00Z' }] }],
-    shipments: [shipment(100, '2026-11-05T00:00:00Z'), shipment(2, '2026-12-02T00:00:00Z')],
+    counts: [{ source: 'manual', status: 'done', month: '2026-11', lines: [{ publicationId: 1, onHand: 2, updatedAt: '2026-12-20T00:00:00Z' }] }],
+    shipments: [shipment(100, '2026-11-05T00:00:00Z'), shipment(2, '2026-12-12T00:00:00Z')],
   });
   assert.equal(result.toOrder[0].stock, 4);
 });
@@ -106,8 +106,8 @@ test('shipment adds only the remainder after subscriber allocation', () => {
 test('stock deliveries and unallocated received requests reduce available stock', () => {
   const result = make({
     requests: [request(1, 1, 8), request(2, 1, 2, 'received')],
-    counts: [{ source: 'manual', month: '2026-10', lines: [{ publicationId: 1, onHand: 10, updatedAt: '2026-10-01T00:00:00Z' }] }],
-    deliveries: [{ publicationId: 1, shipmentId: null, quantity: 3, deliveredAt: '2026-11-02T00:00:00Z' }],
+    counts: [{ source: 'manual', status: 'done', month: '2026-10', lines: [{ publicationId: 1, onHand: 10, updatedAt: '2026-10-01T00:00:00Z' }] }],
+    deliveries: [{ publicationId: 1, shipmentId: null, quantity: 3, deliveredAt: '2026-11-12T00:00:00Z' }],
   });
   assert.equal(result.toOrder[0].stock, 5);
 });
@@ -117,4 +117,23 @@ test('received requests allocated to a counted shipment are not subtracted twice
   const result = make({ requests: [request(1, 1, 8), received], counts: [reportCount],
     shipments: [shipment(10)], people: [{ id: 2, name: '乙' }] });
   assert.equal(result.toOrder[0].stock, 7);
+});
+
+test('stock follows the count coverage instant for completed and draft counts', () => {
+  const count = (status, completedAt = null) => ({
+    status,
+    completedAt,
+    month: '2026-12',
+    lines: [{ publicationId: 1, onHand: 2 }],
+  });
+  const stock = (entry, shipments) => {
+    const result = make({ requests: [request(1, 1, 100)], counts: [entry], shipments });
+    return result.toOrder[0].stock;
+  };
+  assert.equal(stock(count('done', '2026-12-08T00:00:00Z'), [shipment(3, '2026-12-20T00:00:00Z')]), 5);
+  assert.equal(stock({ ...count('done'), source: 'jwhub-report', month: '2026-10' }, [
+    shipment(100, '2026-10-05T00:00:00Z'),
+    shipment(3, '2026-10-15T00:00:00Z'),
+  ]), 5);
+  assert.equal(stock(count('draft'), [shipment(3, '2026-10-15T00:00:00Z')]), 2);
 });

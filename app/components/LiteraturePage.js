@@ -77,7 +77,7 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
       {view !== 'catalog' && loadError && <div className="imp-error">{loadError} <button className="btn" onClick={load}>重試</button></div>}
       {!loading && !loadError && view === 'requests' && <RequestsView people={people} items={displayItems} request={request} />}
       {(!loading || items.length > 0) && !loadError && view === 'shipments' && <HandoutView items={displayItems} request={request} reloadCatalog={load} />}
-      {(!loading || items.length > 0) && !loadError && view === 'inventory' && <InventoryView items={displayItems} request={request} reloadCatalog={load} />}
+      {(!loading || items.length > 0) && !loadError && view === 'inventory' && <InventoryView people={people} items={displayItems} request={request} reloadCatalog={load} />}
       {view === 'catalog' && <CatalogView items={items} setItems={setItems} loading={loading} loadError={loadError} load={load} request={request} />}
     </section>
   );

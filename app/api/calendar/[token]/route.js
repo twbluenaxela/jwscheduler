@@ -4,5 +4,5 @@ import { calendarResponse } from '../../../lib/calendarFeed.mjs';
 
 export async function GET(request, context) {
   const { token } = await context.params;
-  return calendarResponse(db, token);
+  return calendarResponse(db, token, { origin: new URL(request.url).origin });
 }

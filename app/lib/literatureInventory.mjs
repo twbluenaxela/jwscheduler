@@ -12,18 +12,20 @@ export function previousMonth(month) {
   const [year, number] = month.split('-').map(Number);
   return number === 1 ? `${year - 1}-12` : `${year}-${String(number - 1).padStart(2, '0')}`;
 }
-// Counts cover stock before this instant, expressed at midnight in Taipei.
-export function countCoverageStart(count) {
+// The count includes everything received through this instant.
+export function countCoveredUntil(count, now = new Date()) {
+  if (count.completedAt) return new Date(count.completedAt);
+  if (count.status !== 'done') return new Date(now);
   const [year, month] = count.month.split('-').map(Number);
-  const nextMonth = count.source === 'jwhub-report' ? 0 : 1;
-  return new Date(Date.UTC(year, month - 1 + nextMonth, 1, -8));
+  const monthOffset = count.source === 'jwhub-report' ? 0 : 1;
+  return new Date(Date.UTC(year, month - 1 + monthOffset, 10, 15, 59, 59, 999));
 }
 
-export function receivedBetween(shipments, from, toExclusive) {
+export function receivedBetween(shipments, from, to) {
   const result = new Map();
   for (const shipment of shipments) {
     const date = new Date(shipment.shippedAt ?? shipment.createdAt);
-    if (date < from || date >= toExclusive) continue;
+    if ((from && date <= from) || date > to) continue;
     for (const line of shipment.lines) {
       result.set(line.publicationId, (result.get(line.publicationId) || 0) + line.quantity);
     }

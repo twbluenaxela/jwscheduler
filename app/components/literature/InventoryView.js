@@ -15,7 +15,7 @@ const currentMonth = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
-export default function InventoryView({ items, request, reloadCatalog }) {
+export default function InventoryView({ items, people, request, reloadCatalog }) {
   const fileInput = useRef(null);
   const [counts, setCounts] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -24,6 +24,36 @@ export default function InventoryView({ items, request, reloadCatalog }) {
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [reminderPersonId, setReminderPersonId] = useState(null);
+  const [personQuery, setPersonQuery] = useState('');
+  const [reminderError, setReminderError] = useState('');
+
+  async function openReminder() {
+    setReminderError('');
+    setPersonQuery('');
+    setReminderOpen(true);
+    try {
+      const result = await request('/api/literature/inventory/reminder');
+      setReminderPersonId(result.personId);
+    } catch (err) {
+      setReminderError(err.message);
+    }
+  }
+
+  async function saveReminder(personId) {
+    setBusy(true);
+    setReminderError('');
+    try {
+      const result = await request('/api/literature/inventory/reminder', json('PATCH', { personId }));
+      setReminderPersonId(result.personId);
+      setReminderOpen(false);
+    } catch (err) {
+      setReminderError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -88,8 +118,11 @@ export default function InventoryView({ items, request, reloadCatalog }) {
     <div className="lit-detail">
       <div className="lit-header">
         <h1>每月清點</h1>
+        <Menu items={[
+          { label: '清點提醒（行事曆）', onSelect: openReminder },
+          ...(counts.length > 0 ? [{ label: '匯入 JW Hub 庫存報告', onSelect: () => fileInput.current?.click() }] : []),
+        ]} />
         {counts.length > 0 && <>
-          <Menu items={[{ label: '匯入 JW Hub 庫存報告', onSelect: () => fileInput.current?.click() }]} />
           <input
             ref={fileInput}
             className="lit-file"
@@ -129,6 +162,30 @@ export default function InventoryView({ items, request, reloadCatalog }) {
         ))}
       </div>
       {!counts.length && <p>尚無清點紀錄。</p>}
+      {reminderOpen && (
+        <Sheet title="清點提醒（行事曆）" close={() => setReminderOpen(false)}>
+          <p>每月 10 日的清點截止提醒會顯示在所選人員的訂閱行事曆，並提前 3 天提醒。</p>
+          <p>目前：{people.find((person) => String(person.id) === String(reminderPersonId))?.name || '不提醒'}</p>
+          <label className="field">
+            <span className="field__label">搜尋人員</span>
+            <input
+              className="field__input"
+              placeholder="搜尋姓名"
+              value={personQuery}
+              onChange={(event) => setPersonQuery(event.target.value)}
+            />
+          </label>
+          {reminderError && <div className="imp-error" role="alert">{reminderError}</div>}
+          <div className="lit-picker">
+            <button type="button" disabled={busy} onClick={() => saveReminder(null)}>不提醒</button>
+            {people.filter((person) => person.name.includes(personQuery.trim())).map((person) => (
+              <button type="button" key={person.id} disabled={busy} onClick={() => saveReminder(person.id)}>
+                {person.name}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
       {preview && (
         <Sheet title="確認庫存報告" close={() => setPreview(null)}>
           <p>{preview.month} · {preview.language} · {preview.rows.length} 項</p>
