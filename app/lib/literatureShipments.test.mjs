@@ -1,12 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { seriesOf, issueOf, hubLanguage, splitHubCode, parsePackingSlip, matchShipmentLines, allocateShipment, pendingRecipientCount } from './literatureShipments.mjs';
+import { seriesOf, standingSeriesOf, issueOf, hubLanguage, splitHubCode, parsePackingSlip, matchShipmentLines, allocateShipment, pendingRecipientCount } from './literatureShipments.mjs';
 
 test('periodical codes and Hub languages', () => {
   assert.equal(seriesOf('wlp27.02'), 'wlp');
   assert.equal(seriesOf('w27.03'), 'w');
   assert.equal(seriesOf('nwt'), null);
+  assert.equal(standingSeriesOf('w'), 'w');
+  assert.equal(standingSeriesOf('mwb'), 'mwb');
+  assert.equal(standingSeriesOf('wlp'), 'wlp');
+  assert.equal(standingSeriesOf('w27.03'), 'w');
+  assert.equal(standingSeriesOf('wp'), null);
+  assert.equal(standingSeriesOf('g26.1'), null);
   assert.equal(issueOf('mwb27.03'), '2027-03');
   assert.equal(issueOf('wp21.1'), '2021-n1');
   assert.equal(hubLanguage('J'), 'JPN');

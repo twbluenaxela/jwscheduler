@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import db from '../../../../../lib/db';
 import { publicCongregation, publicJson, disabled } from '../../../../../lib/publicLiteratureApi';
 import { validateSubmission, flagSubmission } from '../../../../../lib/publicForm.mjs';
-import { seriesOf } from '../../../../../lib/literatureShipments.mjs';
+import { standingSeriesOf } from '../../../../../lib/literatureShipments.mjs';
 
 const attempts = new Map();
 const windowMs = 10 * 60 * 1000;
@@ -56,7 +56,7 @@ export async function POST(request, context) {
             });
             entry.requestId = row.id;
           } else {
-            const series = seriesOf(pub.code),
+            const series = standingSeriesOf(pub.code),
               language = pub.language;
             const unique = { personId: normalized.personId, series, language };
             const existing = await tx.literatureSubscription.findUnique({

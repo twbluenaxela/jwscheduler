@@ -2,6 +2,10 @@ import { periodicalEntry } from './literature.mjs';
 
 const pattern = /^(wlp|mwb|wp|w|g)(\d{2})\.(\d{1,2})$/;
 export function seriesOf(code) { return pattern.exec(code)?.[1] ?? null; }
+// Catalog cards for a whole series use the bare code ("w", "mwb", "wlp");
+// unlike `seriesOf` this accepts those as well as dated issue codes.
+const standingPattern = /^(wlp|mwb|w)(?:\d{2}\.\d{1,2})?$/;
+export function standingSeriesOf(code) { return standingPattern.exec(code)?.[1] ?? null; }
 export function issueOf(code) {
   const match = pattern.exec(code);
   if (!match) return null;

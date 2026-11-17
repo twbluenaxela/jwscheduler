@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { matchPublications, withCoverFallback } from '../../lib/literature.mjs';
-import { PUBLIC_SECTIONS, MAGAZINE_TABS } from '../../lib/publicForm.mjs';
+import { PUBLIC_SECTIONS, MAGAZINE_TABS, defaultKind } from '../../lib/publicForm.mjs';
 import PubThumb, { Sheet } from './PubThumb';
 import Icon from './Icon';
 
@@ -444,9 +444,10 @@ export default function PublicRequestForm({ token }) {
     });
   }
   function openItem(p) {
+    const queued = cart.find((item) => item.publicationId === p.id);
     setSelected(p);
-    setKind('once');
-    setQuantity(cart.find((item) => item.publicationId === p.id && item.kind === 'once')?.quantity || 1);
+    setKind(queued?.kind || defaultKind(p, Boolean(person?.guest)));
+    setQuantity(queued?.quantity || 1);
   }
   function add() {
     const rect = coverRef.current?.getBoundingClientRect();

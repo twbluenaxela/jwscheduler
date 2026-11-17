@@ -1,5 +1,5 @@
 import { sortPublications, mapPublication } from './literature.mjs';
-import { seriesOf } from './literatureShipments.mjs';
+import { seriesOf, standingSeriesOf } from './literatureShipments.mjs';
 
 export const PUBLIC_SECTIONS = [
   { key: 'book', label: '書籍', icon: 'book' },
@@ -32,7 +32,11 @@ export function publicSection(p) {
 }
 
 export const STANDING_SERIES = ['w', 'wlp', 'mwb'];
-export const isStanding = (publication) => STANDING_SERIES.includes(seriesOf(publication.code));
+// Bare catalog cards (守望台研讀版 / 聚會手冊 / 大字版) are standing-eligible too —
+// only dated issue cards used to show the 定期 option in the form.
+export const isStanding = (publication) => STANDING_SERIES.includes(standingSeriesOf(publication.code || ''));
+export const defaultKind = (publication, guest = false) =>
+  !guest && isStanding(publication) ? 'standing' : 'once';
 
 export function publicCatalog(publications) {
   const candidates = publications.filter(p => p.active && p.requestable !== false && p.category !== 'form');
@@ -54,7 +58,7 @@ export function publicCatalog(publications) {
   }
   return sortPublications(candidates.filter(p => !seriesOf(p.code) || allowed.has(String(p.id)))).map(p => {
     const { id, code, name, category, language, format, coverUrl } = mapPublication(p);
-    return { id, code, name, category, language, format, coverUrl, ...publicSection(p), series: seriesOf(code), standing: isStanding(p) };
+    return { id, code, name, category, language, format, coverUrl, ...publicSection(p), series: standingSeriesOf(code) ?? seriesOf(code), standing: isStanding(p) };
   });
 }
 
@@ -93,12 +97,13 @@ export function validateSubmission({ body, people, publications, guest = body?.g
     const pub = publications.find(p => String(p.id) === String(item?.publicationId));
     if (!pub || !catalog.has(String(pub.id))) throw new Error('書刊無法申請');
     if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20) throw new Error('數量須為 1 至 20');
-    if (!['once', 'standing'].includes(item.kind)) throw new Error('申請類型無效');
-    if (item.kind === 'standing' && (guestName || !isStanding(pub))) throw new Error('此書刊無法定期申請');
-    const key = `${pub.id}:${item.kind}`;
+    const kind = item.kind ?? defaultKind(pub, Boolean(guestName));
+    if (!['once', 'standing'].includes(kind)) throw new Error('申請類型無效');
+    if (kind === 'standing' && (guestName || !isStanding(pub))) throw new Error('此書刊無法定期申請');
+    const key = `${pub.id}:${kind}`;
     const quantity = (merged.get(key)?.quantity || 0) + item.quantity;
     if (quantity > 20) throw new Error('合併後數量不可超過 20');
-    merged.set(key, { publicationId: pub.id, quantity, kind: item.kind });
+    merged.set(key, { publicationId: pub.id, quantity, kind });
   }
   return { personId, guestName, guestNote, note, items: [...merged.values()] };
 }

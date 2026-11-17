@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { publicCatalog, groupPeople, validateSubmission, flagSubmission, isStanding } from './publicForm.mjs';
+import { publicCatalog, groupPeople, validateSubmission, flagSubmission, isStanding, defaultKind } from './publicForm.mjs';
 
 const pub = (id, code, extra = {}) => ({ id, code, name: code, category: 'study', language: 'CHT', format: 'standard', active: true, ...extra });
 const publications = [pub(1, 'w26.01'), pub(2, 'w26.02'), pub(3, 'w26.03'), pub(4, 'w26.04'), pub(5, 'book'), pub(6, 'form', { category: 'form' }), pub(7, 'off', { requestable: false }), pub(8, 'inactive', { active: false })];
@@ -13,6 +13,26 @@ test('catalog filters, keeps latest issues per variant, and maps covers', () => 
   assert.equal(rows.find(p => p.id === '9').coverUrl, '/api/literature/covers/abc');
   assert.equal(isStanding(publications[0]), true);
   assert.equal(isStanding(pub(10, 'g26.01')), false);
+});
+test('bare periodical cards default to 定期 for members, 單次 for guests', () => {
+  for (const code of ['w', 'mwb', 'wlp', 'w27.01', 'mwb27.03', 'wlp27.01']) {
+    const card = pub(20, code, { language: 'JPN', format: 'large' });
+    assert.equal(isStanding(card), true, code);
+    assert.equal(defaultKind(card), 'standing', code);
+    assert.equal(defaultKind(card, true), 'once', code);
+  }
+  assert.equal(isStanding(pub(21, 'wp')), false);
+  assert.equal(defaultKind(pub(21, 'wp')), 'once');
+  assert.equal(publicCatalog([pub(22, 'w', { language: 'ENG' })])[0].series, 'w');
+  const bare = pub(23, 'mwb', { language: 'ENG' });
+  const validateBare = body => validateSubmission({ body, people, publications: [...publications, bare] });
+  assert.equal(validateBare({ personId: 1, items: [{ publicationId: 23, quantity: 1 }] }).items[0].kind, 'standing');
+  assert.equal(validateBare({ guest: { name: '訪客' }, items: [{ publicationId: 23, quantity: 1 }] }).items[0].kind, 'once');
+  assert.deepEqual(
+    validateBare({ personId: 1, items: [{ publicationId: 23, quantity: 1 }, { publicationId: 23, quantity: 2 }] }).items,
+    [{ publicationId: 23, quantity: 3, kind: 'standing' }],
+  );
+  assert.equal(validate({ personId: 1, items: [{ publicationId: 5, quantity: 1 }] }).items[0].kind, 'once');
 });
 test('groups include active people and ungrouped people in order', () => {
   const groups = groupPeople([...people, { id: 3, name: '丙', serviceGroup: null }]);
