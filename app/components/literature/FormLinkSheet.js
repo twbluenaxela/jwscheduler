@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import PubThumb, { Sheet } from './PubThumb';
 
-function SubmissionRow({ row, archived, archive, request, onNoteSaved }) {
+function SubmissionRow({ row, archived, archive, request, onNoteSaved, isNew }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   async function saveNote() {
@@ -29,7 +29,7 @@ function SubmissionRow({ row, archived, archive, request, onNoteSaved }) {
   return (
     <div className="public-submission">
       <strong>
-        {row.personName} {!row.personId && <small className="lit-badge">名單外</small>}
+        {row.personName} {isNew && <small className="lit-badge">新</small>} {!row.personId && <small className="lit-badge">名單外</small>}
       </strong>
       {row.note && <blockquote className="public-submission-note">{row.note}</blockquote>}
       {row.note && row.personId && (
@@ -106,7 +106,7 @@ function LinkControls({ url, copied, copy, link }) {
   );
 }
 
-export default function FormLinkSheet({ request, close, onNoteSaved }) {
+export default function FormLinkSheet({ request, close, onNoteSaved, seenAt }) {
   const [url, setUrl] = useState('');
   const [rows, setRows] = useState([]);
   const [archived, setArchived] = useState(false);
@@ -174,7 +174,7 @@ export default function FormLinkSheet({ request, close, onNoteSaved }) {
         </label>
         {!rows.length && <p>沒有申請紀錄。</p>}
         {rows.map((row) => (
-          <SubmissionRow key={row.id} row={row} archived={archived} archive={archive} request={request} onNoteSaved={onNoteSaved} />
+          <SubmissionRow key={row.id} row={row} isNew={Boolean(seenAt && Date.parse(row.createdAt) > Date.parse(seenAt))} archived={archived} archive={archive} request={request} onNoteSaved={onNoteSaved} />
         ))}
         {error && (
           <p className="imp-error" role="alert">

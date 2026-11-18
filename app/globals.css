@@ -3015,3 +3015,45 @@ button.service-month-card { cursor: pointer; }
     transition: none;
   }
 }
+
+
+.lit-new-submissions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+
+.lit-new-submissions svg {
+  width: 18px;
+  height: 18px;
+}
+
+.lit-nav-dot {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c44735;
+}
+
+.tabbar__icon {
+  position: relative;
+}
+
+.lit-nav-dot--inline {
+  position: static;
+  flex: none;
+}

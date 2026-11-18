@@ -119,7 +119,7 @@ export default function InventoryView({ items, people, request, reloadCatalog })
       <div className="lit-header">
         <h1>每月清點</h1>
         <Menu items={[
-          { label: '清點提醒（行事曆）', onSelect: openReminder },
+          { label: '書刊負責人', onSelect: openReminder },
           ...(counts.length > 0 ? [{ label: '匯入 JW Hub 庫存報告', onSelect: () => fileInput.current?.click() }] : []),
         ]} />
         {counts.length > 0 && <>
@@ -163,8 +163,8 @@ export default function InventoryView({ items, people, request, reloadCatalog })
       </div>
       {!counts.length && <p>尚無清點紀錄。</p>}
       {reminderOpen && (
-        <Sheet title="清點提醒（行事曆）" close={() => setReminderOpen(false)}>
-          <p>每月 10 日的清點截止提醒會顯示在所選人員的訂閱行事曆，並提前 3 天提醒。</p>
+        <Sheet title="書刊負責人" close={() => setReminderOpen(false)}>
+          <p>清點截止提醒會放進他的行事曆；表單有新申請時會用 LINE 通知他</p>
           <p>目前：{people.find((person) => String(person.id) === String(reminderPersonId))?.name || '不提醒'}</p>
           <label className="field">
             <span className="field__label">搜尋人員</span>

@@ -181,6 +181,63 @@ export default function App({ initialPage = 'meetings' }) {
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const canLiterature = dbUser?.role === 'SYSADMIN' || dbUser?.canLiterature === true;
   const [page, setPage] = useState(initialPage);
+  const [formSeen, setFormSeen] = useState(null);
+  const [newFormCount, setNewFormCount] = useState(0);
+
+  useEffect(() => {
+    if (!firebaseUser || !canLiterature) return;
+    let seen;
+    try {
+      seen = localStorage.getItem('lit:formSeen');
+      if (!seen || !Number.isFinite(Date.parse(seen))) {
+        seen = new Date().toISOString();
+        localStorage.setItem('lit:formSeen', seen);
+      }
+    } catch {
+      seen = new Date().toISOString();
+    }
+    setFormSeen(seen);
+  }, [firebaseUser, canLiterature]);
+
+  useEffect(() => {
+    if (!firebaseUser || !canLiterature || !formSeen) return;
+    let active = true;
+    async function refresh() {
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch('/api/literature/form-submissions?limit=20', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (active) {
+          setNewFormCount(data.submissions.filter((row) => Date.parse(row.createdAt) > Date.parse(formSeen)).length);
+        }
+      } catch {
+        // Keep the last known count if the network is unavailable.
+      }
+    }
+    refresh();
+    window.addEventListener('focus', refresh);
+    const timer = setInterval(refresh, 60000);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refresh);
+      clearInterval(timer);
+    };
+  }, [firebaseUser, canLiterature, formSeen, page]);
+
+  function markFormsSeen() {
+    const now = new Date().toISOString();
+    try {
+      localStorage.setItem('lit:formSeen', now);
+    } catch {
+      // Continue with an in-memory seen time when storage is unavailable.
+    }
+    setFormSeen(now);
+    setNewFormCount(0);
+  }
+
   const [midweekWeeks, setMidweekWeeks] = useState([]);
   const [view, setView] = useState('midweek');
   const [week, setWeek] = useState(0);
@@ -764,7 +821,7 @@ export default function App({ initialPage = 'meetings' }) {
             />
           )}
           {page === 'services' && <ServicesPage firebaseUser={firebaseUser} canEdit={canEdit} people={people} />}
-          {page === 'literature' && canLiterature && <LiteraturePage firebaseUser={firebaseUser} people={people} />}
+          {page === 'literature' && canLiterature && <LiteraturePage firebaseUser={firebaseUser} people={people} formSeen={formSeen} newFormCount={newFormCount} markFormsSeen={markFormsSeen} />}
           {page === 'settings' && (
             <SettingsPage
               congSettings={congSettings}
@@ -849,7 +906,7 @@ export default function App({ initialPage = 'meetings' }) {
           )}
         </div>
       </div>
-      <TabBar page={page} setPage={setPage} role={role} canLiterature={canLiterature} onAdmin={() => router.push('/admin')} />
+      <TabBar newFormCount={newFormCount} page={page} setPage={setPage} role={role} canLiterature={canLiterature} onAdmin={() => router.push('/admin')} />
 
       {sheet && (() => {
         // Recomputed per open sheet (cheap: one pass over the loaded weeks) so

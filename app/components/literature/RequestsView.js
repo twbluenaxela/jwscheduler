@@ -89,7 +89,7 @@ function GuestRequestsSheet({ name, requests, people, publication, mutate, setSn
   );
 }
 
-export default function RequestsView({ people, items, request }) {
+export default function RequestsView({ people, items, request, formSeen, newFormCount, markFormsSeen }) {
   const [data, setData] = useState({ subscriptions: [], requests: [] });
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
@@ -100,6 +100,12 @@ export default function RequestsView({ people, items, request }) {
   const [pubQuery, setPubQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [sheetSeen, setSheetSeen] = useState(null);
+  function openLink() {
+    setSheetSeen(formSeen);
+    markFormsSeen();
+    setLinkOpen(true);
+  }
   const [guestName, setGuestName] = useState(null);
   const [snack, setSnack] = useState(null);
   const [orderOpen, setOrderOpen] = useState(false);
@@ -213,6 +219,12 @@ export default function RequestsView({ people, items, request }) {
   );
   return (
     <div>
+      {newFormCount > 0 && (
+        <button className="lit-new-submissions" onClick={openLink}>
+          {newFormCount} 筆新申請
+          <Icon name="chevronRight" />
+        </button>
+      )}
       {orderData && (orderData.toOrder.length > 0 || orderData.fromStock.length > 0) && (
         <button className="lit-order-summary" onClick={() => setOrderOpen(true)}>
           <span>訂購清單 · 要訂 {orderData.toOrder.length} 項 · {orderData.toOrder.reduce((sum, row) => sum + row.order, 0)} 本</span>
@@ -226,7 +238,7 @@ export default function RequestsView({ people, items, request }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <Menu items={[{ label: '訂購清單', onSelect: () => setOrderOpen(true) }, { label: '申請連結（給大家用的表單）', onSelect: () => setLinkOpen(true) }]} />
+        <Menu items={[{ label: '訂購清單', onSelect: () => setOrderOpen(true) }, { label: '申請連結（給大家用的表單）', onSelect: openLink }]} />
         <button className="btn btn--primary lit-add" aria-label="新增申請" onClick={() => add(null)}>
           ＋
         </button>
@@ -321,7 +333,7 @@ export default function RequestsView({ people, items, request }) {
         />
       )}
       {orderOpen && <OrderList data={orderData} loading={orderLoading} error={orderError} reload={loadOrders} close={() => setOrderOpen(false)} mark={markOrders} busy={busy} />}
-      {linkOpen && <FormLinkSheet request={request} close={() => setLinkOpen(false)} onNoteSaved={updateNote} />}
+      {linkOpen && <FormLinkSheet request={request} close={() => setLinkOpen(false)} onNoteSaved={updateNote} seenAt={sheetSeen} />}
       {snack && (
         <div className="lit-handout-snack" role="status">
           {snack.ids ? `已標 ${snack.ids.length} 筆為${snack.label}` : '已封存'}{' '}

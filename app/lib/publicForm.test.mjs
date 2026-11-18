@@ -139,3 +139,32 @@ test('submission note is trimmed, optional and limited to 300 characters', () =>
   assert.throws(() => validate({ ...body, note: '字'.repeat(301) }), /備註不可超過 300 個字/);
   assert.throws(() => validate({ ...body, note: 2 }), /備註不可超過 300 個字/);
 });
+
+test('submission message formats members, standing items, notes and flags', async () => {
+  const { formSubmissionMessage } = await import('./publicForm.mjs');
+  assert.equal(formSubmissionMessage({
+    name: '許文英（B 組）',
+    guest: false,
+    items: [
+      { name: '天天查考聖經2027', quantity: 1, kind: 'once' },
+      { name: '守望台研讀版（大字版）', quantity: 1, kind: 'standing' },
+    ],
+    note: '全部要紙本',
+    flagged: true,
+    reason: '數量超過 5',
+    origin: 'https://example.org',
+  }), '📚 新的書刊申請\n許文英（B 組）\n• 天天查考聖經2027 ×1\n• 守望台研讀版（大字版） ×1 定期\n備註：全部要紙本\n⚠ 需留意：數量超過 5\nhttps://example.org/literature');
+});
+
+test('submission message labels guests and truncates after ten items', async () => {
+  const { formSubmissionMessage } = await import('./publicForm.mjs');
+  const message = formSubmissionMessage({
+    name: '訪客',
+    guest: true,
+    items: Array.from({ length: 12 }, (_, index) => ({ name: `書 ${index}`, quantity: 1 })),
+    origin: 'https://example.org/',
+  });
+  assert.match(message, /訪客（名單外）/);
+  assert.match(message, /…還有 2 項/);
+  assert.doesNotMatch(message, /書 10/);
+});
