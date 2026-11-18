@@ -1,3 +1,4 @@
+import { pushLine } from '../../../lib/linePush.mjs';
 import { dbErrorResponse } from '../../../lib/apiErrors.mjs';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
@@ -39,21 +40,6 @@ function buildMessage(name, current, previous) {
   }
   lines.push('\n如有疑問請聯絡編排負責人。');
   return lines.join('\n');
-}
-
-async function pushLineMessage(lineUserId, text) {
-  const res = await fetch('https://api.line.me/v2/bot/message/push', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ to: lineUserId, messages: [{ type: 'text', text }] }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || `LINE API ${res.status}`);
-  }
 }
 
 export async function POST(request) {
@@ -108,7 +94,8 @@ export async function POST(request) {
         text += '\n\n📅 想讓安排自動出現在手機行事曆？回覆「行事曆」就可以。';
       }
       try {
-        await pushLineMessage(person.lineUserId, text);
+        const result = await pushLine(person.lineUserId, text);
+        if (!result.ok) throw new Error(result.error);
         sent++;
       } catch (err) {
         failed++;

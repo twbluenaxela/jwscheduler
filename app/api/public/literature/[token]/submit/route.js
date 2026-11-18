@@ -1,7 +1,10 @@
+import { after } from 'next/server';
 export const dynamic = 'force-dynamic';
 import db from '../../../../../lib/db';
 import { publicCongregation, publicJson, disabled } from '../../../../../lib/publicLiteratureApi';
-import { validateSubmission, flagSubmission, localizedName } from '../../../../../lib/publicForm.mjs';
+import { validateSubmission, flagSubmission, localizedName, formSubmissionMessage } from '../../../../../lib/publicForm.mjs';
+import { pushLine } from '../../../../../lib/linePush.mjs';
+import { publicOrigin } from '../../../../../lib/publicOrigin.mjs';
 import { standingSeriesOf } from '../../../../../lib/literatureShipments.mjs';
 
 const attempts = new Map();
@@ -22,12 +25,14 @@ export async function POST(request, context) {
   attempts.set(key, timestamps);
   let normalized;
   let publications;
+  let people;
   try {
     const body = await request.json();
-    const [people, catalog] = await Promise.all([
+    const [foundPeople, catalog] = await Promise.all([
       db.person.findMany({ where: { congregationId: congregation.id } }),
       db.publication.findMany({ where: { congregationId: congregation.id } }),
     ]);
+    people = foundPeople;
     publications = catalog;
     normalized = validateSubmission({ body, people, publications, guest: body.guest });
   } catch (error) {
@@ -98,6 +103,30 @@ export async function POST(request, context) {
       },
       { timeout: 60000, maxWait: 10000 },
     );
+    const origin = publicOrigin(request);
+    after(async () => {
+      try {
+        const contact = people.find((person) => person.id === congregation.inventoryReminderPersonId);
+        if (!contact?.lineUserId) return;
+        const person = people.find((entry) => entry.id === normalized.personId);
+        const name = person
+          ? `${person.name}${person.serviceGroup ? `（${person.serviceGroup} 組）` : ''}`
+          : normalized.guestName;
+        const message = formSubmissionMessage({
+          name,
+          guest: !normalized.personId,
+          items: submission.items,
+          note: submission.note,
+          flagged: submission.flagged,
+          reason: submission.reason,
+          origin,
+        });
+        const result = await pushLine(contact.lineUserId, message);
+        if (!result.ok) console.error('LINE submission notification failed:', result.error);
+      } catch (error) {
+        console.error('LINE submission notification failed:', error);
+      }
+    });
     return publicJson({ ok: true, submissionId: String(submission.id) });
   } catch (error) {
     return publicJson({ error: '送出失敗，請稍後再試。' }, 500);

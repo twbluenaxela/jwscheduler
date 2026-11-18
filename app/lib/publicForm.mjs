@@ -176,3 +176,15 @@ export function flagSubmission({ items, previousSubs = [], recentCount = 0, gues
   if (guest) reasons.push('名單外');
   return { flagged: reasons.length > 0, reason: reasons.join('、') || null };
 }
+
+export function formSubmissionMessage({ name, guest, items, note, flagged, reason, origin }) {
+  const lines = ['📚 新的書刊申請', `${name}${guest ? '（名單外）' : ''}`];
+  for (const item of items.slice(0, 10)) {
+    lines.push(`• ${item.name} ×${item.quantity}${item.kind === 'standing' ? ' 定期' : ''}`);
+  }
+  if (items.length > 10) lines.push(`…還有 ${items.length - 10} 項`);
+  if (note) lines.push(`備註：${note}`);
+  if (flagged) lines.push(`⚠ 需留意：${reason}`);
+  lines.push(`${origin.replace(/\/$/, '')}/literature`);
+  return lines.join('\n');
+}

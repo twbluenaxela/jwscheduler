@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-export default function TabBar({ page, setPage, role, onAdmin, canLiterature }) {
+export default function TabBar({ page, setPage, role, onAdmin, canLiterature, newFormCount }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreButtonRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -95,7 +95,10 @@ export default function TabBar({ page, setPage, role, onAdmin, canLiterature }) 
             aria-current={page === item.id ? 'page' : undefined}
             onClick={() => navigate(item)}
           >
-            <span className="tabbar__icon">{item.icon}</span>
+            <span className="tabbar__icon">
+              {item.icon}
+              {item.id === 'literature' && newFormCount > 0 && <span className="lit-nav-dot" aria-label={`${newFormCount} 筆新申請`} />}
+            </span>
             <span>{item.label}</span>
           </button>
         ))}
@@ -131,6 +134,7 @@ export default function TabBar({ page, setPage, role, onAdmin, canLiterature }) 
               {overflow.map((item) => (
                 <button key={item.id} className="tabbar-more__row" aria-current={page === item.id ? 'page' : undefined} onClick={() => navigate(item)}>
                   {item.icon}
+                  {item.id === 'literature' && newFormCount > 0 && <span className="lit-nav-dot lit-nav-dot--inline" aria-label={`${newFormCount} 筆新申請`} />}
                   <span className="tabbar-more__text"><span>{item.label}</span><small>{descriptions[item.id]}</small></span>
                   {page === item.id && <svg viewBox="0 0 24 24" className="navicon" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>}
                 </button>

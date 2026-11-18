@@ -7,7 +7,7 @@ import RequestsView from './literature/RequestsView';
 import HandoutView from './literature/HandoutView';
 import InventoryView from './literature/InventoryView';
 
-export default function LiteraturePage({ firebaseUser, people = [] }) {
+export default function LiteraturePage({ firebaseUser, people = [], formSeen, newFormCount, markFormsSeen }) {
   const initialized = useRef(false);
   const [view, setView] = useState(null);
   const [initialId, setInitialId] = useState(null);
@@ -75,7 +75,7 @@ export default function LiteraturePage({ firebaseUser, people = [] }) {
       </div>
       {view !== 'catalog' && loading && <p className="lit-loading">正在載入書刊…</p>}
       {view !== 'catalog' && loadError && <div className="imp-error">{loadError} <button className="btn" onClick={load}>重試</button></div>}
-      {!loading && !loadError && view === 'requests' && <RequestsView people={people} items={displayItems} request={request} />}
+      {!loading && !loadError && view === 'requests' && <RequestsView people={people} items={displayItems} request={request} formSeen={formSeen} newFormCount={newFormCount} markFormsSeen={markFormsSeen} />}
       {(!loading || items.length > 0) && !loadError && view === 'shipments' && <HandoutView items={displayItems} request={request} reloadCatalog={load} />}
       {(!loading || items.length > 0) && !loadError && view === 'inventory' && <InventoryView people={people} items={displayItems} request={request} reloadCatalog={load} />}
       {view === 'catalog' && <CatalogView items={items} setItems={setItems} loading={loading} loadError={loadError} load={load} request={request} />}
