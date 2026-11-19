@@ -31,10 +31,10 @@ export async function GET(request) {
         });
       }
       const group = grouped.get(person.id);
-      group.items.push(handoutItem(publication, {
+      group.items.push({ ...handoutItem(publication, {
         ...delivery,
         source: delivery.requestId ? 'request' : 'subscription',
-      }, delivery.shipmentId));
+      }, delivery.shipmentId), key: `d:${delivery.id}`, deliveryId: delivery.id });
       group.deliveryIds.push(delivery.id);
     }
     for (const row of data.requests.filter(item => item.personId == null && item.status === 'delivered' && item.deliveredAt >= today)) {
@@ -42,7 +42,7 @@ export async function GET(request) {
       grouped.set(`guest:${row.id}`, {
         personId: null, guestKey: `guest:${row.id}`, name: row.guestName, serviceGroup: null,
         guest: true, requestId: row.id, deliveredAt: row.deliveredAt,
-        items: [handoutItem(row.publication, { ...row, requestId: row.id, source: 'request' })],
+        items: [{ ...handoutItem(row.publication, { ...row, requestId: row.id, source: 'request' }), key: `g:${row.id}` }],
         deliveryIds: [],
       });
     }
