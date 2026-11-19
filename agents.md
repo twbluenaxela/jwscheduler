@@ -245,7 +245,7 @@ acceptSuggestion(slotId, name)      ← ghost pill ✓ button
 acceptAllSuggestions(prefix)        ← toolbar 接受全部
   → batch: setAssignments + persist all + single undo toast
 
-clearSlot(slotId)                   ← pair-toggle-btn − in edit mode
+clearSlot(slotId)                   ← ⋯ menu 「移除助手欄位」 in edit mode
   → deletes slotId from assignments state
   → POST /api/assignments { slotId, name: '' }  (clears helper assignment in DB)
   → no toast (silent; called from the ＋/− toggle button in PartRow)
@@ -269,7 +269,7 @@ these parts — it collapses both empty slots to `[]`, which makes `PartRow` ren
 one slot and hides the helper field entirely.
 
 `PairSlot` receives a `roleLabels` array (split from `roleLabel`) to label each slot
-correctly in the AssignSheet context label. In edit mode, `PartRow` shows a `pair-toggle-btn`
+correctly in the AssignSheet context label. In edit mode, `PartRow`'s ⋯ menu has a 加入/移除助手欄位 item (was `pair-toggle-btn`)
 (＋/−) to show or hide the helper slot; hiding also calls `clearSlot` to remove the DB record.
 
 ### WeekendRow `type` values

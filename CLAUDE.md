@@ -334,7 +334,7 @@ app/
                          `isPair` driven by `roleLabel?.includes('/')` (NOT assign.length)
                          so ministry (學生/助手) and CBS (主持/朗讀) always show two slots
                          even when both are empty; PairSlot accepts `roleLabels` prop to
-                         label each slot correctly; edit mode shows a `pair-toggle-btn`
+                         label each slot correctly; edit mode's ⋯ menu toggles the helper slot (was `pair-toggle-btn`)
                          (＋/−) per pair-capable part to add/remove the helper slot —
                          removing calls `clearSlot` (from page.js via MeetingsPage) to
                          clear the _1 assignment; `hiddenHelpers` Set in local state
