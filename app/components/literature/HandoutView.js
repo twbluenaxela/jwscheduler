@@ -1,124 +1,118 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { handoutSummary } from '../../lib/literatureShipments.mjs';
+import { buildChecklist, applyCheck, applyUncheck, pendingStats } from '../../lib/handoutChecklist.mjs';
 import Icon from './Icon';
 import Menu from './Menu';
-import PubThumb, { Sheet, groupOf } from './PubThumb';
+import PubThumb, { groupOf } from './PubThumb';
 import ShipmentsView from './ShipmentsView';
-
-function Check({ done = false }) {
-  return (
-    <span className={`lit-handout-check${done ? ' is-done' : ''}`} aria-hidden="true">
-      {done ? <Icon name="check" /> : '發'}
-    </span>
-  );
-}
 
 function CoverStrip({ person, items }) {
   return (
-    <span className="lit-handout-covers" aria-hidden="true">
-      {person.items.slice(0, 4).map((item, index) => (
+    <span className="lit-check-stack" aria-hidden="true">
+      {person.items.slice(0, 3).map((item, index) => (
         <PubThumb
           key={item.key || index}
           publication={items.find((publication) => String(publication.id) === String(item.publicationId)) || item}
         />
       ))}
-      {person.items.length > 4 && <span>+{person.items.length - 4}</span>}
     </span>
   );
 }
 
-function PersonRow({ person, items, pending, onMark, onSelect }) {
+function HandoutCard({ person, items, open, onToggle, onToggleItem, onCheckAll, pendingKeys }) {
+  const unchecked = person.items.filter((item) => !item.checked);
+  const busy = (item) => pendingKeys.has(`${person.key}:${item.key}`);
   return (
-    <div className="lit-handout-row" aria-busy={pending || undefined}>
-      <button
-        className="lit-handout-main"
-        disabled={pending}
-        aria-label={`${person.name}，標為已發`}
-        onClick={() => onMark(person)}
-      >
-        <Check />
-        <span className="lit-handout-copy">
-          <strong>{person.name} {person.guest && <small className="lit-badge">名單外</small>}</strong>
-          <CoverStrip person={person} items={items} />
-          <span className="lit-handout-summary">
-            {handoutSummary(person.items)}{' '}
-            {person.items.some(item => item.source === 'request') && <small>單次</small>}{' '}
-            {person.items.some(item => item.short) && <small className="lit-short">不足</small>}
+    <article className={`lit-check-card${open ? ' is-open' : ''}${person.done ? ' is-done' : ''}`}>
+      <button className="lit-check-head" aria-expanded={open} onClick={onToggle}>
+        <CoverStrip person={person} items={items} />
+        <span className="lit-check-person">
+          <strong>{person.name}</strong>
+          {(person.guest || person.items.some((item) => item.source === 'request') || person.items.some((item) => item.short)) && (
+            <span className="lit-check-meta">
+              {person.items.some((item) => item.source === 'request') && <span>單次</span>}
+              {person.items.some((item) => item.short) && <span className="lit-short">不足</span>}
+              {person.guest && <small className="lit-badge">名單外</small>}
+            </span>
+          )}
+        </span>
+        {person.done ? (
+          <span className="lit-check-delivered">
+            <Icon name="check" />
+            <time>
+              {new Date(person.deliveredAt).toLocaleTimeString('zh-TW', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: 'Asia/Taipei',
+              })}
+            </time>
           </span>
+        ) : (
+          <span className={`lit-check-progress${person.checkedCount > 0 ? ' is-partial' : ''}`}>
+            {person.checkedCount}/{person.total}
+          </span>
+        )}
+        <span className="lit-check-chevron" aria-hidden="true">
+          <Icon name="chevronRight" />
         </span>
       </button>
-      <button
-        className="lit-delivery-expand"
-        disabled={pending}
-        aria-label="逐項發放"
-        onClick={() => onSelect(person)}
-      >
-        <Icon name="chevronRight" />
-      </button>
-    </div>
-  );
-}
-
-function DeliveredRow({ person, items, pending, onUndo }) {
-  return (
-    <button
-      className="lit-handout-main lit-handout-done"
-      disabled={pending}
-      aria-busy={pending || undefined}
-      aria-label={`${person.name}，已發，點一下取消`}
-      onClick={() => onUndo(person)}
-    >
-      <Check done />
-      <span className="lit-handout-copy">
-        <strong>{person.name} {person.guest && <small className="lit-badge">名單外</small>}</strong>
-        <CoverStrip person={person} items={items} />
-        <span className="lit-handout-summary">{handoutSummary(person.items)}</span>
-      </span>
-      <time>
-        {new Date(person.deliveredAt).toLocaleTimeString('zh-TW', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-          timeZone: 'Asia/Taipei',
-        })}
-      </time>
-    </button>
-  );
-}
-
-function Snackbar({ snack, onClose, onHeight }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const element = ref.current;
-    const measure = () => onHeight(element.getBoundingClientRect().height);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [onHeight]);
-  return (
-    <div ref={ref} className="lit-handout-snack" role="status" aria-live="polite">
-      <span>{snack.text}</span>
-      <button onClick={() => { onClose(); snack.undo(); }}>復原</button>
-    </div>
+      {open && (
+        <div className="lit-check-body">
+          {person.items.map((item, index) => (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={item.checked}
+              aria-busy={busy(item) || undefined}
+              disabled={busy(item)}
+              className={`lit-check-item${index === person.items.length - 1 ? ' is-last' : ''}`}
+              key={item.key}
+              onClick={() => onToggleItem(person, item)}
+            >
+              <span className={`lit-check-box${item.checked ? ' is-checked' : ''}`} aria-hidden="true">
+                {item.checked && <Icon name="check" />}
+              </span>
+              <PubThumb
+                publication={items.find((publication) => String(publication.id) === String(item.publicationId)) || item}
+              />
+              <span className={`lit-check-label${item.checked ? ' is-checked' : ''}`}>
+                <span>{item.label}</span>
+                {item.quantity > 1 && (
+                  <span className="lit-check-quantity">×{item.quantity}</span>
+                )}
+                {item.short && <small className="lit-short">不足</small>}
+              </span>
+              <span className="sr-only">{item.checked ? '取消' : '標記'}{item.label}</span>
+            </button>
+          ))}
+          {unchecked.length > 0 && (
+            <button
+              className="lit-check-all"
+              disabled={unchecked.some(busy)}
+              onClick={() => onCheckAll(person, unchecked)}
+            >
+              全部勾選（{unchecked.length} 項）
+            </button>
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 
 export default function HandoutView({ items, request, reloadCatalog }) {
-  const [data, setData] = useState({ people: [], delivered: [], olderShipments: [] });
+  const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState('全部');
-  const [selected, setSelected] = useState(null);
+  const [openKey, setOpenKey] = useState(null);
   const [shipments, setShipments] = useState(false);
-  const [snack, setSnack] = useState(null);
-  const [snackHeight, setSnackHeight] = useState(60);
-  const [pending, setPending] = useState(new Set());
-  const dataRef = useRef(data);
-  dataRef.current = data;
+  const [pendingKeys, setPendingKeys] = useState(new Set());
   const pendingRef = useRef(new Set());
+  const listRef = useRef(list);
+  listRef.current = list;
   const revision = useRef(0);
 
   const load = useCallback(async () => {
@@ -126,7 +120,12 @@ export default function HandoutView({ items, request, reloadCatalog }) {
     try {
       const result = await request('/api/literature/handouts');
       if (startedAt === revision.current && pendingRef.current.size === 0) {
-        setData(result);
+        const next = buildChecklist(result);
+        setList(next);
+        listRef.current = next;
+        setOpenKey((current) => (
+          next.some((entry) => entry.key === current && entry.done) ? null : current
+        ));
       }
     } catch (err) {
       setError(err.message);
@@ -134,132 +133,90 @@ export default function HandoutView({ items, request, reloadCatalog }) {
       setLoading(false);
     }
   }, [request]);
-
   useEffect(() => { load(); }, [load]);
-  useEffect(() => {
-    if (!snack) return;
-    const timer = setTimeout(() => setSnack(null), 5000);
-    return () => clearTimeout(timer);
-  }, [snack]);
 
-  function begin(personId) {
-    if (pendingRef.current.has(personId)) return false;
-    pendingRef.current.add(personId);
-    revision.current += 1;
-    setPending(new Set(pendingRef.current));
+  function begin(tokens) {
+    if (tokens.some((token) => pendingRef.current.has(token))) return false;
+    tokens.forEach((token) => pendingRef.current.add(token));
+    revision.current++;
+    setPendingKeys(new Set(pendingRef.current));
     return true;
   }
-
-  function finish(personId) {
-    pendingRef.current.delete(personId);
-    setPending(new Set(pendingRef.current));
+  function finish(tokens) {
+    tokens.forEach((token) => pendingRef.current.delete(token));
+    setPendingKeys(new Set(pendingRef.current));
     if (pendingRef.current.size === 0) load();
   }
+  const update = (next) => {
+    listRef.current = next;
+    setList(next);
+  };
 
-  function restorePerson(current, original, personId) {
-    const restore = (list, previous) => {
-      const remaining = list.filter(person => person.personId !== personId);
-      return [...remaining, ...previous.filter(person => person.personId === personId)];
-    };
-    return {
-      ...current,
-      people: restore(current.people, original.people),
-      delivered: restore(current.delivered, original.delivered),
-    };
-  }
-
-  async function mark(person, chosen = person.items) {
-    if (person.guest) {
-      const key = person.guestKey || `guest:${person.requestId}`;
-      if (!begin(key)) return;
-      try {
-        for (const item of chosen) await request(`/api/literature/requests/${item.requestId}/handout`, { method: 'POST' });
-        setSnack({ text: `已發給 ${person.name}`, undo: () => undo({ ...person, items: chosen }) });
-      } catch (err) { setError(`發放失敗：${err.message}，請重試。`); }
-      finally { finish(key); }
-      return;
-    }
-    if (!begin(person.personId)) return;
+  async function toggleItems(person, chosen, checked) {
+    const tokens = chosen.map((item) => `${person.key}:${item.key}`);
+    if (chosen.some((item) => (
+      checked && item.checked
+      || !checked && (!item.checked || !person.guest && !item.deliveryId)
+    ))) return;
+    if (!begin(tokens)) return;
     setError('');
-    navigator.vibrate?.(10);
-    const previous = dataRef.current;
-    const keys = new Set(chosen.map(item => item.key));
-    const optimistic = {
-      ...person,
-      items: chosen,
-      deliveryIds: [],
-      deliveredAt: new Date().toISOString(),
-    };
-    setData(current => ({
-      ...current,
-      people: current.people.map(p => p.personId === person.personId
-        ? { ...p, items: p.items.filter(item => !keys.has(item.key)) }
-        : p).filter(p => p.items.length),
-      delivered: [optimistic, ...current.delivered],
-    }));
-    setSelected(null);
-    try {
-      const result = await request('/api/literature/deliveries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: chosen.map(item => ({
-            personId: person.personId,
-            publicationId: item.publicationId,
-            quantity: item.quantity,
-            shipmentId: item.shipmentId,
-            requestId: item.requestId,
-          })),
-        }),
+    const before = listRef.current;
+    if (checked) {
+      const next = applyCheck(before, person.key, chosen.map((item) => item.key), {
+        at: new Date().toISOString(),
       });
-      const delivered = { ...optimistic, deliveryIds: result.deliveries.map(d => d.id) };
-      setSnack({ text: `已發給 ${person.name}`, undo: () => undo(delivered) });
-      setData(current => ({
-        ...current,
-        delivered: current.delivered.map(p => p === optimistic ? delivered : p),
-      }));
-    } catch (err) {
-      setData(current => restorePerson(current, previous, person.personId));
-      setError(`發放失敗：${err.message}，請重試。`);
-    } finally {
-      finish(person.personId);
+      update(next);
+      if (next.find((entry) => entry.key === person.key)?.done) setOpenKey(null);
+    } else {
+      update(applyUncheck(before, person.key, chosen.map((item) => item.key)));
     }
-  }
-
-  async function undo(person) {
-    if (person.guest) {
-      const key = person.guestKey || `guest:${person.requestId}`;
-      if (!begin(key)) return;
-      try {
-        for (const item of person.items) await request(`/api/literature/requests/${item.requestId || person.requestId}/handout`, { method: 'DELETE' });
-        setSnack({ text: `已取消 ${person.name} 的發放`, undo: () => mark(person) });
-      } catch (err) { setError(`取消失敗：${err.message}，請重試。`); }
-      finally { finish(key); }
-      return;
-    }
-    if (!person.deliveryIds.length || !begin(person.personId)) return;
-    setError('');
-    const previous = dataRef.current;
-    setData(current => ({
-      ...current,
-      delivered: current.delivered.filter(p => p.personId !== person.personId),
-      people: [...current.people, { ...person, deliveryIds: undefined }],
-    }));
     try {
-      await request(`/api/literature/deliveries?ids=${person.deliveryIds.join(',')}`, {
-        method: 'DELETE',
-      });
-      setSnack({ text: `已取消 ${person.name} 的發放`, undo: () => mark(person) });
+      if (person.guest) {
+        for (const item of chosen) {
+          await request(`/api/literature/requests/${item.requestId || person.requestId}/handout`, {
+            method: checked ? 'POST' : 'DELETE',
+          });
+        }
+      } else if (checked) {
+        const result = await request('/api/literature/deliveries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: chosen.map((item) => ({
+              personId: person.personId,
+              publicationId: item.publicationId,
+              quantity: item.quantity,
+              shipmentId: item.shipmentId,
+              requestId: item.requestId,
+            })),
+          }),
+        });
+        update(applyCheck(listRef.current, person.key, chosen.map((item) => item.key), {
+          deliveryIds: result.deliveries.map((delivery) => delivery.id),
+          at: new Date().toISOString(),
+        }));
+      } else {
+        await request(
+          `/api/literature/deliveries?ids=${chosen.map((item) => item.deliveryId).join(',')}`,
+          { method: 'DELETE' },
+        );
+      }
     } catch (err) {
-      setData(current => restorePerson(current, previous, person.personId));
-      setError(`取消失敗：${err.message}，請重試。`);
+      update(checked
+        ? applyUncheck(listRef.current, person.key, chosen.map((item) => item.key))
+        : applyCheck(listRef.current, person.key, chosen.map((item) => item.key), {
+          deliveryIds: chosen.map((item) => item.deliveryId),
+        }));
+      setError(`${checked ? '發放失敗' : '取消失敗'}：${err.message}，請重試。`);
     } finally {
-      finish(person.personId);
+      finish(tokens);
     }
   }
 
   async function complete(shipment) {
-    if (!window.confirm(`確定將裝箱單 ${shipment.slipNumber} 的待發書刊全部標為已發？`)) return;
+    if (!window.confirm(`確定將裝箱單 ${shipment.slipNumber} 的待發書刊全部標為已發？`)) {
+      return;
+    }
     try {
       await request('/api/literature/handouts/complete-shipment', {
         method: 'POST',
@@ -271,7 +228,6 @@ export default function HandoutView({ items, request, reloadCatalog }) {
       setError(err.message);
     }
   }
-
   if (shipments) {
     return (
       <div>
@@ -283,89 +239,75 @@ export default function HandoutView({ items, request, reloadCatalog }) {
     );
   }
 
-  const filtered = data.people.filter(person =>
-    (group === '全部' || groupOf(person) === group) && person.name.includes(search.trim()));
-  const groups = ['A', 'B', 'C', 'D', 'E'].filter(g =>
-    data.people.some(person => groupOf(person) === g));
-  const count = data.people.reduce((sum, person) =>
-    sum + person.items.reduce((total, item) => total + item.quantity, 0), 0);
-
+  const pending = list.filter((person) => !person.done);
+  const delivered = list.filter((person) => person.done);
+  const filtered = pending.filter((person) => (
+    (group === '全部' || groupOf(person) === group) && person.name.includes(search.trim())
+  ));
+  const groups = ['A', 'B', 'C', 'D', 'E'].filter((g) => pending.some((person) => groupOf(person) === g));
+  const stats = pendingStats(list);
   return (
-    <div className={`lit-handouts${snack ? ' lit-handouts--snack' : ''}`} style={{ '--snack-height': `${snackHeight}px` }}>
+    <div className="lit-handouts">
       <div className="lit-handout-heading">
         <h1>發放</h1>
         <Menu items={[{ label: '裝箱單', onSelect: () => setShipments(true) }]} />
       </div>
       <div className="lit-handout-sticky">
-        <p>還有 {data.people.length} 人待發 · {count} 本</p>
+        <p>還有 {stats.people} 人待發 · {stats.quantity} 本</p>
         <input
           type="search"
           value={search}
-          onChange={event => setSearch(event.target.value)}
+          onChange={(event) => setSearch(event.target.value)}
           placeholder="搜尋姓名"
           aria-label="搜尋姓名"
         />
         <div className="chips lit-chips">
-          {['全部', ...groups].map(g => (
-            <button className="chip" key={g} aria-pressed={group === g} onClick={() => setGroup(g)}>
-              {g}
+          {['全部', ...groups].map((groupName) => (
+            <button
+              className="chip"
+              key={groupName}
+              aria-pressed={group === groupName}
+              onClick={() => setGroup(groupName)}
+            >
+              {groupName}
             </button>
           ))}
         </div>
       </div>
       {error && <div className="imp-error" role="alert">{error}</div>}
-      {data.olderShipments.map(shipment => {
-        const date = new Date(shipment.shippedAt);
-        return (
-          <div className="lit-handout-notice" key={shipment.id}>
-            <span>{date.getMonth() + 1}/{date.getDate()} 裝箱單還有 {shipment.pendingPeople} 人未標記</span>
-            <button onClick={() => complete(shipment)}>全部標為已發</button>
-          </div>
-        );
-      })}
-      {loading ? <p className="lit-loading">正在載入發放清單…</p>
-        : !data.people.length ? <p className="lit-handout-empty">都發完了。新的裝箱單到了，在 ⋯ › 裝箱單 上傳。</p>
-          : !filtered.length ? <p className="lit-handout-empty">找不到符合的姓名。</p>
-            : filtered.map(person => (
-              <PersonRow
-                key={person.guestKey || person.personId}
-                person={person}
-                items={items}
-                pending={pending.has(person.guestKey || person.personId)}
-                onMark={mark}
-                onSelect={setSelected}
-              />
-            ))}
+      {loading ? (
+        <p className="lit-loading">正在載入發放清單…</p>
+      ) : !pending.length ? (
+        <p className="lit-handout-empty">都發完了。新的裝箱單到了，在 ⋯ › 裝箱單 上傳。</p>
+      ) : !filtered.length ? (
+        <p className="lit-handout-empty">找不到符合的姓名。</p>
+      ) : filtered.map((person) => (
+        <HandoutCard
+          key={person.key}
+          person={person}
+          items={items}
+          open={openKey === person.key}
+          onToggle={() => setOpenKey(openKey === person.key ? null : person.key)}
+          onToggleItem={(entry, item) => toggleItems(entry, [item], !item.checked)}
+          onCheckAll={(entry, unchecked) => toggleItems(entry, unchecked, true)}
+          pendingKeys={pendingKeys}
+        />
+      ))}
       <details className="lit-handout-delivered">
-        <summary>今天已發 ({data.delivered.length})</summary>
-        {data.delivered.map(person => (
-          <DeliveredRow
-            key={person.guestKey || person.personId}
+        <summary>今天已發 ({delivered.length})</summary>
+        {delivered.map((person) => (
+          <HandoutCard
+            key={person.key}
             person={person}
             items={items}
-            pending={pending.has(person.guestKey || person.personId)}
-            onUndo={undo}
+            open={openKey === person.key}
+            onToggle={() => setOpenKey(openKey === person.key ? null : person.key)}
+            onToggleItem={(entry, item) => toggleItems(entry, [item], !item.checked)}
+            onCheckAll={(entry, unchecked) => toggleItems(entry, unchecked, true)}
+            pendingKeys={pendingKeys}
           />
         ))}
       </details>
-      {selected && (
-        <Sheet title={`${selected.name}的書刊`} close={() => setSelected(null)}>
-          {selected.items.map(item => (
-            <button
-              className="lit-handout-sheet-row"
-              key={item.key}
-              disabled={pending.has(selected.guestKey || selected.personId)}
-              aria-busy={pending.has(selected.guestKey || selected.personId) || undefined}
-              onClick={() => mark(selected, [item])}
-            >
-              <Check />
-              <PubThumb publication={items.find(p => String(p.id) === String(item.publicationId)) || item} />
-              <span>{item.label}{item.quantity > 1 ? ` ×${item.quantity}` : ''}</span>
-            </button>
-          ))}
-        </Sheet>
-      )}
-      {snack && <Snackbar snack={snack} onClose={() => setSnack(null)} onHeight={setSnackHeight} />}
     </div>
   );
 }
