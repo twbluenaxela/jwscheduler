@@ -17,6 +17,10 @@ const paths = {
   chevronDown: <path d="M6 9l6 6 6-6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
   search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></>,
+  plus: <path d="M12 5v14M5 12h14" />,
+  minus: <path d="M5 12h14" />,
+  arrowUp: <><path d="M12 19V5M6 11l6-6 6 6" /></>,
+  arrowDown: <><path d="M12 5v14M6 13l6 6 6-6" /></>,
 };
 
 export default function Icon({ name, className }) {
