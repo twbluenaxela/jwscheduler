@@ -44,7 +44,8 @@ return [
   definition('search_publications', '搜尋書刊 search publications catalog', { query: string('搜尋文字'), limit: number('最多筆數') }, ['query'], async (ctx, a) => {
     const all = await publications(ctx);
     const rows = matchPublications(a.query, all, { limit: Math.min(100, Math.max(1, a.limit ?? 20)) });
-    const data = rows.map((p) => ({ id: p.id, code: p.code, name: localizedName(p, all), language: p.language, format: p.format, category: p.category, itemNumber: p.itemNumber }));
+    const data = rows.map((p) => ({ id: p.id, code: p.code, name: localizedName(p, all), language: p.language, format: p.format, category: p.category, itemNumber: p.itemNumber,
+      orderable: p.orderable !== false, specialOrder: Boolean(p.specialOrder) }));
     return output(`找到 ${data.length} 筆書刊`, data);
   }),
   definition('find_people', '尋找會眾成員 find people group', { query: string('姓名'), group: string('小組') }, [], async (ctx, a) => {
@@ -186,11 +187,16 @@ return [
     return output(`已開始 ${month} 庫存清點`, count);
   }),
   definition('order_checklist', '核對定期訂單 order checklist standing orders', {}, [], async (ctx) => {
-    const [subscriptions, shipments] = await Promise.all([
+    const [subscriptions, shipments, pubs] = await Promise.all([
       ctx.db.literatureSubscription.findMany({ where: { congregationId: ctx.congregationId } }),
       ctx.db.shipment.findMany({ where: { congregationId: ctx.congregationId }, include: { lines: { include: { publication: true } } } }),
+      publications(ctx),
     ]);
-    return output('定期訂單核對', standingOrders({ subscriptions, shipments }));
+    const rows = standingOrders({ subscriptions, shipments }).map((row) => {
+      const match = pubs.find((p) => seriesOf(p.code) === row.series && p.language === row.language);
+      return { ...row, orderable: match?.orderable !== false, specialOrder: Boolean(match?.specialOrder) };
+    });
+    return output('定期訂單核對', rows);
   }),
   definition('get_order_list', '訂購清單 order list what to order JW Hub', {}, [], async (ctx) => {
     const [requests, pubs, counts, subscriptions, shipments, deliveries, people] = await Promise.all([
@@ -202,7 +208,13 @@ return [
       ctx.db.literatureDelivery.findMany({ where: { congregationId: ctx.congregationId } }),
       ctx.db.person.findMany({ where: { congregationId: ctx.congregationId } }),
     ]);
-    return output('訂購清單', buildOrderList({ requests, publications: pubs, counts, subscriptions, shipments, deliveries, people }));
+    const result = buildOrderList({ requests, publications: pubs, counts, subscriptions, shipments, deliveries, people });
+    const withFlags = (rows) => rows.map((row) => ({
+      ...row,
+      orderable: row.publication?.orderable !== false,
+      specialOrder: Boolean(row.publication?.specialOrder),
+    }));
+    return output('訂購清單', { ...result, toOrder: withFlags(result.toOrder), fromStock: withFlags(result.fromStock) });
   }),
 ];
 

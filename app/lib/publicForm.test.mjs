@@ -156,6 +156,13 @@ test('submission message formats members, standing items, notes and flags', asyn
   }), '📚 新的書刊申請\n許文英（B 組）\n• 天天查考聖經2027 ×1\n• 守望台研讀版（大字版） ×1 定期\n備註：全部要紙本\n⚠ 需留意：數量超過 5\nhttps://example.org/literature');
 });
 
+test('catalog keeps non-orderable titles only when they still have stock', () => {
+  const rows = [pub(1, 'a', { orderable: false }), pub(2, 'b', { orderable: false }), pub(3, 'c', { specialOrder: true })];
+  assert.deepEqual(publicCatalog(rows).map(p => p.id), ['3']);
+  assert.deepEqual(publicCatalog(rows, { inStock: new Set(['1']) }).map(p => p.id), ['1', '3']);
+  assert.deepEqual(publicCatalog(rows, { inStock: ['2'] }).map(p => p.id), ['2', '3']);
+});
+
 test('submission message labels guests and truncates after ten items', async () => {
   const { formSubmissionMessage } = await import('./publicForm.mjs');
   const message = formSubmissionMessage({

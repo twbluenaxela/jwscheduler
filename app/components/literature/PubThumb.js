@@ -51,7 +51,7 @@ export default function PubThumb({ publication, code, name, size = 'mini', langu
   );
 }
 
-export function Sheet({ title, close, children }) {
+export function Sheet({ title, close, children, footer }) {
   const [phase, setPhase] = useState('enter');
   useEffect(() => { const frame = requestAnimationFrame(() => setPhase('open')); return () => cancelAnimationFrame(frame); }, []);
   function dismiss() { if (phase === 'exit') return; if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { close(); return; } setPhase('exit'); setTimeout(close, 180); }
@@ -61,6 +61,7 @@ export function Sheet({ title, close, children }) {
         <div className="sheet__grab" />
         <header className="sheet__head"><strong>{title}</strong><button type="button" className="sheet__close" aria-label="關閉" onClick={dismiss}><Icon name="close" /></button></header>
         <div className="lit-sheet-body">{children}</div>
+        {footer && <div className="lit-sheet-foot">{footer}</div>}
       </div>
     </div>
   );

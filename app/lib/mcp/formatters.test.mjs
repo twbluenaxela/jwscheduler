@@ -36,3 +36,20 @@ test('order checklist formats standing order changes', () => {
   const text = formatResult('order_checklist', '定期訂單核對', rows);
   assert.match(text, /守望台研讀版中文：現在 10 本，上次到 5 本，改成 10/);
 });
+
+test('order list marks special orders and keeps paused titles out of the order totals', () => {
+  const data = {
+    toOrder: [
+      { hubCode: 'be-CH', order: 2, need: 2, stock: 0, orderable: true, specialOrder: false },
+      { hubCode: 'it-1-CH', order: 3, need: 3, stock: 0, orderable: true, specialOrder: true },
+      { hubCode: 'old-CH', order: 5, need: 5, stock: 0, orderable: false, specialOrder: false },
+    ],
+    fromStock: [], standing: [],
+  };
+  const text = formatResult('get_order_list', '訂購清單', data);
+  assert.match(text, /要訂：\nbe-CH ×2[^\n]*\nit-1-CH ×3[^\n]*（特別預訂）/);
+  assert.match(text, /暫停訂購（目前無法向分部訂購）：\nold-CH 需要 5（暫停訂購）/);
+  assert.doesNotMatch(text, /old-CH ×5/);
+  const checklist = [{ label: '守望台研讀版中文', now: 10, last: 5, diff: 5, orderable: false, specialOrder: true }];
+  assert.match(formatResult('order_checklist', '定期訂單核對', checklist), /改成 10（特別預訂）（暫停訂購）/);
+});

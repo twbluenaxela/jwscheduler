@@ -227,6 +227,8 @@ model Publication {
   s28Order Int?
   active Boolean @default(true)
   requestable Boolean @default(true)
+  orderable Boolean @default(true)
+  specialOrder Boolean @default(false)
   countable Boolean?
   inventoryLines InventoryLine[]
   coverToken String? @unique
