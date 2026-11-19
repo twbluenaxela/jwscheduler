@@ -20,6 +20,14 @@ test('resolves people exactly, partially, and refuses ambiguity', () => {
   assert.equal(resolvePerson('秀蘭', rows), rows[0]);
   assert.throws(() => resolvePerson('王', rows), /王小明（二）/);
 });
+test('姓名相似建議採字元重疊且要求確認', () => {
+  assert.throws(() => resolvePerson('陳宜萱', [{ name: '陳宜玄' }, { name: '陳倫陞' }, { name: '王以梵' }]), error => {
+    assert.match(error.message, /陳宜玄/);
+    assert.match(error.message, /請向使用者確認/);
+    assert.doesNotMatch(error.message, /王以梵/);
+    return true;
+  });
+});
 test('resolves publications and refuses ambiguous variants', () => {
   const rows = [{ id: 1, code: 'lff', name: '聖經導讀', language: 'CHT', format: 'standard', category: 'book' },
     { id: 2, code: 'lff', name: '聖經導讀', language: 'ENG', format: 'standard', category: 'book' },

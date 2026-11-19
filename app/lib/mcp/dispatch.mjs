@@ -1,7 +1,7 @@
 import { canEdit, canLiterature } from '../roles.mjs';
 import { formatResult, cleanResult } from './formatters.mjs';
 
-const allowed = (tool, ctx) => tool.domain === 'schedule' ? canEdit(ctx.user?.role) : canLiterature(ctx.user);
+const allowed = (tool, ctx) => tool.domain === 'account' || (tool.domain === 'schedule' ? canEdit(ctx.user?.role) : canLiterature(ctx.user));
 const error = (id, code, message) => ({ jsonrpc: '2.0', id, error: { code, message } });
 function validateArguments(schema, args) {
   if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('工具參數必須是物件');
@@ -28,7 +28,7 @@ export async function dispatch(message, ctx, tools) {
     const versions = ['2025-06-18', '2025-03-26', '2024-11-05'];
     result = { protocolVersion: versions.includes(params.protocolVersion) ? params.protocolVersion : versions[0], capabilities: { tools: {} },
       serverInfo: { name: 'jwscheduler', version: '1.0.0' },
-      instructions: '管理會眾書刊與聚會委派。姓名、節目或日期有歧義時請先詢問，勿猜測。修改後請在回覆中確認變更內容。發布通知請在應用程式中操作。' };
+      instructions: '管理會眾書刊與聚會委派。修改前先用 get_my_permissions 確認權限。依日期判斷週中或週末聚會（get_week_schedule 會說明），週中節目用 assign_midweek / update_midweek_part，週末用 assign_weekend。姓名、節目或日期有歧義或找不到時，請向使用者確認，勿自行猜測或選用候選人。修改後請在回覆中確認變更內容。發布通知請在應用程式中操作。' };
   } else if (method === 'ping') result = {};
   else if (method === 'tools/list') {
     const visible = tools.filter((t) => allowed(t, ctx));
@@ -41,8 +41,8 @@ export async function dispatch(message, ctx, tools) {
       try {
         validateArguments(tool.inputSchema, params.arguments || {});
         const value = await tool.handler(ctx, params.arguments || {});
-        result = { content: [{ type: 'text', text: tool.domain === 'schedule' ? value.summary : formatResult(tool.name, value.summary, value.data) }],
-          structuredContent: { data: tool.domain === 'schedule' ? value.data : cleanResult(
+        result = { content: [{ type: 'text', text: ['schedule', 'account'].includes(tool.domain) ? value.summary : formatResult(tool.name, value.summary, value.data) }],
+          structuredContent: { data: ['schedule', 'account'].includes(tool.domain) ? value.data : cleanResult(
             value.data, tool.name === 'list_open_requests' ? 'requestsByPerson' : '',
           ) } };
       } catch (e) {
