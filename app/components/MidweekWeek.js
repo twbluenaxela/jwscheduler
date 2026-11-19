@@ -19,6 +19,20 @@ function defaultAfterPartKey(section, parts) {
   return parts[parts.length - 1]?.id ?? null;
 }
 
+function BandAddButton({ section, label, parts, onOpen }) {
+  return (
+    <button
+      className="band__add"
+      type="button"
+      aria-label={`在${label}新增節目`}
+      onClick={(event) => onOpen(section, defaultAfterPartKey(section, parts), event.currentTarget)}
+    >
+      <Icon name="plus" />
+      新增
+    </button>
+  );
+}
+
 function TextField({ editMode, value, onChange, className, inputClassName, ariaLabel, placeholder }) {
   if (editMode) {
     return (
@@ -193,7 +207,6 @@ function PartRow({
               }}
             />
             <span className="row__dur">
-              （
               <input
                 className="week-edit__input week-edit__input--dur"
                 type="text"
@@ -204,7 +217,6 @@ function PartRow({
                   updatePart({ dur: e.target.value });
                 }}
               />
-              ）
             </span>
           </span>
         ) : (
@@ -475,19 +487,6 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
         );
       }
     }
-    if (editMode) {
-      rows.push(
-        <button
-          key={`addrow:${sectionName}`}
-          className="mw-addrow"
-          type="button"
-          onClick={(event) => openPartSheet(sectionName, defaultAfterPartKey(sectionName, parts), event.currentTarget)}
-        >
-          <Icon name="plus" />
-          新增節目
-        </button>
-      );
-    }
     return rows;
   };
 
@@ -618,21 +617,45 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
       </div>
 
         <div className="band band--treasures">
-        <span className="band__title">上帝話語的寶藏</span>
-      </div>
+          <span className="band__title">上帝話語的寶藏</span>
+          {editMode && (
+            <BandAddButton
+              section="treasures"
+              label="上帝話語的寶藏"
+              parts={shownWeek.treasures ?? []}
+              onOpen={openPartSheet}
+            />
+          )}
+        </div>
       <div className="rows">
         {renderParts('treasures')}
       </div>
 
         <div className="band band--ministry">
-        <span className="band__title">用心準備傳道工作</span>
-      </div>
+          <span className="band__title">用心準備傳道工作</span>
+          {editMode && (
+            <BandAddButton
+              section="ministry"
+              label="用心準備傳道工作"
+              parts={shownWeek.ministry ?? []}
+              onOpen={openPartSheet}
+            />
+          )}
+        </div>
       <div className="rows">
         {renderParts('ministry')}
       </div>
 
       <div className="band band--living">
-        <span className="band__title">基督徒的生活</span>
+          <span className="band__title">基督徒的生活</span>
+          {editMode && (
+            <BandAddButton
+              section="living"
+              label="基督徒的生活"
+              parts={shownWeek.living ?? []}
+              onOpen={openPartSheet}
+            />
+          )}
       </div>
       <div className="rows">
         <div className="row row--song">
