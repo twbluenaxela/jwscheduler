@@ -128,10 +128,35 @@ function PartRow({
   const roleLabels = shownPart.roleLabel?.split('/');
   const isPair = isPairRole && !helperHidden;
   const updatePart = (patch) => updateWeekSection(weekId, sectionName, part.id, updateMidweekWeek, patch);
+  const showHelperToggle = editMode && (isPairRole || (sectionName === 'ministry' && shownPart.cat === 'ministry'));
+  const helperToggleItem = {
+    label: isPair
+      ? `移除${roleLabels?.[1] ?? '助手'}欄位`
+      : `加入${roleLabels?.[1] ?? '助手'}欄位`,
+    onSelect: () => {
+      if (sectionName === 'ministry') {
+        // The EPUB can't always tell pair vs single (e.g. mis-labelled talks),
+        // so for ministry parts the toggle rewrites roleLabel itself — which
+        // also flips the candidate pool (single 演講 → brothers-only).
+        if (isPair) clearSlot?.(`${weekId}_${part.id}_1`);
+        const patch = { roleLabel: isPair ? '學生' : '學生/助手' };
+        onDraftPartChange(patch);
+        updatePart(patch);
+        if (helperHidden) onToggleHelper?.(false); // normalize legacy hideHelper
+      } else {
+        if (!helperHidden) clearSlot?.(`${weekId}_${part.id}_1`);
+        onToggleHelper?.(!helperHidden);
+      }
+    },
+  };
   const menuItems = part.id === 'cbs'
-    ? [{ label: '在上方新增節目', onSelect: onAddAbove }]
+    ? [
+      { label: '在上方新增節目', onSelect: onAddAbove },
+      ...(showHelperToggle ? [helperToggleItem] : []),
+    ]
     : [
       { label: '在下方新增節目', onSelect: onAddBelow },
+      ...(showHelperToggle ? [helperToggleItem] : []),
       { label: '刪除節目', danger: true, onSelect: onRequestDelete },
     ];
 
@@ -219,27 +244,6 @@ function PartRow({
             onAccept={onAccept}
             onClear={onClear}
           />
-        )}
-        {editMode && (isPairRole || (sectionName === 'ministry' && shownPart.cat === 'ministry')) && (
-          <button
-            className="pair-toggle-btn"
-            title={isPair ? `移除${roleLabels?.[1] ?? '助手'}欄位` : `加入${roleLabels?.[1] ?? '助手'}欄位`}
-            onClick={() => {
-              if (sectionName === 'ministry') {
-                // The EPUB can't always tell pair vs single (e.g. mis-labelled talks),
-                // so for ministry parts the toggle rewrites roleLabel itself — which
-                // also flips the candidate pool (single 演講 → brothers-only).
-                if (isPair) clearSlot?.(`${weekId}_${part.id}_1`);
-                const patch = { roleLabel: isPair ? '學生' : '學生/助手' };
-                onDraftPartChange(patch);
-                updatePart(patch);
-                if (helperHidden) onToggleHelper?.(false); // normalize legacy hideHelper
-              } else {
-                if (!helperHidden) clearSlot?.(`${weekId}_${part.id}_1`);
-                onToggleHelper?.(!helperHidden);
-              }
-            }}
-          >{isPair ? '−' : '＋'}</button>
         )}
       </span>
       <span className="row__menu">
