@@ -90,10 +90,13 @@ function matchPublication(item, catalog) {
   if (item.format === 'large') {
     // Hub large-print codes end in lp/ls, but the catalog often keeps them
     // under the base code with format 'large' (wcglp → wcg/large).
+    // An exact Hub code is the same item even if the catalog stores it as
+    // standard (e.g. Hub 'sjjyls' under 大字本 vs catalog sjjyls/standard).
     const base = code.replace(/(?:lp|ls)$/i, '');
     return catalog.find((p) => String(p.code) === code && p.format === 'large')
       || (base !== code ? catalog.find((p) => String(p.code) === base && p.format === 'large') : null)
-      || null; // never fall back to a standard row
+      || catalog.find((p) => String(p.code) === code)
+      || null;
   }
   const byCode = catalog.filter((p) => String(p.code) === code);
   return byCode.find((p) => p.format === item.format) || byCode[0] || null;
@@ -102,7 +105,6 @@ function matchPublication(item, catalog) {
 export function planOrderableSync(publications, parsed) {
   const catalog = (publications || []).filter((p) => !p.language || p.language === 'CHT');
   const matchedIds = new Set();
-  const protectedIds = new Set();
   const add = [];
   const present = [];
   for (const item of parsed.items) {
@@ -112,12 +114,6 @@ export function planOrderableSync(publications, parsed) {
       present.push({ item, pub });
     } else {
       add.push(item);
-      // A large item whose only catalog counterpart is an exact-code standard
-      // row is a data edge case: never close or reflag that standard row.
-      if (item.format === 'large') {
-        const exactStandard = catalog.find((p) => String(p.code) === String(item.code) && p.format === 'standard');
-        if (exactStandard) protectedIds.add(String(exactStandard.id));
-      }
     }
   }
 
@@ -133,7 +129,7 @@ export function planOrderableSync(publications, parsed) {
         const item = present.find((x) => String(x.pub.id) === String(pub.id))?.item;
         if (item && !item.specialOrder) specialOff.push(pub);
       }
-    } else if (pub.orderable !== false && !protectedIds.has(String(pub.id))) {
+    } else if (pub.orderable !== false) {
       close.push(pub);
     }
   }

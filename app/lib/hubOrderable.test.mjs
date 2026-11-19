@@ -182,11 +182,24 @@ test('planOrderableSync matches Hub lp/ls large codes to the base code with larg
   assert.deepEqual(plan.open.map((p) => p.id), [1]);
   assert.deepEqual(plan.specialOn.map((p) => p.id), [2]);
 
-  // A large item whose catalog row is only exact-code/standard must not be touched.
+  // An exact-code standard row is now matched by the large Hub item, so it
+  // is no longer added as a new publication.
   const standardOnly = planOrderableSync([pub(3, 'wcglp', { format: 'standard' })], parsed);
-  assert.deepEqual(standardOnly.add.map((i) => i.code), ['wcglp', 'bhsls']);
+  assert.deepEqual(standardOnly.add.map((i) => i.code), ['bhsls']);
   assert.deepEqual(standardOnly.close, [], 'standard row left alone');
   assert.deepEqual(standardOnly.open, []);
+});
+
+test('planOrderableSync matches an exact Hub large code to a standard catalog row', () => {
+  const pasted = `書籍 | 大字本
+* sjjyls-CH | 中文繁體（國語）
+[純歌詞版](https://hub.example/sjjyls)`;
+  const parsed = parseHubList(pasted);
+  const pubs = [pub(1, 'sjjyls', { format: 'standard', orderable: false })];
+  const plan = planOrderableSync(pubs, parsed);
+  assert.deepEqual(plan.open.map((p) => p.id), [1], 'exact-code standard row matched and opened');
+  assert.deepEqual(plan.add, [], 'no add');
+  assert.deepEqual(plan.close, [], 'no close');
 });
 
 test('planOrderableSync is idempotent once applied', () => {
