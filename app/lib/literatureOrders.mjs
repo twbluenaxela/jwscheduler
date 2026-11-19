@@ -45,17 +45,9 @@ export function standingOrders({ subscriptions, shipments }) {
   }).filter((row) => row.diff !== 0);
 }
 
-export function buildOrderList({ requests, publications, counts, subscriptions, shipments, deliveries, people }) {
-  const pending = new Map();
-  const promised = new Map();
-  for (const request of requests) {
-    const key = String(request.publicationId);
-    if (request.status !== 'pending') continue;
-    const row = pending.get(key) || { need: 0, requests: [] };
-    row.need += request.quantity;
-    row.requests.push({ requestId: request.id, personName: request.person?.name || request.personName || null, guestName: request.guestName || null, quantity: request.quantity });
-    pending.set(key, row);
-  }
+// The order list's stock estimate, shared with the public form so a title with
+// stock stays requestable even when the branch says it is not orderable.
+function stockState({ publications, counts, subscriptions, shipments, requests, deliveries, people }) {
   const stock = new Map();
   for (const count of counts) {
     for (const line of count.lines) {
@@ -86,6 +78,7 @@ export function buildOrderList({ requests, publications, counts, subscriptions, 
       stock.set(key, detail);
     }
   }
+  const promised = new Map();
   for (const request of requests) {
     if (request.status !== 'received' || allocatedRequests.has(String(request.id))) continue;
     const key = String(request.publicationId);
@@ -100,6 +93,33 @@ export function buildOrderList({ requests, publications, counts, subscriptions, 
     if (detail?.date && date <= detail.date) continue;
     handedOut.set(key, (handedOut.get(key) || 0) + delivery.quantity);
   }
+  return { stock, handedOut, promised };
+}
+
+// Map of publication id → estimated on-hand quantity, using exactly the same
+// computation the order list uses for its `stock` column.
+export function stockAvailableByPublication(args) {
+  const { stock, handedOut, promised } = stockState(args);
+  const result = new Map();
+  for (const publication of args.publications || []) {
+    const key = String(publication.id);
+    const detail = stock.get(key) || { base: 0, date: null, fromShipments: 0 };
+    result.set(key, Math.max(0, detail.base + detail.fromShipments - (handedOut.get(key) || 0) - (promised.get(key) || 0)));
+  }
+  return result;
+}
+
+export function buildOrderList({ requests, publications, counts, subscriptions, shipments, deliveries, people }) {
+  const pending = new Map();
+  for (const request of requests) {
+    const key = String(request.publicationId);
+    if (request.status !== 'pending') continue;
+    const row = pending.get(key) || { need: 0, requests: [] };
+    row.need += request.quantity;
+    row.requests.push({ requestId: request.id, personName: request.person?.name || request.personName || null, guestName: request.guestName || null, quantity: request.quantity });
+    pending.set(key, row);
+  }
+  const { stock, handedOut, promised } = stockState({ publications, counts, subscriptions, shipments, requests, deliveries, people });
   const toOrder = [];
   const fromStock = [];
   const sorted = publications.filter((item) => pending.has(String(item.id))).sort((a, b) => {

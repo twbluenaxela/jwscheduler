@@ -63,4 +63,6 @@ test('search tool returns useful rows in text and cleaned structured data', asyn
   const result = await invoke(context(), 'search_publications', { query: 'gwt2' });
   assert.match(result.content[0].text, /#4 聖經導讀 gwt2.*中文.*一般/);
   assert.equal(result.structuredContent.data[0].id, '4');
+  assert.equal(result.structuredContent.data[0].orderable, true);
+  assert.equal(result.structuredContent.data[0].specialOrder, false);
 });

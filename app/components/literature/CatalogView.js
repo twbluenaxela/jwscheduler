@@ -1,6 +1,8 @@
 'use client';
 import { localizedName } from '../../lib/publicForm.mjs';
+import { sectionLabel } from '../../lib/hubOrderable.mjs';
 import Icon from './Icon';
+import Menu from './Menu';
 import { useMemo, useState } from 'react';
 import Toast from '../Toast';
 import PubThumb, { Sheet } from './PubThumb';
@@ -25,8 +27,17 @@ const blank = () => ({
   note: '',
   active: true,
   requestable: true,
+  orderable: true,
+  specialOrder: false,
   countable: null,
 });
+const HUB_GROUPS = [
+  ['add', '新增到目錄'],
+  ['open', '恢復可訂購'],
+  ['close', '暫停訂購'],
+  ['specialOn', '標記特別預訂'],
+  ['specialOff', '取消特別預訂'],
+];
 const options = (labels) =>
   Object.entries(labels).map(([value, label]) => (
     <option key={value} value={value}>
@@ -73,6 +84,12 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [toast, setToast] = useState(null);
+  const [hubOpen, setHubOpen] = useState(false),
+    [hubText, setHubText] = useState(''),
+    [hubPlan, setHubPlan] = useState(null),
+    [hubBusy, setHubBusy] = useState(false),
+    [hubError, setHubError] = useState(''),
+    [addMissing, setAddMissing] = useState(true);
   const categories = Object.keys(CATEGORY_LABELS).filter((c) =>
     items.some((p) => p.category === c && (showInactive || p.active)),
   );
@@ -199,6 +216,43 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
       setBusy(false);
     }
   }
+  async function previewHub() {
+    setHubBusy(true);
+    setHubError('');
+    try {
+      setHubPlan(await request('/api/literature/catalog/orderable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: hubText }),
+      }));
+    } catch (err) {
+      setHubPlan(null);
+      setHubError(err.message);
+    } finally {
+      setHubBusy(false);
+    }
+  }
+  async function applyHub() {
+    setHubBusy(true);
+    setHubError('');
+    try {
+      const data = await request('/api/literature/catalog/orderable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: hubText, apply: true, addMissing }),
+      });
+      await load();
+      setHubOpen(false);
+      setHubPlan(null);
+      setHubText('');
+      const counts = data.counts || {};
+      setToast({ msg: `可訂購清單已更新（暫停 ${counts.close || 0}、恢復 ${counts.open || 0}、新增 ${counts.add || 0}）` });
+    } catch (err) {
+      setHubError(err.message);
+    } finally {
+      setHubBusy(false);
+    }
+  }
   const field = (label, key, type = 'text') => (
     <label className="field">
       <span className="field__label">{label}</span>
@@ -223,6 +277,12 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
       </select>
     </label>
   );
+  const hubPlanData = hubPlan?.plan;
+  const hubChangeCount = hubPlanData
+    ? hubPlanData.open.length + hubPlanData.close.length + hubPlanData.specialOn.length +
+      hubPlanData.specialOff.length + (addMissing ? hubPlanData.add.length : 0)
+    : 0;
+  const hubHasChanges = hubChangeCount > 0;
   const card = (p) => (
     <button
       key={p.id}
@@ -232,7 +292,12 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
       {p.coverUrl && <PubThumb publication={p} size="card" />}
       <span className="lit-card__body">
         {!p.coverUrl && <span className="lit-card__placeholder-code">{p.code}</span>}
-        <strong className="lit-card__name">{p.note && <span className="lit-note-dot" />}{localizedName(p, items)}</strong>
+        <strong className="lit-card__name">
+          {p.note && <span className="lit-note-dot" />}
+          {localizedName(p, items)}
+          {p.specialOrder && <small className="lit-badge">特別預訂</small>}
+          {p.orderable === false && <small className="lit-badge">暫停訂購</small>}
+        </strong>
         {p.coverUrl ? <span className="lit-code">{p.code}</span> : <span className="lit-code">{[FORMAT_LABELS[p.format], LANGUAGE_LABELS[p.language]].filter(Boolean).join(' · ')}</span>}
       </span>
     </button>
@@ -243,11 +308,74 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
         <input className="field__input" placeholder={`搜尋 ${items.filter((p) => p.active).length} 項書刊`}
           value={query} onChange={(e) => setQuery(e.target.value)} />
         <button className="btn btn--primary lit-add" aria-label="新增" onClick={() => setActions(true)}>＋</button>
+        <Menu label="更多目錄選項" items={[{ label: '更新可訂購清單', onSelect: () => {
+          setHubError('');
+          setHubPlan(null);
+          setHubOpen(true);
+        } }]} />
       </div>
       {actions && <Sheet title="新增" close={() => setActions(false)}>
         <div className="lit-action-sheet">
           <button className="btn" onClick={() => { setActions(false); edit(null); }}>新增書刊</button>
           <button className="btn" onClick={() => { setActions(false); openPeriod(); }}>新增期數</button>
+        </div>
+      </Sheet>}
+      {hubOpen && <Sheet
+        title="更新可訂購清單"
+        close={() => { setHubOpen(false); setHubPlan(null); }}
+        footer={<>
+          <button className="btn" disabled={hubBusy} onClick={() => { setHubOpen(false); setHubPlan(null); }}>取消</button>
+          <button className="btn btn--primary" disabled={hubBusy || !hubHasChanges} onClick={applyHub}>
+            {hubBusy ? '更新中…' : hubHasChanges ? `確認更新（${hubChangeCount} 項變更）` : '目前已是最新'}
+          </button>
+        </>}
+      >
+        <div className="lit-form lit-hub-form">
+          <label className="field">
+            <span className="field__label">貼上 Hub 書刊清單</span>
+            <textarea
+              className="field__input lit-hub-textarea"
+              rows={9}
+              placeholder="把 Hub 書刊清單頁面全選複製後貼在這裡"
+              value={hubText}
+              onChange={(e) => setHubText(e.target.value)}
+            />
+          </label>
+          <div className="lit-hub-preview-row">
+            <button className="btn" disabled={hubBusy || !hubText.trim()} onClick={previewHub}>
+              {hubBusy ? '預覽中…' : '預覽'}
+            </button>
+          </div>
+          {hubError && <p className="imp-error" role="alert">{hubError}</p>}
+          {hubPlanData && <>
+            <p className="lit-hub-detected">已偵測：{hubPlan.sections.map(sectionLabel).join('、')} — 其他類別不會變更</p>
+            {HUB_GROUPS.filter(([key]) => (hubPlanData[key] || []).length).map(([key, label]) => {
+              const rows = hubPlanData[key] || [];
+              return (
+                <details key={key} className="lit-hub-group">
+                  <summary>
+                    <span>{label}</span>
+                    <span className="lit-hub-count">{rows.length}</span>
+                    <Icon name="chevronRight" className="lit-hub-chevron" />
+                  </summary>
+                  <ul>
+                    {rows.map((row, index) => (
+                      <li key={row.id || `${row.code}-${index}`}>
+                        {row.code} · {row.name}
+                        {row.format === 'large' && <small className="lit-badge">大字</small>}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              );
+            })}
+            {hubPlanData.add.length > 0 && (
+              <label className="lit-check">
+                <input type="checkbox" checked={addMissing} onChange={(e) => setAddMissing(e.target.checked)} />{' '}
+                同時新增目錄中沒有的 {hubPlanData.add.length} 項
+              </label>
+            )}
+          </>}
         </div>
       </Sheet>}
       <div className="chips lit-chips">
@@ -366,6 +494,8 @@ export default function CatalogView({ items, setItems, loading, loadError, load,
                 {field('期數', 'issue')}
                 {field('備註', 'note')}
                 <label className="field"><span className="field__label">開放申請</span><input type="checkbox" role="switch" checked={form.requestable !== false} onChange={e => setForm({ ...form, requestable: e.target.checked })} /></label>
+                <label className="field"><span className="field__label">可向分部訂購</span><input type="checkbox" role="switch" checked={form.orderable !== false} onChange={e => setForm({ ...form, orderable: e.target.checked })} /></label>
+                <label className="field"><span className="field__label">特別預訂</span><input type="checkbox" role="switch" checked={form.specialOrder === true} onChange={e => setForm({ ...form, specialOrder: e.target.checked })} /></label>
                 <label className="field">
                   <span className="field__label">納入盤點</span>
                   <select className="field__input" value={form.countable == null ? 'auto' : String(form.countable)}

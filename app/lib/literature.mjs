@@ -137,7 +137,7 @@ export function publicationPayload(body, partial = false) {
       throw new Error('別名格式無效');
     data.aliases = body.aliases.map((a) => a.trim());
   } else if (!partial) data.aliases = [];
-  for (const key of ['active', 'onS28', 'requestable'])
+  for (const key of ['active', 'onS28', 'requestable', 'orderable', 'specialOrder'])
     if (key in body) {
       if (typeof body[key] !== 'boolean') throw new Error('書刊欄位格式無效');
       data[key] = body[key];
@@ -172,6 +172,8 @@ export function mapPublication(p) {
     coverToken,
     countable,
     requestable,
+    orderable,
+    specialOrder,
   } = p;
   return {
     id: String(id),
@@ -190,6 +192,8 @@ export function mapPublication(p) {
     active,
     countable,
     requestable,
+    orderable,
+    specialOrder,
     coverUrl: coverToken ? `/api/literature/covers/${coverToken}` : null,
   };
 }

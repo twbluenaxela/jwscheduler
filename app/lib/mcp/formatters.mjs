@@ -9,6 +9,7 @@ const language = (value) => LANGUAGE_LABELS[value] || value || '未知語言';
 const state = (value) => STATUS_LABELS[value] || value;
 const date = (value) => value ? new Date(value).toISOString().slice(0, 10) : '日期不明';
 const pub = (value) => value ? `${value.name || '未知書刊'} ${value.code || ''}`.trim() : '未知書刊';
+const flags = (row) => `${row.specialOrder ? '（特別預訂）' : ''}${row.orderable === false ? '（暫停訂購）' : ''}`;
 const empty = (rows) => rows.length ? rows : ['無'];
 const permitted = new Set([
   'id', 'personId', 'publicationId', 'requestId', 'shipmentId', 'countId', 'name', 'code', 'language', 'format', 'category',
@@ -16,7 +17,7 @@ const permitted = new Set([
   'deliveredAt', 'shippedAt', 'slipNumber', 'source', 'month', 'opening', 'received', 'onHand', 'distributed', 'counted', 'total',
   'publication', 'person', 'shipment', 'subscriptions', 'requests', 'deliveries', 'lines', 'count', 'groups', 'remainders', 'remainder',
   'subscribed', 'lastReceived', 'issueCode', 'diff', 'delivered', 'deliveredQuantity', 'short', 'rawCode', 'issue', 'lineCount',
-  'totalQuantity', 'data', 'entries', 'literatureNote',
+  'totalQuantity', 'data', 'entries', 'literatureNote', 'orderable', 'specialOrder',
 ]);
 export function cleanResult(value, key = '') {
   if (value instanceof Date) return date(value);
@@ -82,18 +83,22 @@ export function formatResult(name, summary, data) {
       lines = data.map((r) => `${series(r.series)} ${language(r.language)}：×${r.subscribed}`);
       break;
     case 'order_checklist':
-      lines = data.map((row) => `${row.label}：現在 ${row.now} 本，上次到 ${row.last} 本，改成 ${row.now}`);
+      lines = data.map((row) => `${row.label}：現在 ${row.now} 本，上次到 ${row.last} 本，改成 ${row.now}${flags(row)}`);
       break;
-    case 'get_order_list':
+    case 'get_order_list': {
+      // Paused titles stay visible as demand but do not count toward the order.
+      const paused = [...data.toOrder, ...data.fromStock].filter((row) => row.orderable === false);
       lines = [
         '要訂：',
-        ...data.toOrder.map((row) => `${row.hubCode} ×${row.order}（需要 ${row.need}，庫存 ${row.stock}）`),
+        ...data.toOrder.filter((row) => row.orderable !== false).map((row) => `${row.hubCode} ×${row.order}（需要 ${row.need}，庫存 ${row.stock}）${flags(row)}`),
         '庫存夠，直接發：',
-        ...data.fromStock.map((row) => `${row.hubCode} ×${row.need}`),
+        ...data.fromStock.filter((row) => row.orderable !== false).map((row) => `${row.hubCode} ×${row.need}${flags(row)}`),
+        ...(paused.length ? ['暫停訂購（目前無法向分部訂購）：', ...paused.map((row) => `${row.hubCode} 需要 ${row.need}${flags(row)}`)] : []),
         '定期要調整：',
-        ...data.standing.map((row) => `${row.label}：現在 ${row.now} 本，上次到 ${row.last} 本，改成 ${row.now}`),
+        ...data.standing.map((row) => `${row.label}：現在 ${row.now} 本，上次到 ${row.last} 本，改成 ${row.now}${flags(row)}`),
       ];
       break;
+    }
     case 'list_shipments':
       lines = data.map((s) => `裝箱單 ${s.slipNumber}｜${date(s.shippedAt || s.createdAt)}｜` +
         `${s.lines.length} 項，共 ${s.lines.reduce((sum, line) => sum + line.quantity, 0)} 本`);

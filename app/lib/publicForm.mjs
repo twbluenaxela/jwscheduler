@@ -40,8 +40,11 @@ export const isStanding = (publication) => STANDING_SERIES.includes(standingSeri
 export const defaultKind = (publication, guest = false) =>
   !guest && isStanding(publication) ? 'standing' : 'once';
 
-export function publicCatalog(publications) {
-  const candidates = publications.filter(p => p.active && p.requestable !== false && p.category !== 'form');
+export function publicCatalog(publications, { inStock } = {}) {
+  const stock = inStock instanceof Set ? inStock : new Set(inStock || []);
+  // A title the branch cannot take is still requestable while we hold stock.
+  const candidates = publications.filter(p => p.active && p.requestable !== false && p.category !== 'form' &&
+    (p.orderable !== false || stock.has(String(p.id))));
   const groups = new Map();
   for (const p of candidates) {
     const series = seriesOf(p.code);
