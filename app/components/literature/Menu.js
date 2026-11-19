@@ -72,7 +72,7 @@ export default function Menu({ items, label = '更多選項' }) {
               key={index}
               type="button"
               role="menuitem"
-              className={item.danger ? 'lit-popmenu-danger' : undefined}
+              className={item.danger ? 'lit-popmenu__item--danger lit-popmenu-danger' : undefined}
               onClick={() => selectItem(item.onSelect)}
             >
               {item.label}

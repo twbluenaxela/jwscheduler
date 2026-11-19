@@ -263,7 +263,7 @@ export default function MeetingsPage({
   weekendFilter, setWeekendFilter, weekendRows,
   weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen,
   addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField,
-  getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, addMidweekPart, deleteMidweekWeek, clearSlot, setPage,
+  getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, addMidweekPart, deleteMidweekPart, deleteMidweekWeek, clearSlot, setPage,
   getSuggestion, onAccept, onClear,
   suggestions = {}, fetchMidweekSuggestions, acceptAllSuggestions, clearSuggestions,
   fetchWeekendSuggestions, canEdit = true,
@@ -485,6 +485,7 @@ export default function MeetingsPage({
                 openSheet={openSheet}
                 updateMidweekWeek={updateMidweekWeek}
                 addMidweekPart={addMidweekPart}
+                deleteMidweekPart={deleteMidweekPart}
                 cardRef={captureRef}
                 getSuggestion={getSuggestion}
                 onAccept={onAccept}

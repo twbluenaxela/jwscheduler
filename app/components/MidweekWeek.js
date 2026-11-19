@@ -1,104 +1,22 @@
 'use client';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import Icon from './literature/Icon';
+import Menu from './literature/Menu';
+import PartTimelineSheet from './PartTimelineSheet';
 import { slotCat } from '../lib/partTypes.mjs';
 import { isMidweekSuspended, suspendedNotice } from '../lib/weekType.mjs';
 
-function parseDurationMinutes(value) {
-  const match = String(value ?? '').match(/^\s*(\d+)\s*(?:分鐘|min)?\s*$/i);
-  return match ? Number(match[1]) : null;
-}
+const SECTION_LABELS = {
+  treasures: '上帝話語的寶藏',
+  ministry: '用心準備傳道工作',
+  living: '基督徒生活',
+};
 
-function addMinutesToTime(time, minutes) {
-  const match = String(time ?? '').match(/^(\d{1,2}):(\d{2})$/);
-  if (!match || !Number.isFinite(minutes)) return '';
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (hour < 1 || hour > 12 || minute > 59) return '';
-  const total = hour * 60 + minute + minutes;
-  const nextHour = (((Math.floor(total / 60) - 1) % 12) + 12) % 12 + 1;
-  const nextMinute = ((total % 60) + 60) % 60;
-  return `${nextHour}:${String(nextMinute).padStart(2, '0')}`;
-}
-
-function AddPartForm({ section, afterPart, followingParts, onCancel, onSubmit, busy }) {
-  const [title, setTitle] = useState('');
-  const [dur, setDur] = useState('');
-  const [time, setTime] = useState(() => addMinutesToTime(afterPart.time, parseDurationMinutes(afterPart.dur)));
-  const [cat, setCat] = useState(section === 'ministry' ? 'ministry' : section === 'living' ? 'living' : 'treasures');
-  const [ministryRole, setMinistryRole] = useState('pair');
-
-  const roleLabel = section === 'ministry'
-    ? (cat === 'ministrytalk' ? '學生' : ministryRole === 'pair' ? '學生/助手' : '學生')
-    : cat === 'reading' ? '學生' : null;
-  const preview = [];
-  let cursor = time ? addMinutesToTime(time, parseDurationMinutes(dur)) : '';
-  for (const part of followingParts) {
-    if (!cursor) break;
-    preview.push(`${part.title} ${cursor}`);
-    cursor = addMinutesToTime(cursor, parseDurationMinutes(part.dur));
+function defaultAfterPartKey(section, parts) {
+  if (section === 'living') {
+    return ([...parts].reverse().find((part) => part.id !== 'cbs') ?? parts[parts.length - 1])?.id ?? null;
   }
-  if (section === 'living' && cursor) preview.push(`結語 ${cursor}`);
-
-  function handleSubmit(event) {
-    event.preventDefault();
-    if (!title.trim() || !dur.trim() || busy) return;
-    onSubmit({ section, afterPartKey: afterPart.id, title: title.trim(), dur: dur.trim(), time, cat, roleLabel });
-  }
-
-  return (
-    <form className="mw-addpart" onSubmit={handleSubmit}>
-      <div className="mw-addpart__heading">新增節目</div>
-      <div className="mw-addpart__fields">
-        <label>
-          <span>時間</span>
-          <input className="week-edit__input week-edit__input--time" value={time} onChange={(e) => setTime(e.target.value)} placeholder="8:26" aria-label="新增節目時間" />
-        </label>
-        <label className="mw-addpart__title">
-          <span>節目名稱</span>
-          <input autoFocus className="week-edit__input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="輸入節目名稱" aria-label="新增節目名稱" />
-        </label>
-        <label>
-          <span>時長</span>
-          <input className="week-edit__input week-edit__input--dur" value={dur} onChange={(e) => setDur(e.target.value)} placeholder="15 分鐘" aria-label="新增節目時長" />
-        </label>
-        {section === 'treasures' && (
-          <label>
-            <span>類型</span>
-            <select className="week-edit__input" value={cat} onChange={(e) => setCat(e.target.value)} aria-label="新增節目類型">
-              <option value="treasures">寶藏演講</option>
-              <option value="gems">經文寶石</option>
-              <option value="reading">經文朗讀</option>
-            </select>
-          </label>
-        )}
-        {section === 'ministry' && (
-          <>
-            <label>
-              <span>類型</span>
-              <select className="week-edit__input" value={cat} onChange={(e) => setCat(e.target.value)} aria-label="新增節目類型">
-                <option value="ministry">傳道練習</option>
-                <option value="ministrytalk">傳道演講</option>
-              </select>
-            </label>
-            {cat === 'ministry' && (
-              <label>
-                <span>指派欄位</span>
-                <select className="week-edit__input" value={ministryRole} onChange={(e) => setMinistryRole(e.target.value)} aria-label="傳道練習指派方式">
-                  <option value="pair">學生＋助手</option>
-                  <option value="single">學生</option>
-                </select>
-              </label>
-            )}
-          </>
-        )}
-      </div>
-      {preview.length > 0 && <div className="mw-addpart__preview">本段時間預覽：{preview.join(' · ')}</div>}
-      <div className="mw-addpart__actions">
-        <button className="btn btn--sm" type="button" onClick={onCancel} disabled={busy}>取消</button>
-        <button className="btn btn--primary btn--sm" type="submit" disabled={busy || !title.trim() || !dur.trim()}>{busy ? '儲存中…' : '新增節目'}</button>
-      </div>
-    </form>
-  );
+  return parts[parts.length - 1]?.id ?? null;
 }
 
 function TextField({ editMode, value, onChange, className, inputClassName, ariaLabel, placeholder }) {
@@ -201,16 +119,24 @@ function PartRow({
   helperHidden,
   onToggleHelper,
   clearSlot,
-  onAddAfter,
+  onRequestDelete,
+  onAddBelow,
+  onAddAbove,
 }) {
   const shownPart = draftPart ?? part;
   const isPairRole = shownPart.roleLabel?.includes('/');
   const roleLabels = shownPart.roleLabel?.split('/');
   const isPair = isPairRole && !helperHidden;
   const updatePart = (patch) => updateWeekSection(weekId, sectionName, part.id, updateMidweekWeek, patch);
+  const menuItems = part.id === 'cbs'
+    ? [{ label: '在上方新增節目', onSelect: onAddAbove }]
+    : [
+      { label: '在下方新增節目', onSelect: onAddBelow },
+      { label: '刪除節目', danger: true, onSelect: onRequestDelete },
+    ];
 
   return (
-    <div className="row">
+    <div className="row" data-part-key={part.id}>
       <span className="row__time">
         <TextField
           editMode={editMode}
@@ -315,9 +241,9 @@ function PartRow({
             }}
           >{isPair ? '−' : '＋'}</button>
         )}
-        {editMode && (
-          <button className="mw-addpart__trigger" type="button" title="在此後新增節目" aria-label={`在「${shownPart.title}」後新增節目`} onClick={onAddAfter}>＋節目</button>
-        )}
+      </span>
+      <span className="row__menu">
+        {editMode && <Menu label={`「${shownPart.title}」選項`} items={menuItems} />}
       </span>
     </div>
   );
@@ -328,17 +254,30 @@ function initHiddenHelpers(week) {
   return new Set(allParts.filter((p) => p.hideHelper).map((p) => p.id));
 }
 
-export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, addMidweekPart, cardRef, getSuggestion, onAccept, onClear, clearSlot }) {
+export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, addMidweekPart, deleteMidweekPart, cardRef, getSuggestion, onAccept, onClear, clearSlot }) {
   const wId = `mw${week.id}`;
   const ctx = week.date;
   const [draftWeek, setDraftWeek] = useState(week);
   const [hiddenHelpers, setHiddenHelpers] = useState(() => initHiddenHelpers(week));
-  const [addingAfter, setAddingAfter] = useState(null);
+  const [sheet, setSheet] = useState(null); // { section, afterPartKey }
+  const [confirmingDelete, setConfirmingDelete] = useState(null);
   const [addingBusy, setAddingBusy] = useState(false);
+  const sheetTriggerRef = useRef(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
 
   useEffect(() => {
-    if (!editMode) setAddingAfter(null);
+    if (!editMode) {
+      setSheet(null);
+      setConfirmingDelete(null);
+    }
   }, [editMode]);
+
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    const onKeyDown = (event) => { if (event.key === 'Escape') setConfirmingDelete(null); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirmingDelete]);
 
   // Removing/adding a helper slot writes hideHelper into the shared week state.
   // It persists when edit mode is exited (saveMidweekWeek sends every part's hideHelper).
@@ -362,8 +301,10 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
   useEffect(() => {
     setDraftWeek(week);
     setHiddenHelpers(initHiddenHelpers(week));
-    setAddingAfter(null);
+    setSheet(null);
+    setConfirmingDelete(null);
     setAddingBusy(false);
+    setDeletingBusy(false);
   }, [week.id]);
 
   const shownWeek = editMode ? draftWeek : week;
@@ -381,26 +322,59 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     updateWeekSection(week.id, sectionName, partId, updateMidweekWeek, patch);
   };
 
+  function openPartSheet(sectionName, afterPartKey, trigger) {
+    setConfirmingDelete(null);
+    sheetTriggerRef.current = trigger ?? (typeof document !== 'undefined' ? document.activeElement : null);
+    setSheet({ section: sectionName, afterPartKey });
+  }
+
+  function closePartSheet() {
+    setSheet(null);
+    requestAnimationFrame(() => sheetTriggerRef.current?.focus?.());
+  }
+
+  const applyUpdates = (current, data, removedKey) => {
+    const next = { ...current };
+    const updates = new Map((data.updates ?? []).map((item) => [item.partKey, item]));
+    for (const section of ['treasures', 'ministry', 'living']) {
+      next[section] = (current[section] ?? [])
+        .filter((part) => part.id !== removedKey)
+        .map((part) => {
+          const update = updates.get(part.id);
+          if (!update) return part;
+          return {
+            ...part,
+            partNum: update.partNum,
+            time: update.time,
+            ...(update.dur !== undefined ? { dur: update.dur } : {}),
+          };
+        });
+    }
+    if (data.closingTime !== undefined) next.closingTime = data.closingTime;
+    if (data.closeSongTime !== undefined) next.closeSongTime = data.closeSongTime;
+    return next;
+  };
+
   const insertCreatedPart = (sectionName, afterPartKey, data) => {
     const apply = (current) => {
-      const next = { ...current };
-      const updates = new Map((data.updates ?? []).map((item) => [item.partKey, item]));
-      for (const section of ['treasures', 'ministry', 'living']) {
-        next[section] = (current[section] ?? []).map((part) => {
-          const update = updates.get(part.id);
-          return update ? { ...part, partNum: update.partNum, time: update.time } : part;
-        });
-      }
+      const next = applyUpdates(current, data);
       const items = [...(next[sectionName] ?? [])];
-      const index = items.findIndex((part) => part.id === afterPartKey);
-      if (index < 0) return current;
-      items.splice(index + 1, 0, data.part);
+      if (afterPartKey === null) {
+        items.unshift(data.part);
+      } else {
+        const index = items.findIndex((part) => part.id === afterPartKey);
+        if (index < 0) return current;
+        items.splice(index + 1, 0, data.part);
+      }
       next[sectionName] = items;
-      if (data.closingTime !== undefined) next.closingTime = data.closingTime;
-      if (data.closeSongTime !== undefined) next.closeSongTime = data.closeSongTime;
       return next;
     };
+    setDraftWeek(apply);
+    updateMidweekWeek(week.id, apply);
+  };
 
+  const removeDeletedPart = (sectionName, partKey, data) => {
+    const apply = (current) => applyUpdates(current, data, partKey);
     setDraftWeek(apply);
     updateMidweekWeek(week.id, apply);
   };
@@ -411,7 +385,7 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
       const data = await addMidweekPart?.(shownWeek, partDraft);
       if (!data) return;
       insertCreatedPart(partDraft.section, partDraft.afterPartKey, data);
-      setAddingAfter(null);
+      setSheet(null);
       openSheet?.(
         `${wId}_${data.part.id}_0`,
         slotCat(data.part, '0'),
@@ -423,44 +397,95 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     }
   };
 
-  const renderParts = (sectionName) => (shownWeek[sectionName] ?? []).map((part) => {
-    const formOpen = addingAfter?.section === sectionName && addingAfter.partKey === part.id;
-    const followingParts = (shownWeek[sectionName] ?? []).filter((candidate) => candidate.partNum > part.partNum);
+  const confirmDelete = async (part) => {
+    setDeletingBusy(true);
+    try {
+      const sectionName = ['treasures', 'ministry', 'living'].find((s) =>
+        shownWeek[s]?.some((p) => p.id === part.id)
+      );
+      const data = await deleteMidweekPart?.(shownWeek, part.id);
+      if (!data) return;
+      removeDeletedPart(sectionName, part.id, data);
+      setConfirmingDelete(null);
+    } finally {
+      setDeletingBusy(false);
+    }
+  };
+
+  const renderDeleteConfirm = (part) => {
+    const roleCount = part.roleLabel?.includes('/') ? 2 : 1;
+    const names = [];
+    for (let i = 0; i < roleCount; i++) {
+      const name = getAssign(`${wId}_${part.id}_${i}`);
+      if (name) names.push(name);
+    }
     return (
-      <Fragment key={part.id}>
-        <PartRow
-          weekId={wId}
-          ctx={ctx}
-          sectionName={sectionName}
-          part={part}
-          editMode={editMode}
-          draftPart={editMode ? shownWeek[sectionName].find((p) => p.id === part.id) : null}
-          onDraftPartChange={(patch) => updateDraftPart(sectionName, part.id, patch)}
-          updateMidweekWeek={updateMidweekWeek}
-          getAssign={getAssign}
-          openSheet={openSheet}
-          getSuggestion={getSuggestion}
-          onAccept={onAccept}
-          onClear={onClear}
-          helperHidden={hiddenHelpers.has(part.id)}
-          onToggleHelper={(hide) => toggleHelper(part.id, hide)}
-          clearSlot={clearSlot}
-          onAddAfter={() => setAddingAfter({ section: sectionName, partKey: part.id })}
-        />
-        {editMode && formOpen && (
-          <AddPartForm
-            key={`${sectionName}:${part.id}`}
-            section={sectionName}
-            afterPart={part}
-            followingParts={followingParts}
-            busy={addingBusy}
-            onCancel={() => setAddingAfter(null)}
-            onSubmit={submitNewPart}
-          />
-        )}
-      </Fragment>
+      <div className="mw-delconfirm" key={`confirm:${part.id}`}>
+        <div className="mw-delconfirm__text">
+          <div className="mw-delconfirm__title">刪除「{part.title}」？</div>
+          {names.length > 0 && (
+            <div className="mw-delconfirm__names">已指派的 {names.join('、')} 也會一併清除</div>
+          )}
+        </div>
+        <div className="mw-delconfirm__actions">
+          <button className="btn btn--sm" type="button" disabled={deletingBusy} onClick={() => setConfirmingDelete(null)}>取消</button>
+          <button className="btn btn--danger btn--sm" type="button" disabled={deletingBusy} onClick={() => confirmDelete(part)}>{deletingBusy ? '刪除中…' : '刪除'}</button>
+        </div>
+      </div>
     );
-  });
+  };
+
+  const renderParts = (sectionName) => {
+    const parts = shownWeek[sectionName] ?? [];
+    const rows = [];
+    for (const part of parts) {
+      if (editMode && confirmingDelete === part.id) {
+        rows.push(renderDeleteConfirm(part));
+      } else {
+        rows.push(
+          <PartRow
+            key={part.id}
+            weekId={wId}
+            ctx={ctx}
+            sectionName={sectionName}
+            part={part}
+            editMode={editMode}
+            draftPart={editMode ? shownWeek[sectionName].find((p) => p.id === part.id) : null}
+            onDraftPartChange={(patch) => updateDraftPart(sectionName, part.id, patch)}
+            updateMidweekWeek={updateMidweekWeek}
+            getAssign={getAssign}
+            openSheet={openSheet}
+            getSuggestion={getSuggestion}
+            onAccept={onAccept}
+            onClear={onClear}
+            helperHidden={hiddenHelpers.has(part.id)}
+            onToggleHelper={(hide) => toggleHelper(part.id, hide)}
+            clearSlot={clearSlot}
+            onRequestDelete={() => { setSheet(null); setConfirmingDelete(part.id); }}
+            onAddBelow={() => openPartSheet(sectionName, part.id)}
+            onAddAbove={() => {
+              const index = parts.findIndex((candidate) => candidate.id === part.id);
+              openPartSheet(sectionName, index > 0 ? parts[index - 1].id : null);
+            }}
+          />
+        );
+      }
+    }
+    if (editMode) {
+      rows.push(
+        <button
+          key={`addrow:${sectionName}`}
+          className="mw-addrow"
+          type="button"
+          onClick={(event) => openPartSheet(sectionName, defaultAfterPartKey(sectionName, parts), event.currentTarget)}
+        >
+          <Icon name="plus" />
+          新增節目
+        </button>
+      );
+    }
+    return rows;
+  };
 
   // type/label are edited via the navstrip (which writes to the parent week state),
   // so read them from `week` — draftWeek wouldn't see those edits live.
@@ -498,6 +523,7 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
   }
 
   return (
+    <>
     <article className={cardClass} ref={cardRef}>
       <div className="mw-head">
         <div className="mw-head__date">
@@ -709,5 +735,18 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
       </div>
       </div>{/* mw-body */}
     </article>
+    {sheet && editMode && (
+      <PartTimelineSheet
+        section={sheet.section}
+        sectionName={SECTION_LABELS[sheet.section]}
+        ctx={ctx}
+        parts={shownWeek[sheet.section] ?? []}
+        afterPartKey={sheet.afterPartKey}
+        busy={addingBusy}
+        onClose={closePartSheet}
+        onSubmit={submitNewPart}
+      />
+    )}
+    </>
   );
 }

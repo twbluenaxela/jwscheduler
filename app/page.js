@@ -444,6 +444,32 @@ export default function App({ initialPage = 'meetings' }) {
     }
   }, [saveMidweekWeek]);
 
+  const deleteMidweekPart = useCallback(async (weekObj, partKey) => {
+    if (!weekObj?.id || !partKey || !(await saveMidweekWeek(weekObj))) return null;
+    try {
+      const token = await getToken();
+      const res = await fetchRetry(`/api/midweek-weeks/${weekObj.id}/parts?partKey=${encodeURIComponent(partKey)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '刪除節目失敗');
+      // The server already removed the assignment rows — just drop them from
+      // the local map, without persisting anything else.
+      if (Array.isArray(data.removedSlotIds) && data.removedSlotIds.length) {
+        setAssignments((prev) => {
+          const next = { ...prev };
+          for (const slotId of data.removedSlotIds) delete next[slotId];
+          return next;
+        });
+      }
+      return data;
+    } catch (err) {
+      setToast({ msg: `刪除節目失敗：${err.message}` });
+      return null;
+    }
+  }, [saveMidweekWeek]);
+
   const deleteMidweekWeek = useCallback(async (weekId) => {
     const idx = midweekWeeks.findIndex((w) => w.id === weekId);
     setMidweekWeeks((prev) => prev.filter((w) => w.id !== weekId));
@@ -718,7 +744,7 @@ export default function App({ initialPage = 'meetings' }) {
     onClear: useCallback((slotId) => setSuggestions(prev => { const n = { ...prev }; delete n[slotId]; return n; }), []),
   };
 
-  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, addMidweekPart, deleteMidweekWeek, clearSlot, ...ghostProps };
+  const sharedProps = { getAssign, openSheet, updateMidweekWeek, saveMidweekWeek, addMidweekPart, deleteMidweekPart, deleteMidweekWeek, clearSlot, ...ghostProps };
   const weekendProps = { weekendRows, weekendEditMode, setWeekendEditMode, weekendExportOpen, setWeekendExportOpen, addWeekendRow, deleteWeekendRow, updateWeekendRow, persistWeekendField, fetchWeekendSuggestions };
 
   const scheduleStats = (() => {
