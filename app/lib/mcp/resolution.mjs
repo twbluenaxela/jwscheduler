@@ -7,8 +7,18 @@ export function resolvePerson(query, people) {
   const exact = people.filter((p) => normalizeText(p.name) === q);
   const matches = exact.length ? exact : people.filter((p) => normalizeText(p.name).includes(q));
   if (matches.length === 1) return matches[0];
-  const list = matches.length ? matches : people;
-  throw new Error(`${matches.length ? '姓名不明確' : '找不到此人'}，候選：${candidates(list, (p) => `${p.name}（${p.serviceGroup || '未分組'}）`) || '無'}`);
+  if (matches.length) throw new Error(`姓名不明確，候選：${candidates(matches, (p) => `${p.name}（${p.serviceGroup || '未分組'}）`)}。請向使用者確認`);
+  const chars = [...q];
+  const scored = people.map((p) => {
+    const remaining = [...normalizeText(p.name)];
+    let shared = 0;
+    for (const char of chars) { const index = remaining.indexOf(char); if (index >= 0) { shared++; remaining.splice(index, 1); } }
+    const score = shared + (normalizeText(p.name).length === chars.length ? 1 : 0) + (normalizeText(p.name)[0] === chars[0] ? 1 : 0);
+    return { p, score };
+  }).filter(({ score }) => score >= (chars.length <= 2 ? 1 : 2))
+    .sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name)).slice(0, 5).map(({ p }) => p);
+  if (!scored.length) throw new Error(`找不到「${query}」，請向使用者確認正確姓名`);
+  throw new Error(`找不到「${query}」，可能是：${candidates(scored, (p) => `${p.name}（${p.serviceGroup || '未分組'}）`)}。請向使用者確認正確姓名後再操作`);
 }
 export function resolvePublication(args, publications) {
   if (args.publication_id != null) {

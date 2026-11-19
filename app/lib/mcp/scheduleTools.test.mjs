@@ -29,10 +29,45 @@ test('權限過濾及呼叫時再次檢查', async () => {
   const tools = [lit, ...scheduleTools];
   const req = (method, params = {}) => ({ jsonrpc: '2.0', id: 1, method, params });
   const list = async (user) => (await dispatch(req('tools/list'), { user }, tools)).result.tools.map((t) => t.name);
-  assert.deepEqual(await list({ role: 'VIEWER', canLiterature: true }), ['lit']);
+  assert.deepEqual(await list({ role: 'VIEWER', canLiterature: true }), ['lit', 'get_my_permissions']);
+  assert.ok(!(await list({ role: 'VIEWER', canLiterature: true })).includes('assign_midweek'));
   assert.ok((await list({ role: 'ADMIN' })).includes('assign_midweek'));
+  assert.ok((await list({ role: 'ADMIN' })).includes('get_my_permissions'));
   assert.ok(!(await list({ role: 'ADMIN' })).includes('lit'));
   assert.equal((await dispatch(req('tools/call', { name: 'assign_midweek' }), { user: { role: 'VIEWER' } }, tools)).result.isError, true);
+});
+test('帳戶權限摘要人人可見且說明檢視權限', async () => {
+  const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_my_permissions' } };
+  const viewer = (await dispatch(request, { user: { role: 'VIEWER', displayName: '王小明' } }, scheduleTools)).result;
+  assert.match(viewer.content[0].text, /僅能查看/);
+  assert.equal(viewer.structuredContent.data.canEditSchedule, false);
+  const admin = (await dispatch(request, { user: { role: 'ADMIN', displayName: '管理員' } }, scheduleTools)).result;
+  assert.match(admin.content[0].text, /可修改/);
+});
+test('週次摘要標示指定日期的聚會類型', async () => {
+  const mid = { ...week, id: 42, isoDate: '2027-01-02', weekdayPill: '星期六 · 19:30' };
+  const end = { date: '1月 3日', isoDate: '2027-01-03' };
+  const ctx = { db: { congregation: { findUnique: async () => ({ weeks: [mid], weekendRows: [end], people: [] }) } }, congregationId: 1 };
+  const call = async date => (await dispatch({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_week_schedule', arguments: { date } } }, { ...ctx, user: { role: 'ADMIN' } }, scheduleTools)).result.content[0].text;
+  assert.match(await call('2027-01-02'), /^1\/2是週中聚會/);
+  assert.match(await call('2027-01-03'), /^1\/3是週末聚會/);
+});
+test('修改週中節目欄位並驗證歧義、停會及必填', async () => {
+  let written;
+  const db = { congregation: { findUnique: async () => ({ weeks: [{ ...week, parts: week.parts.map(p => ({ ...p, id: p.partKey === 't0' ? 8 : 10, weekId: 42 })).concat([{ id: 9, weekId: 42, partKey: 'x', partNum: 6, title: '另一個示範', scenario: '', dur: '' }]) }], weekendRows: [], people: [] }) },
+    part: { update: async args => { written = args; } } };
+  const ctx = { db, congregationId: 1, user: { role: 'ADMIN' } };
+  const invoke = async (args, user = ctx.user) => (await dispatch({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'update_midweek_part', arguments: args } }, { ...ctx, user }, scheduleTools)).result;
+  assert.match((await invoke({ date: '2027-01-02', part: '4' })).content[0].text, /請提供要修改/);
+  assert.match((await invoke({ date: '2027-01-02', part: '示範', title: '更新' })).content[0].text, /節目不明確/);
+  const success = await invoke({ date: '2027-01-02', part: '4', title: '更新' });
+  assert.equal(success.isError, undefined);
+  assert.equal((await invoke({ date: '2027-01-02', part: '4', title: '更新' }, { role: 'VIEWER' })).isError, true);
+  assert.equal(written.data.title, '更新');
+  await invoke({ date: '2027-01-02', part: '4', dur: '15' });
+  assert.equal(written.data.dur, '15 分鐘');
+  db.congregation.findUnique = async () => ({ weeks: [{ ...week, type: 'suspended', isoDate: '2027-01-02', parts: week.parts.map(p => ({ ...p, id: 8, weekId: 42 })) }], weekendRows: [], people: [] });
+  assert.equal((await invoke({ date: '2027-01-02', part: '4', title: '更新' })).isError, true);
 });
 test('修改指派使用既有寫入與變更紀錄，資格不足需強制', async () => {
   const db = makeFakeDb({ weeks: [week], people: [], congregations: [{ id: 1 }] });

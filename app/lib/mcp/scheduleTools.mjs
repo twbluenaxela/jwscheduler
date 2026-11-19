@@ -1,6 +1,7 @@
 import { ensureCalendarFeed, calendarLinks } from '../calendarFeed.mjs';
 import { resolveRowDate, parseIsoDate, toIsoDate } from '../cnDate.mjs';
 import { resolvePerson } from './resolution.mjs';
+import { canEdit, canLiterature } from '../roles.mjs';
 import { slotCat } from '../partTypes.mjs';
 import { CATS } from '../../data/index.js';
 import { isMidweekSuspended, suspendedNotice } from '../weekType.mjs';
@@ -30,6 +31,10 @@ export function resolveWeek(date, weeks, rows, now = todayTaipei()) {
   if (matches.length > 1 || weekends.length > 1) throw new Error('同一週有多筆聚會資料，請在應用程式確認');
   return { week: matches[0], weekend: weekends[0], start };
 }
+export function resolveScheduleDate(date, now = todayTaipei()) {
+  const offsets = { '這週': 0, '本週': 0, '下週': 1, '下下週': 2 };
+  return !date || Object.hasOwn(offsets, date) ? null : parseIsoDate(date) ?? resolveRowDate(date, now);
+}
 const sections = { chairman: ['主席', 'chairman'], 主席: ['主席', 'chairman'], openPrayer: ['開會禱告', 'prayer'],
   開會禱告: ['開會禱告', 'prayer'], closePrayer: ['結束禱告', 'prayer'], 結束禱告: ['結束禱告', 'prayer'] };
 const names = (week) => Object.fromEntries((week.assignments ?? []).map((a) => [a.slotId, a.name]));
@@ -42,10 +47,7 @@ export function resolvePart(week, query, role) {
     return { slotId: `mw${week.id}_${key}`, title: section[0], cat: section[1] };
   }
   const matches = (week.parts ?? []).filter((p) => String(p.partNum) === String(query) || p.title.includes(String(query)));
-  const list = (week.parts ?? []).map((p) => {
-    const labels = (p.roleLabel || '').split('/');
-    return `${p.partNum} ${p.title} ${labels.map((label, i) => `${label || '負責'}：${names(week)[`mw${week.id}_${p.partKey}_${i}`] || '（空）'}`).join('、')}`;
-  }).join('；');
+  const list = partList(week);
   if (matches.length !== 1) throw new Error(`節目${matches.length ? '不明確' : '找不到'}：${list}`);
   const part = matches[0];
   const labels = (part.roleLabel || '').split('/');
@@ -55,6 +57,12 @@ export function resolvePart(week, query, role) {
     if (idx < 0 || idx >= labels.length) throw new Error(`角色不明確：${list}`);
   } else if (labels.length > 1) throw new Error(`請指定角色：${list}`);
   return { slotId: `mw${week.id}_${part.partKey}_${idx}`, title: part.title, role: labels[idx] || '', cat: slotCat(part, idx) };
+}
+function partList(week) {
+  return (week.parts ?? []).map((p) => {
+    const labels = (p.roleLabel || '').split('/');
+    return `${p.partNum} ${p.title} ${labels.map((label, i) => `${label || '負責'}：${names(week)[`mw${week.id}_${p.partKey}_${i}`] || '（空）'}`).join('、')}`;
+  }).join('；');
 }
 async function load(ctx) {
   const congregation = await ctx.db.congregation.findUnique({ where: { id: ctx.congregationId }, include: {
@@ -87,7 +95,7 @@ function formatWeek(week, row) {
 const field = (type, description, extra = {}) => ({ type, description, ...extra });
 const str = (description) => field('string', description);
 const num = (description) => field('integer', description);
-const definition = (name, description, properties, required, handler) => ({ name, description, domain: 'schedule',
+const definition = (name, description, properties, required, handler, domain = 'schedule') => ({ name, description, domain,
   inputSchema: { type: 'object', properties, required, additionalProperties: false }, handler });
 const result = (summary, data) => ({ summary, data });
 const span = (n) => { if (n < 1 || n > 12) throw new Error('週數須為 1 至 12'); return n; };
@@ -136,10 +144,52 @@ function formatPersonItem(item) {
 }
 const datePart = { date: str('日期或這週、下週'), part: str('節目編號、標題或主席、禱告'), role: str('角色或 0、1') };
 export const scheduleTools = [
-  definition('get_week_schedule', '查詢一週聚會安排', { date: str('日期') }, [], async (ctx, a) => {
+  definition('get_my_permissions', '查詢我的帳戶權限', {}, [], async (ctx) => {
+    const role = ctx.user?.role;
+    const labels = { SYSADMIN: '系統管理員', ADMIN: '管理員', VIEWER: '檢視者' };
+    const canEditSchedule = canEdit(role), literature = canLiterature(ctx.user);
+    const name = ctx.user?.displayName || '未知';
+    return result(`您是 ${name}（${labels[role] || role || '未知'}）\n聚會安排：${canEditSchedule ? '可修改' : '僅能查看（無權限）'}\n書刊：${literature ? '可管理' : '無權限'}`, { name, role, canEditSchedule, canLiterature: literature });
+  }, 'account'),
+  definition('get_week_schedule', '查詢一週聚會安排，並判斷該日期是週中或週末', { date: str('日期') }, [], async (ctx, a) => {
     const c = await load(ctx);
     const { week, weekend } = resolveWeek(a.date, c.weeks, c.weekendRows);
-    return result(formatWeek(week, weekend), { week: week ?? null, weekend: weekend ?? null });
+    const date = resolveScheduleDate(a.date);
+    let summary = formatWeek(week, weekend);
+    if (date) {
+      const label = `${date.getMonth() + 1}/${date.getDate()}`;
+      const iso = toIsoDate(date);
+      const opening = week?.isoDate === iso ? `${label}是週中聚會（${week.weekdayPill || '週中'}）` : weekend?.isoDate === iso ? `${label}是週末聚會` : `${label}不是聚會日；該週週中為 ${week?.isoDate || '無'}，週末為 ${weekend?.isoDate || '無'}`;
+      summary = `${opening}\n${summary}`;
+    }
+    return result(summary, { week: week ?? null, weekend: weekend ?? null });
+  }),
+  definition('update_midweek_part', '修改週中節目標題、內容或時長。用於修改週中節目標題/內容/時長，例如本地需要的主題；本地需要請保留「本地需要（…）」格式，括號內的括號改用《》。不會更改負責人（用 assign_midweek）。', {
+    date: str('日期'), part: str('節目編號或標題 substring'), title: str('新標題'), scenario: str('節目內容說明'), dur: str('時長'),
+  }, ['date', 'part'], async (ctx, a) => {
+    if (![a.title, a.scenario, a.dur].some((v) => v !== undefined)) throw new Error('請提供要修改的標題、內容或時長');
+    const data = {};
+    if (a.title !== undefined) { data.title = a.title.trim(); if (data.title.length < 1 || data.title.length > 200) throw new Error('標題須為 1 至 200 字'); }
+    if (a.scenario !== undefined) { data.scenario = a.scenario.trim(); if (data.scenario.length > 1000) throw new Error('內容不得超過 1000 字'); }
+    if (a.dur !== undefined) {
+      const value = a.dur.trim(), match = value.match(/^(\d+)\s*(?:分鐘|min)?$/i);
+      data.dur = match ? (Number(match[1]) >= 1 ? `${Number(match[1])} 分鐘` : (() => { throw new Error('時長格式無效'); })()) : value;
+      if (data.dur.length < 1 || data.dur.length > 50) throw new Error('時長須為 1 至 50 字');
+    }
+    const c = await load(ctx);
+    const { week } = resolveWeek(a.date, c.weeks, c.weekendRows);
+    if (!week) throw new Error('找不到該週週中聚會');
+    if (isMidweekSuspended(week)) throw new Error(suspendedNotice(week));
+    const matches = (week.parts ?? []).filter((p) => String(p.partNum) === String(a.part) || p.title.includes(String(a.part)));
+    if (matches.length !== 1) throw new Error(`節目${matches.length ? '不明確' : '找不到'}：${partList(week)}`);
+    const part = matches[0];
+    if (part.weekId !== week.id) throw new Error('節目資料不屬於該週');
+    const before = { title: part.title, scenario: part.scenario, dur: part.dur };
+    await ctx.db.part.update({ where: { id: part.id }, data });
+    const after = { ...before, ...data };
+    const changes = [];
+    for (const [key, label] of [['title', '標題'], ['scenario', '內容'], ['dur', '時長']]) if (key in data) changes.push(`${label} ${key === 'title' ? `「${before[key] || ''}」→「${after[key]}」` : `${before[key] || '（空）'} → ${after[key] || '（空）'}`}`);
+    return result(`已修改 ${week.date} 第${part.partNum}項：${changes.join('；')}`, { partId: part.id, partKey: part.partKey, before, after });
   }),
   definition('get_upcoming_schedule', '查詢未來數週安排', { weeks: num('週數 1–12') }, [], async (ctx, a) => {
     const c = await load(ctx);
