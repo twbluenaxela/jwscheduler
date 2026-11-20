@@ -430,13 +430,34 @@ export default function App({ initialPage = 'meetings' }) {
     if (!weekObj?.id || !(await saveMidweekWeek(weekObj))) return null;
     try {
       const token = await getToken();
+      // Pass the whole payload through — delete-undo reuses this path with
+      // scenario / hideHelper / assignments so the restored part keeps its chips.
+      const body = { ...partDraft };
+      if (partDraft.scenario !== undefined) body.scenario = partDraft.scenario;
+      if (partDraft.hideHelper !== undefined) body.hideHelper = partDraft.hideHelper;
+      if (partDraft.assignments !== undefined) body.assignments = partDraft.assignments;
       const res = await fetchRetry(`/api/midweek-weeks/${weekObj.id}/parts`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(partDraft),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '新增節目失敗');
+      // Undo already wrote the Assignment rows on the server. Mirror the chips
+      // locally from createdSlotIds + the names we posted — no extra persist call.
+      if (Array.isArray(data.createdSlotIds) && data.createdSlotIds.length && Array.isArray(partDraft.assignments)) {
+        const names = new Map(partDraft.assignments.map((a) => [a.index, a.name]));
+        setAssignments((prev) => {
+          const next = { ...prev };
+          for (const slotId of data.createdSlotIds) {
+            const index = Number(String(slotId).match(/_(\d+)$/)?.[1] ?? 0);
+            const name = names.get(index);
+            if (name) next[slotId] = name;
+            else delete next[slotId];
+          }
+          return next;
+        });
+      }
       return data;
     } catch (err) {
       setToast({ msg: `新增節目失敗：${err.message}` });
@@ -599,9 +620,13 @@ export default function App({ initialPage = 'meetings' }) {
     return data.weeks ?? [];
   }, []);
 
-  const openSheet = useCallback((slotId, catKey, ctxLabel, currentName) => {
+  const openSheet = useCallback((slotId, catKey, ctxLabel, currentName, opts) => {
     if (!canEdit) return; // viewers are read-only: no assigning
-    setSheet({ slotId, catKey, ctxLabel, defaultName: currentName });
+    setSheet({
+      slotId, catKey, ctxLabel, defaultName: currentName,
+      removeLabel: opts?.removeLabel,
+      onRemoveSlot: opts?.onRemoveSlot,
+    });
   }, [canEdit]);
 
   async function persistAssignment(slotId, name) {

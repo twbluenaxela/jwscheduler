@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planPartDeletion, planCompression, recomputeSectionTimes, planInsertAtStart } from './midweekParts.mjs';
+import {
+  planPartDeletion, planCompression, recomputeSectionTimes, planInsertAtStart,
+  planCascade, timeSourceOptions, buildRestorePayload, retimeClientWeek, canEditMidweekSection, shortPartTitle,
+} from './midweekParts.mjs';
 
 function fixtureWeek() {
   const part = (id, partKey, section, partNum, title, dur, time) => ({
@@ -9,6 +12,7 @@ function fixtureWeek() {
   return {
     id: 1210,
     date: '12/10',
+    midSongTime: '8:12',
     closingTime: '9:28',
     closeSongTime: '9:31',
     parts: [
@@ -46,9 +50,11 @@ test('planPartDeletion: 刪除中間的 living 節目，後續 living 時間往�
   // Cursor after cbs is 9:13, 15 min before the old closing 9:28.
   assert.equal(plan.closingTime, '9:13');
   assert.equal(plan.closeSongTime, '9:16');
+  // Living is the last section: 中場唱詩 is before it and never moves.
+  assert.equal(plan.midSongTime, undefined);
 });
 
-test('planPartDeletion: 刪除前段節目時，後面所有區段都重新編號，只有同區段時間往前移', () => {
+test('planPartDeletion: 刪除 treasures 節目時，後面所有區段重新編號並往前移，中場唱詩與結語也往前移', () => {
   const plan = planPartDeletion(fixtureWeek(), 't0');
   const byKey = new Map(plan.updates.map((item) => [item.partKey, item]));
 
@@ -56,29 +62,31 @@ test('planPartDeletion: 刪除前段節目時，後面所有區段都重新編�
   assert.equal(byKey.get('t1').partNum, 1);
   assert.equal(byKey.get('m0').partNum, 3);
   assert.equal(byKey.get('cbs').partNum, 9);
-  // Same-section parts shift back; cross-section parts keep their time.
+  // Treasures end moves from 8:00 to 7:50 (−10), so everything later shifts −10.
   assert.equal(byKey.get('t1').time, '7:36');
   assert.equal(byKey.get('t2').time, '7:46');
-  assert.equal(byKey.get('m0').time, '8:00');
-  assert.equal(byKey.get('cbs').time, '8:58');
-  assert.equal(plan.closingTime, undefined);
+  assert.equal(byKey.get('m0').time, '7:50');
+  assert.equal(byKey.get('m2').time, '7:57');
+  assert.equal(byKey.get('l0').time, '8:08');
+  assert.equal(byKey.get('cbs').time, '8:48');
+  assert.equal(plan.midSongTime, '8:02');
+  assert.equal(plan.closingTime, '9:18');
+  assert.equal(plan.closeSongTime, '9:21');
 });
 
-test('planPartDeletion: 刪除區段最後一個節目不改變任何時間', () => {
+test('planPartDeletion: 刪除區段最後一個節目時同區段不變，但後面區段仍整體前移', () => {
   const plan = planPartDeletion(fixtureWeek(), 't2');
   const byKey = new Map(plan.updates.map((item) => [item.partKey, item]));
 
   assert.equal(byKey.has('t2'), false);
   assert.equal(byKey.get('m0').partNum, 3);
   assert.equal(byKey.get('cbs').partNum, 9);
-  // No same-section part follows t2, so nothing gets a new time and closing
-  // times stay untouched.
-  for (const item of plan.updates) {
-    const original = fixtureWeek().parts.find((p) => p.partKey === item.partKey);
-    assert.equal(item.time, original.time, item.partKey);
-  }
-  assert.equal(plan.closingTime, undefined);
-  assert.equal(plan.closeSongTime, undefined);
+  // No same-section part follows t2, but the section end still moved −4 min.
+  assert.equal(byKey.get('m0').time, '7:56');
+  assert.equal(byKey.get('cbs').time, '8:54');
+  assert.equal(plan.midSongTime, '8:08');
+  assert.equal(plan.closingTime, '9:24');
+  assert.equal(plan.closeSongTime, '9:27');
 });
 
 test('planPartDeletion: 找不到的節目回傳 null', () => {
@@ -152,4 +160,197 @@ test('planInsertAtStart: 從區段第一個節目取得插入編號與起始時�
   };
   assert.deepEqual(planInsertAtStart(week, 'ministry'), { partNum: 4, time: '8:00', renumberFrom: 4 });
   assert.equal(planInsertAtStart(week, 'living'), null);
+});
+
+test('planCascade: 在 ministry 加 5 分鐘，所有 living 節目、中場唱詩與結語都往後 5 分鐘', () => {
+  const cascade = planCascade(fixtureWeek(), { section: 'ministry', delta: 5 });
+  const byKey = new Map(cascade.parts.map((item) => [item.partKey, item]));
+
+  assert.equal(byKey.size, 4);
+  assert.equal(byKey.get('l0').time, '8:23');
+  assert.equal(byKey.get('x_demo').time, '8:38');
+  assert.equal(byKey.get('l1').time, '8:53');
+  assert.equal(byKey.get('cbs').time, '9:03');
+  // Earlier sections (and the ministry section itself) are untouched.
+  assert.equal(byKey.has('m0'), false);
+  assert.equal(byKey.has('t0'), false);
+  assert.equal(cascade.midSongTime, '8:17');
+  assert.equal(cascade.closingTime, '9:33');
+  assert.equal(cascade.closeSongTime, '9:36');
+});
+
+test('planCascade: 區段結束未變（壓縮添加）時不產生任何更新', () => {
+  assert.deepEqual(planCascade(fixtureWeek(), { section: 'ministry', delta: 0 }), { parts: [] });
+  assert.deepEqual(planCascade(fixtureWeek(), { section: 'ministry', delta: null }), { parts: [] });
+});
+
+test('planCascade: 無法解析的時間保持原樣', () => {
+  const week = fixtureWeek();
+  week.parts.find((part) => part.partKey === 'cbs').time = '';
+  week.midSongTime = '';
+  const cascade = planCascade(week, { section: 'treasures', delta: 5 });
+  assert.equal(cascade.parts.some((item) => item.partKey === 'cbs'), false);
+  assert.equal(cascade.midSongTime, undefined);
+  assert.equal(cascade.closingTime, '9:33');
+});
+
+test('shortPartTitle: 在第一個全形或半形括號前截斷並保留完整標題', () => {
+  assert.equal(shortPartTitle('本地需要（訪問：恩德與愛倫夫妻）'), '本地需要');
+  assert.equal(shortPartTitle('會眾研經班'), '會眾研經班');
+  assert.equal(shortPartTitle('新節目 (示範) 說明'), '新節目');
+  assert.equal(shortPartTitle('  本地需要  （說明）'), '本地需要');
+  assert.equal(shortPartTitle(), '');
+});
+
+test('timeSourceOptions: 平均分攤為預設且包含 cbs，其次依序列出各節目與延後結束', () => {
+  const parts = [
+    { partKey: 'l0', title: '本地需要', cat: 'living', dur: '15 分鐘', partNum: 7 },
+    { partKey: 'cbs', title: '會眾研經班', cat: 'cbs', dur: '30 分鐘', partNum: 10 },
+  ];
+  const plan = timeSourceOptions(parts, 5);
+  assert.equal(plan.defaultKey, 'spread');
+  assert.deepEqual(plan.options.map((option) => option.key), ['spread', 'l0', 'cbs', 'later']);
+  assert.deepEqual(
+    plan.options[0].changes.map((change) => [change.partKey, change.from, change.to]),
+    [['l0', 15, 13], ['cbs', 30, 27]],
+  );
+  assert.deepEqual(plan.options[0].adjust, [
+    { partKey: 'l0', dur: '13 分鐘' },
+    { partKey: 'cbs', dur: '27 分鐘' },
+  ]);
+  assert.equal(plan.options[0].shortfall, 0);
+  assert.equal(plan.options[1].label, '本地需要 15→10');
+  assert.equal(plan.options[2].label, '會眾研經班 30→25');
+  assert.deepEqual(plan.options[3].adjust, []);
+});
+
+test('timeSourceOptions: 長標題在標籤中使用短名，完整標題另行保留', () => {
+  const parts = [
+    { partKey: 'l0', title: '本地需要（訪問：恩德與愛倫夫妻）', dur: '15 分鐘', partNum: 7 },
+    { partKey: 'cbs', title: '會眾研經班', dur: '30 分鐘', partNum: 9 },
+  ];
+  const plan = timeSourceOptions(parts, 5);
+  assert.equal(plan.options[1].label, '本地需要 15→10');
+  assert.equal(plan.options[1].fullTitle, '本地需要（訪問：恩德與愛倫夫妻）');
+  assert.deepEqual(
+    plan.options[0].changes.map((change) => [change.title, change.fullTitle]),
+    [['本地需要', '本地需要（訪問：恩德與愛倫夫妻）'], ['會眾研經班', '會眾研經班']],
+  );
+});
+
+test('timeSourceOptions: 只有會眾研經班時也能分攤或單獨扣時間', () => {
+  const parts = [{ partKey: 'cbs', title: '會眾研經班', cat: 'cbs', dur: '30 分鐘', partNum: 9 }];
+  const plan = timeSourceOptions(parts, 5);
+  assert.deepEqual(plan.options.map((option) => option.key), ['spread', 'cbs', 'later']);
+  assert.deepEqual(plan.options[0].changes.map((change) => [change.partKey, change.from, change.to]), [['cbs', 30, 25]]);
+  assert.equal(plan.options[1].label, '會眾研經班 30→25');
+});
+
+test('timeSourceOptions: 需求過大時平均分攤回報 shortfall，且沒有單一節目選項', () => {
+  const parts = [
+    { partKey: 'l0', title: '本地需要', cat: 'living', dur: '15 分鐘', partNum: 7 },
+    { partKey: 'cbs', title: '會眾研經班', cat: 'cbs', dur: '30 分鐘', partNum: 10 },
+  ];
+  const plan = timeSourceOptions(parts, 100);
+  assert.deepEqual(plan.options.map((option) => option.key), ['spread', 'later']);
+  assert.equal(plan.options[0].shortfall, 78);
+  assert.deepEqual(plan.options[0].changes.map((change) => [change.partKey, change.from, change.to]), [['l0', 15, 8], ['cbs', 30, 15]]);
+});
+
+test('canEditMidweekSection: 只有基督徒的生活可以新增或刪除', () => {
+  assert.equal(canEditMidweekSection('living'), true);
+  assert.equal(canEditMidweekSection('treasures'), false);
+  assert.equal(canEditMidweekSection('ministry'), false);
+  assert.equal(canEditMidweekSection(''), false);
+});
+
+function clientWeek() {
+  return {
+    treasures: [
+      { id: 't0', partNum: 1, time: '7:36', dur: '10 分鐘' },
+      { id: 't1', partNum: 2, time: '7:46', dur: '10 分鐘' },
+    ],
+    ministry: [
+      { id: 'm0', partNum: 3, time: '8:00', dur: '3 分鐘' },
+      { id: 'm1', partNum: 4, time: '8:03', dur: '4 分鐘' },
+    ],
+    living: [
+      { id: 'l0', partNum: 5, time: '8:18', dur: '15 分鐘' },
+      { id: 'cbs', partNum: 6, time: '8:33', dur: '30 分鐘' },
+    ],
+    midSongTime: '8:12',
+    closingTime: '9:03',
+    closeSongTime: '9:06',
+  };
+}
+
+test('retimeClientWeek: 改 treasures 時長會往後推移同區段、後面區段與所有共用時間', () => {
+  const next = retimeClientWeek(clientWeek(), { section: 'treasures', partNum: 1, delta: 5 });
+  assert.equal(next.treasures[1].time, '7:51');
+  assert.equal(next.ministry[0].time, '8:05');
+  assert.equal(next.ministry[1].time, '8:08');
+  assert.equal(next.midSongTime, '8:17');
+  assert.equal(next.living[0].time, '8:23');
+  assert.equal(next.living[1].time, '8:38');
+  assert.equal(next.closingTime, '9:08');
+  assert.equal(next.closeSongTime, '9:11');
+  // The edited part itself is not moved, and the original week is untouched.
+  assert.equal(next.treasures[0].time, '7:36');
+  assert.equal(clientWeek().closingTime, '9:03');
+});
+
+test('retimeClientWeek: 改 living 節目只推後面節目與結語，不移中場唱詩', () => {
+  const next = retimeClientWeek(clientWeek(), { section: 'living', partNum: 5, delta: -2 });
+  assert.equal(next.living[1].time, '8:31');
+  assert.equal(next.midSongTime, '8:12');
+  assert.equal(next.closingTime, '9:01');
+  assert.equal(next.closeSongTime, '9:04');
+  assert.equal(next.ministry[0].time, '8:00');
+});
+
+test('retimeClientWeek: delta 0 與無法解析的時間不產生變更', () => {
+  const week = clientWeek();
+  assert.equal(retimeClientWeek(week, { section: 'living', partNum: 5, delta: 0 }), week);
+  week.living[1].time = '';
+  week.closingTime = '';
+  const next = retimeClientWeek(week, { section: 'living', partNum: 5, delta: 3 });
+  assert.equal(next.living[1].time, '');
+  assert.equal(next.closingTime, '');
+  assert.equal(next.closeSongTime, '9:09');
+});
+
+test('buildRestorePayload: 組出 delete undo 所需的 POST payload', () => {
+  const week = fixtureWeek();
+  const deleted = week.parts.find((part) => part.partKey === 'x_demo');
+  deleted.scenario = '示範情境';
+  deleted.hideHelper = true;
+  const assignments = [
+    { slotId: 'mw1210_x_demo_1', name: '助手' },
+    { slotId: 'mw1210_x_demo_0', name: '主講' },
+  ];
+
+  assert.deepEqual(buildRestorePayload(week, 'x_demo', assignments), {
+    section: 'living',
+    afterPartKey: 'l0',
+    title: '年度服務報告',
+    dur: '15 分鐘',
+    time: '8:33',
+    cat: 'living',
+    roleLabel: null,
+    scenario: '示範情境',
+    hideHelper: true,
+    assignments: [
+      { index: 0, name: '主講' },
+      { index: 1, name: '助手' },
+    ],
+  });
+
+  // First part of a section inserts at start; missing part has no payload.
+  assert.equal(buildRestorePayload(week, 't0', []).afterPartKey, null);
+  assert.equal(buildRestorePayload(week, 'nope', []), null);
+  // Callers may also pass assignments with an explicit index.
+  assert.deepEqual(
+    buildRestorePayload(week, 'x_demo', [{ index: 1, name: 'A' }]).assignments,
+    [{ index: 1, name: 'A' }],
+  );
 });

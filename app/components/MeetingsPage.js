@@ -327,6 +327,15 @@ export default function MeetingsPage({
     setWeek(w => (w + 1) % totalWeeks);
   };
 
+  // Single exit path so the toolbar button and the card's inline 「完成」 bar
+  // both save the current draft before leaving edit mode.
+  function finishEdit() {
+    if (!editMode) return;
+    if (midweekWeeks[week]) saveMidweekWeek(midweekWeeks[week]);
+    if (mwPrefix) clearSuggestions?.(mwPrefix);
+    setEditMode(false);
+  }
+
   const tabs = (
     <div className="tabs" role="tablist">
       <button className="tab" role="tab"
@@ -349,13 +358,7 @@ export default function MeetingsPage({
             {canEdit && (
               <button
                 className={`btn${editMode ? ' btn--primary' : ''}`}
-                onClick={() => {
-                  if (editMode) {
-                    saveMidweekWeek(midweekWeeks[week]);
-                    if (mwPrefix) clearSuggestions?.(mwPrefix);
-                  }
-                  setEditMode(e => !e);
-                }}
+                onClick={() => { if (editMode) finishEdit(); else setEditMode(true); }}
               >
                 <span className="pen">{editMode ? '✓' : '✎'}</span>
                 <span>{editMode ? '完成' : '編輯'}</span>
@@ -386,13 +389,6 @@ export default function MeetingsPage({
               {publishResult.error
                 ? `發送失敗：${publishResult.error}`
                 : `已發送 ${publishResult.sent} / ${publishResult.total} 人${publishResult.failed > 0 ? `，${publishResult.failed} 人失敗` : ''}`}
-            </div>
-          )}
-
-          {editMode && (
-            <div className="edit-banner">
-              <span className="pen">✎</span>
-              編輯模式 — 可直接修改會議日期、時間、標題與時長。人名仍請用指派清單調整。
             </div>
           )}
 
@@ -491,6 +487,7 @@ export default function MeetingsPage({
                 onAccept={onAccept}
                 onClear={onClear}
                 clearSlot={clearSlot}
+                onFinishEdit={finishEdit}
               />
             </>
           )}
