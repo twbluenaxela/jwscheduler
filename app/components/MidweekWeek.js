@@ -1,56 +1,33 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import Icon from './literature/Icon';
-import Menu from './literature/Menu';
-import PartTimelineSheet from './PartTimelineSheet';
 import { slotCat } from '../lib/partTypes.mjs';
 import { isMidweekSuspended, suspendedNotice } from '../lib/weekType.mjs';
+import { addMinutes, parseDuration, retimeClientWeek, timeDifference, timeSourceOptions, recomputeSectionTimes } from '../lib/midweekParts.mjs';
 
 const SECTION_LABELS = {
   treasures: '上帝話語的寶藏',
   ministry: '用心準備傳道工作',
-  living: '基督徒生活',
+  living: '基督徒的生活',
 };
+const SECTIONS = ['treasures', 'ministry', 'living'];
 
-function defaultAfterPartKey(section, parts) {
-  if (section === 'living') {
-    return ([...parts].reverse().find((part) => part.id !== 'cbs') ?? parts[parts.length - 1])?.id ?? null;
-  }
-  return parts[parts.length - 1]?.id ?? null;
+const finePointer = () => typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches;
+function useFineFocus(ref) {
+  useEffect(() => { if (finePointer()) requestAnimationFrame(() => ref.current?.focus()); }, []);
 }
 
-function BandAddButton({ section, label, parts, onOpen }) {
-  return (
-    <button
-      className="band__add"
-      type="button"
-      aria-label={`在${label}新增節目`}
-      onClick={(event) => onOpen(section, defaultAfterPartKey(section, parts), event.currentTarget)}
-    >
-      <Icon name="plus" />
-      新增
-    </button>
-  );
+function partContext(ctx, part, includeScenario) {
+  const heading = `${ctx} ・ ${part.title}（${part.dur}）`;
+  return includeScenario && part.scenario ? `${heading}　・　情境：${part.scenario}` : heading;
 }
 
-function TextField({ editMode, value, onChange, className, inputClassName, ariaLabel, placeholder }) {
-  if (editMode) {
-    return (
-      <input
-        className={inputClassName}
-        type="text"
-        value={value ?? ''}
-        aria-label={ariaLabel}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    );
-  }
-
-  return <span className={className}>{value}</span>;
+function sectionEnd(parts) {
+  const last = [...(parts ?? [])].sort((a, b) => a.partNum - b.partNum).at(-1);
+  return last ? (addMinutes(last.time, parseDuration(last.dur)) ?? '') : '';
 }
 
-function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
+function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet, getSuggestion, onAccept, onClear, slotOpts }) {
   const name = getAssign(slotId, defaultName);
   const ghost = !name ? (getSuggestion?.(slotId) ?? null) : null;
 
@@ -65,16 +42,13 @@ function WhoSlot({ slotId, catKey, ctxLabel, defaultName, getAssign, openSheet, 
   }
 
   return (
-    <span
-      className={`who${!name ? ' who--empty' : ''}`}
-      onClick={() => openSheet(slotId, catKey, ctxLabel, name)}
-    >
+    <span className={`who${!name ? ' who--empty' : ''}`} onClick={() => openSheet(slotId, catKey, ctxLabel, name, slotOpts)}>
       {name || '未指派'}
     </span>
   );
 }
 
-function PairSlot({ baseId, catKeys, ctxLabel, defaultNames, roleLabels, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
+function PairSlot({ baseId, catKeys, ctxLabel, defaultNames, roleLabels, getAssign, openSheet, getSuggestion, onAccept, onClear, secondOpts }) {
   const [label0, label1] = roleLabels ?? ['', '助手'];
   const ghostProps = { getSuggestion, onAccept, onClear };
   return (
@@ -96,263 +70,427 @@ function PairSlot({ baseId, catKeys, ctxLabel, defaultNames, roleLabels, getAssi
         defaultName={defaultNames[1] ?? ''}
         getAssign={getAssign}
         openSheet={openSheet}
+        slotOpts={secondOpts}
         {...ghostProps}
       />
     </span>
   );
 }
 
-function updateWeekSection(weekId, sectionName, partId, updateMidweekWeek, patch) {
-  updateMidweekWeek(weekId, (week) => ({
-    ...week,
-    [sectionName]: week[sectionName].map((part) => (
-      part.id === partId ? { ...part, ...patch } : part
-    )),
-  }));
+function RowMain({ as, className, onClick, label, editKey, children }) {
+  const Tag = as;
+  const props = as === 'button'
+    ? { type: 'button', onClick, 'aria-label': label, 'data-edit-key': editKey }
+    : {};
+  return <Tag className={`row__main${className ? ` ${className}` : ''}`} {...props}>{children}</Tag>;
 }
 
-function partContext(ctx, part, includeScenario) {
-  const heading = `${ctx} · ${part.title}（${part.dur}）`;
-  return includeScenario && part.scenario ? `${heading}　·　情境：${part.scenario}` : heading;
-}
+function Assignees({ part, wId, ctx, sectionName, editMode, getAssign, openSheet, getSuggestion, onAccept, onClear, toggleHelperSlot }) {
+  const isPairRole = Boolean(part.roleLabel?.includes('/'));
+  const roleLabels = part.roleLabel?.split('/') ?? [];
+  const isPair = isPairRole && !part.hideHelper;
+  // Same condition the old ⋯ item used: ministry student parts and pair-role
+  // parts (e.g. cbs) whose helper is hidden via hideHelper.
+  const canTakeSecond = isPairRole || (sectionName === 'ministry' && part.cat === 'ministry');
+  const helperLabel = sectionName === 'ministry' ? '助手' : (roleLabels[1] ?? '助手');
+  const baseId = `${wId}_${part.id}`;
+  const ctxLabel = partContext(ctx, part, sectionName === 'ministry');
 
-function PartRow({
-  weekId,
-  ctx,
-  sectionName,
-  part,
-  editMode,
-  draftPart,
-  onDraftPartChange,
-  updateMidweekWeek,
-  getAssign,
-  openSheet,
-  getSuggestion,
-  onAccept,
-  onClear,
-  helperHidden,
-  onToggleHelper,
-  clearSlot,
-  onRequestDelete,
-  onAddBelow,
-  onAddAbove,
-}) {
-  const shownPart = draftPart ?? part;
-  const isPairRole = shownPart.roleLabel?.includes('/');
-  const roleLabels = shownPart.roleLabel?.split('/');
-  const isPair = isPairRole && !helperHidden;
-  const updatePart = (patch) => updateWeekSection(weekId, sectionName, part.id, updateMidweekWeek, patch);
-  const showHelperToggle = editMode && (isPairRole || (sectionName === 'ministry' && shownPart.cat === 'ministry'));
-  const helperToggleItem = {
-    label: isPair
-      ? `移除${roleLabels?.[1] ?? '助手'}欄位`
-      : `加入${roleLabels?.[1] ?? '助手'}欄位`,
-    onSelect: () => {
-      if (sectionName === 'ministry') {
-        // The EPUB can't always tell pair vs single (e.g. mis-labelled talks),
-        // so for ministry parts the toggle rewrites roleLabel itself — which
-        // also flips the candidate pool (single 演講 → brothers-only).
-        if (isPair) clearSlot?.(`${weekId}_${part.id}_1`);
-        const patch = { roleLabel: isPair ? '學生' : '學生/助手' };
-        onDraftPartChange(patch);
-        updatePart(patch);
-        if (helperHidden) onToggleHelper?.(false); // normalize legacy hideHelper
-      } else {
-        if (!helperHidden) clearSlot?.(`${weekId}_${part.id}_1`);
-        onToggleHelper?.(!helperHidden);
-      }
-    },
+  const addHelper = () => {
+    const after = sectionName === 'ministry'
+      ? { ...part, roleLabel: '學生/助手' }
+      : { ...part, hideHelper: false };
+    toggleHelperSlot?.(part, sectionName, true);
+    openSheet(`${baseId}_1`, slotCat(after, '1'), partContext(ctx, after, sectionName === 'ministry'), '', {
+      removeLabel: helperLabel,
+      onRemoveSlot: () => toggleHelperSlot?.(part, sectionName, false),
+    });
   };
-  const menuItems = part.id === 'cbs'
-    ? [
-      { label: '在上方新增節目', onSelect: onAddAbove },
-      ...(showHelperToggle ? [helperToggleItem] : []),
-    ]
-    : [
-      { label: '在下方新增節目', onSelect: onAddBelow },
-      ...(showHelperToggle ? [helperToggleItem] : []),
-      { label: '刪除節目', danger: true, onSelect: onRequestDelete },
-    ];
+  const secondOpts = editMode && isPair && canTakeSecond
+    ? {
+      removeLabel: helperLabel,
+      onRemoveSlot: () => toggleHelperSlot?.(part, sectionName, false),
+    }
+    : undefined;
 
   return (
-    <div className="row" data-part-key={part.id}>
-      <span className="row__time">
-        <TextField
-          editMode={editMode}
-          value={shownPart.time}
-          onChange={(value) => {
-            onDraftPartChange({ time: value });
-            updatePart({ time: value });
-          }}
-          className="row__time-value"
-          inputClassName="week-edit__input week-edit__input--time"
-          ariaLabel={`${shownPart.title} 時間`}
+    <>
+      {part.roleLabel && <span className="role-label">{part.roleLabel}</span>}
+      {isPair ? (
+        <PairSlot
+          baseId={baseId}
+          catKeys={[slotCat(part, '0'), slotCat(part, '1')]}
+          ctxLabel={ctxLabel}
+          defaultNames={part.assign}
+          roleLabels={roleLabels}
+          getAssign={getAssign}
+          openSheet={openSheet}
+          getSuggestion={getSuggestion}
+          onAccept={onAccept}
+          onClear={onClear}
+          secondOpts={secondOpts}
         />
-      </span>
-      <span className="dotwrap">
-        <span className={`dot ${sectionName === 'ministry' ? 'dot--ministry' : sectionName === 'living' ? 'dot--living' : 'dot--treasures'}`} />
-        <span className="partnum">{shownPart.partNum}</span>
-      </span>
-      <div className="row__part">
-        {editMode ? (
-          <span className="row__part-edit">
-            <input
-              className="week-edit__input week-edit__input--title"
-              type="text"
-              value={shownPart.title ?? ''}
-              aria-label={`${shownPart.partNum} 題目`}
-              onChange={(e) => {
-                onDraftPartChange({ title: e.target.value });
-                updatePart({ title: e.target.value });
-              }}
-            />
-            <span className="row__dur">
-              <input
-                className="week-edit__input week-edit__input--dur"
-                type="text"
-                value={shownPart.dur ?? ''}
-                aria-label={`${shownPart.partNum} 時長`}
-                onChange={(e) => {
-                  onDraftPartChange({ dur: e.target.value });
-                  updatePart({ dur: e.target.value });
-                }}
-              />
-            </span>
-          </span>
-        ) : (
-          <>
-            <div className="row__part-main">
-              {shownPart.title} <span className="dur">（{shownPart.dur}）</span>
-              {shownPart.cbsRef && <span className="cbs-ref">{shownPart.cbsRef}</span>}
-            </div>
-          </>
-        )}
-        {sectionName === 'ministry' && shownPart.scenario && <div className="row__scenario">{shownPart.scenario}</div>}
-      </div>
+      ) : (
+        <WhoSlot
+          slotId={`${baseId}_0`}
+          catKey={slotCat(part, '0')}
+          ctxLabel={ctxLabel}
+          defaultName={part.assign?.[0] ?? ''}
+          getAssign={getAssign}
+          openSheet={openSheet}
+          getSuggestion={getSuggestion}
+          onAccept={onAccept}
+          onClear={onClear}
+        />
+      )}
+      {editMode && canTakeSecond && !isPair && (
+        <button
+          type="button"
+          className="who who--ghost-add"
+          aria-label={`為「${part.title}」加入${helperLabel}欄位`}
+          onClick={addHelper}
+        >
+          ＋ {helperLabel}
+        </button>
+      )}
+    </>
+  );
+}
+
+function PartRow({ wId, ctx, sectionName, part, editMode, isOpen, onOpen, getAssign, openSheet, getSuggestion, onAccept, onClear, toggleHelperSlot }) {
+  return (
+    <div className={`row${isOpen ? ' row--open' : ''}`} data-part-key={part.id}>
+      <RowMain
+        as={editMode ? 'button' : 'div'}
+        editKey={part.id}
+        label={`編輯第${part.partNum}項 ${part.title}`}
+        onClick={onOpen}
+      >
+        <span className="row__time">{part.time}</span>
+        <span className="dotwrap">
+          <span className={`dot ${sectionName === 'ministry' ? 'dot--ministry' : sectionName === 'living' ? 'dot--living' : 'dot--treasures'}`} />
+          <span className="partnum">{part.partNum}</span>
+        </span>
+        <span className="row__part">
+          <span className="row__part-main">{part.title} <span className="dur">（{part.dur}）</span></span>
+          {part.cbsRef && <span className="cbs-ref">{part.cbsRef}</span>}
+          {sectionName === 'ministry' && part.scenario && <span className="row__scenario">{part.scenario}</span>}
+        </span>
+      </RowMain>
       <span className="row__assign">
-        {shownPart.roleLabel && <span className="role-label">{shownPart.roleLabel}</span>}
-        {isPair ? (
-          <PairSlot
-            baseId={`${weekId}_${part.id}`}
-            catKeys={[slotCat(shownPart, '0'), slotCat(shownPart, '1')]}
-            ctxLabel={partContext(ctx, shownPart, sectionName === 'ministry')}
-            defaultNames={shownPart.assign}
-            roleLabels={roleLabels}
-            getAssign={getAssign}
-            openSheet={openSheet}
-            getSuggestion={getSuggestion}
-            onAccept={onAccept}
-            onClear={onClear}
-          />
-        ) : (
-          <WhoSlot
-            slotId={`${weekId}_${part.id}_0`}
-            catKey={slotCat(shownPart, '0')}
-            ctxLabel={partContext(ctx, shownPart, sectionName === 'ministry')}
-            defaultName={shownPart.assign[0] ?? ''}
-            getAssign={getAssign}
-            openSheet={openSheet}
-            getSuggestion={getSuggestion}
-            onAccept={onAccept}
-            onClear={onClear}
-          />
-        )}
-      </span>
-      <span className="row__menu">
-        {editMode && <Menu label={`「${shownPart.title}」選項`} items={menuItems} />}
+        <Assignees
+          part={part} wId={wId} ctx={ctx} sectionName={sectionName} editMode={editMode}
+          getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion}
+          onAccept={onAccept} onClear={onClear} toggleHelperSlot={toggleHelperSlot}
+        />
       </span>
     </div>
   );
 }
 
-function initHiddenHelpers(week) {
-  const allParts = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
-  return new Set(allParts.filter((p) => p.hideHelper).map((p) => p.id));
+function PartInlineEditor({ part, sectionName, baseEnd, currentEnd, onChange, onDuration, onRequestDelete, onClose }) {
+  const titleRef = useRef(null);
+  useFineFocus(titleRef);
+  const minutes = parseDuration(part.dur) ?? 1;
+  const effect = timeDifference(baseEnd, currentEnd);
+  // The first two sections are immutable apart from their text fields; only
+  // living gets the duration stepper and the delete action (cbs included).
+  const isLiving = sectionName === 'living';
+
+  return (
+    <div className="mw-inline" data-editor-for={part.id}>
+      <div className="mw-inline__body">
+        <label className="mw-field mw-field--wide">
+          <span className="mw-field__label">標題</span>
+          <input
+            ref={titleRef}
+            className="week-edit__input mw-input--full"
+            type="text"
+            value={part.title ?? ''}
+            aria-label={`編輯第${part.partNum}項標題`}
+            onChange={(e) => onChange({ title: e.target.value })}
+          />
+        </label>
+        {isLiving && (
+          <div className="mw-field">
+            <span className="mw-field__label">時長</span>
+            <div className="mw-stepper">
+              <button type="button" aria-label={`${part.title} 減少一分鐘`} onClick={() => onDuration(Math.max(1, minutes - 1))}><Icon name="minus" /></button>
+              <span className="mw-stepper__val">{minutes} 分鐘</span>
+              <button type="button" aria-label={`${part.title} 增加一分鐘`} onClick={() => onDuration(minutes + 1)}><Icon name="plus" /></button>
+            </div>
+            <div className="mw-inline__effect">
+              結束 {currentEnd || '—'}
+              {effect ? <span className={effect > 0 ? 'mw-late' : ''}> ・ {effect > 0 ? '延後' : '提早'} {Math.abs(effect)} 分鐘</span> : null}
+            </div>
+          </div>
+        )}
+        <label className="mw-field">
+          <span className="mw-field__label">開始時間</span>
+          <input
+            className="week-edit__input week-edit__input--time"
+            type="text"
+            value={part.time ?? ''}
+            aria-label={`編輯第${part.partNum}項時間`}
+            onChange={(e) => onChange({ time: e.target.value })}
+          />
+        </label>
+        {sectionName === 'ministry' && (
+          <label className="mw-field mw-field--wide">
+            <span className="mw-field__label">情境</span>
+            <textarea
+              className="week-edit__input mw-textarea"
+              value={part.scenario ?? ''}
+              aria-label="情境"
+              rows={2}
+              onChange={(e) => onChange({ scenario: e.target.value })}
+            />
+          </label>
+        )}
+      </div>
+      <div className="mw-inline__foot">
+        {isLiving && (
+          <button type="button" className="mw-textbtn mw-textbtn--danger" onClick={onRequestDelete}>刪除節目</button>
+        )}
+        <span className="mw-spacer" />
+        <button type="button" className="btn btn--sm" onClick={onClose}>完成</button>
+      </div>
+    </div>
+  );
 }
 
-export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, addMidweekPart, deleteMidweekPart, cardRef, getSuggestion, onAccept, onClear, clearSlot }) {
+function InsertSeam({ seamKey, label, onOpen }) {
+  return (
+    <div className="mw-seam-row">
+      <button type="button" className="mw-seam" data-seam={seamKey} aria-label={label} onClick={onOpen}>
+        <Icon name="plus" />
+      </button>
+    </div>
+  );
+}
+
+function AddInlineEditor({ section, parts, afterPartKey, busy, onCancel, onSubmit }) {
+  const titleRef = useRef(null);
+  useFineFocus(titleRef);
+  const [title, setTitle] = useState('');
+  const [minutes, setMinutes] = useState(5);
+  const { options, defaultKey } = timeSourceOptions(parts, minutes);
+  const [source, setSource] = useState(defaultKey);
+  const chosen = options.find((option) => option.key === source) ?? options[0];
+
+  const sectionStart = parts[0]?.time ?? '';
+  const oldEnd = recomputeSectionTimes(parts, sectionStart).end;
+  const adjustMap = new Map(chosen.adjust.map((item) => [item.partKey, item.dur]));
+  const virtual = parts.map((part) => ({
+    ...part,
+    partKey: part.id,
+    dur: adjustMap.get(part.id) ?? part.dur,
+  }));
+  const insertIndex = afterPartKey === null ? 0 : Math.max(0, virtual.findIndex((part) => part.id === afterPartKey) + 1);
+  virtual.splice(insertIndex, 0, {
+    id: '__new__', partKey: '__new__', partNum: 0, dur: `${minutes} 分鐘`, title: title.trim() || '新節目',
+  });
+  virtual.forEach((part, index) => { part.partNum = index + 1; });
+  const plan = recomputeSectionTimes(virtual, sectionStart);
+  const newTime = plan.updates.find((entry) => entry.partKey === '__new__')?.time ?? '';
+  const end = plan.end;
+  const delta = timeDifference(oldEnd, end);
+
+  const submit = (event) => {
+    event.preventDefault();
+    if (!title.trim() || busy) return;
+    onSubmit({
+      section,
+      afterPartKey,
+      title: title.trim(),
+      dur: `${minutes} 分鐘`,
+      time: newTime,
+      cat: 'living',
+      roleLabel: null,
+      adjust: chosen.adjust,
+    });
+  };
+
+  return (
+    <form className="mw-addinline" onSubmit={submit}>
+      <div className="mw-inline__body">
+        <label className="mw-field mw-field--wide">
+          <span className="mw-field__label">新節目名稱</span>
+          <input
+            ref={titleRef}
+            className="week-edit__input mw-input--full"
+            type="text"
+            value={title}
+            placeholder="新節目名稱"
+            aria-label="新增節目名稱"
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </label>
+        <div className="mw-field">
+          <span className="mw-field__label">時長</span>
+          <div className="mw-stepper">
+            <button type="button" aria-label="新節目 減少一分鐘" onClick={() => setMinutes((v) => Math.max(1, v - 1))}><Icon name="minus" /></button>
+            <span className="mw-stepper__val">{minutes} 分鐘</span>
+            <button type="button" aria-label="新節目 增加一分鐘" onClick={() => setMinutes((v) => v + 1)}><Icon name="plus" /></button>
+          </div>
+        </div>
+        <fieldset className="mw-field mw-field--wide mw-sources">
+          <legend className="mw-field__label">時間從哪裡扣？</legend>
+          <div className="mw-sources__chips">
+            {options.map((option) => {
+              const fullLabel = option.fullTitle
+                ? `${option.fullTitle} ${option.from}→${option.to}`
+                : option.label;
+              return (
+                <label
+                  key={option.key}
+                  className={`mw-chip${source === option.key ? ' mw-chip--on' : ''}`}
+                  title={fullLabel}
+                  aria-label={fullLabel}
+                >
+                  <input type="radio" name="mw-time-source" value={option.key} checked={source === option.key} onChange={() => setSource(option.key)} />
+                  <span>{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+          {source === 'spread' && chosen.changes?.length > 0 && (
+            <div className="mw-sources__detail">
+              {chosen.changes.map((change) => `${change.title ?? ''} ${change.from}→${change.to}`).join(' · ')}
+              {chosen.shortfall > 0 ? ` ・ 仍延後 ${chosen.shortfall} 分鐘` : ''}
+            </div>
+          )}
+        </fieldset>
+      </div>
+      <div className="mw-inline__status">
+        結束 {end || '—'}
+        {delta ? <span className={delta > 0 ? 'mw-late' : ''}> ・ {delta > 0 ? '延後' : '提早'} {Math.abs(delta)} 分鐘</span> : <Icon name="check" className="mw-ok" />}
+      </div>
+      <div className="mw-inline__foot">
+        <button type="button" className="btn btn--sm" onClick={onCancel}>取消</button>
+        <span className="mw-spacer" />
+        <button type="submit" className="btn btn--primary btn--sm" disabled={!title.trim() || busy}>{busy ? '儲存中…' : '新增'}</button>
+      </div>
+    </form>
+  );
+}
+
+function SmallInlineEditor({ label, value, onChange, onClose, multiline, type = 'text' }) {
+  const inputRef = useRef(null);
+  useFineFocus(inputRef);
+  return (
+    <div className="mw-inline mw-inline--small">
+      <div className="mw-inline__body">
+        <label className="mw-field mw-field--wide">
+          <span className="mw-field__label">{label}</span>
+          {multiline ? (
+            <textarea ref={inputRef} className="week-edit__input mw-textarea" value={value ?? ''} rows={2} onChange={(e) => onChange(e.target.value)} />
+          ) : (
+            <input ref={inputRef} className="week-edit__input mw-input--full" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
+          )}
+        </label>
+      </div>
+      <div className="mw-inline__foot">
+        <span className="mw-spacer" />
+        <button type="button" className="btn btn--sm" onClick={onClose}>完成</button>
+      </div>
+    </div>
+  );
+}
+
+export default function MidweekWeek({ week, editMode, getAssign, openSheet, updateMidweekWeek, addMidweekPart, deleteMidweekPart, cardRef, getSuggestion, onAccept, onClear, clearSlot, onFinishEdit }) {
   const wId = `mw${week.id}`;
   const ctx = week.date;
   const [draftWeek, setDraftWeek] = useState(week);
   const [hiddenHelpers, setHiddenHelpers] = useState(() => initHiddenHelpers(week));
-  const [sheet, setSheet] = useState(null); // { section, afterPartKey }
+  const [openEditor, setOpenEditor] = useState(null); // { type: 'part'|'add'|'song'|'closing', ... }
   const [confirmingDelete, setConfirmingDelete] = useState(null);
+  const [snackbar, setSnackbar] = useState(null);
   const [addingBusy, setAddingBusy] = useState(false);
-  const sheetTriggerRef = useRef(null);
   const [deletingBusy, setDeletingBusy] = useState(false);
 
+  const shownWeek = editMode ? draftWeek : week;
+
   useEffect(() => {
-    if (!editMode) {
-      setSheet(null);
-      setConfirmingDelete(null);
-    }
+    if (!editMode) { setOpenEditor(null); setConfirmingDelete(null); setSnackbar(null); }
   }, [editMode]);
-
-  useEffect(() => {
-    if (!confirmingDelete) return;
-    const onKeyDown = (event) => { if (event.key === 'Escape') setConfirmingDelete(null); };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [confirmingDelete]);
-
-  // Removing/adding a helper slot writes hideHelper into the shared week state.
-  // It persists when edit mode is exited (saveMidweekWeek sends every part's hideHelper).
-  const toggleHelper = (partId, hide) => {
-    setHiddenHelpers(prev => {
-      const next = new Set(prev);
-      if (hide) next.add(partId); else next.delete(partId);
-      return next;
-    });
-    const section = ['treasures', 'ministry', 'living'].find((s) =>
-      week[s]?.some((p) => p.id === partId)
-    );
-    if (section) {
-      updateMidweekWeek(week.id, (w) => ({
-        ...w,
-        [section]: w[section].map((p) => p.id === partId ? { ...p, hideHelper: hide } : p),
-      }));
-    }
-  };
 
   useEffect(() => {
     setDraftWeek(week);
     setHiddenHelpers(initHiddenHelpers(week));
-    setSheet(null);
+    setOpenEditor(null);
     setConfirmingDelete(null);
+    setSnackbar(null);
     setAddingBusy(false);
     setDeletingBusy(false);
   }, [week.id]);
 
-  const shownWeek = editMode ? draftWeek : week;
-  const updateDraftWeek = (patch) => {
+  useEffect(() => {
+    if (!snackbar) return undefined;
+    const timer = setTimeout(() => setSnackbar(null), snackbar.restore ? 8000 : 3000);
+    return () => clearTimeout(timer);
+  }, [snackbar]);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return;
+      if (confirmingDelete) setConfirmingDelete(null);
+      else if (openEditor) setOpenEditor(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirmingDelete, openEditor]);
+
+  const applyPatch = (patch) => {
     setDraftWeek((current) => ({ ...current, ...patch }));
     updateMidweekWeek(week.id, (current) => ({ ...current, ...patch }));
   };
   const updateDraftPart = (sectionName, partId, patch) => {
-    setDraftWeek((current) => ({
+    const apply = (current) => ({
       ...current,
-      [sectionName]: current[sectionName].map((part) => (
-        part.id === partId ? { ...part, ...patch } : part
-      )),
-    }));
-    updateWeekSection(week.id, sectionName, partId, updateMidweekWeek, patch);
+      [sectionName]: current[sectionName].map((part) => (part.id === partId ? { ...part, ...patch } : part)),
+    });
+    setDraftWeek(apply);
+    updateMidweekWeek(week.id, apply);
   };
 
-  function openPartSheet(sectionName, afterPartKey, trigger) {
-    setConfirmingDelete(null);
-    sheetTriggerRef.current = trigger ?? (typeof document !== 'undefined' ? document.activeElement : null);
-    setSheet({ section: sectionName, afterPartKey });
-  }
+  const toggleHelperSlot = (part, sectionName, showHelper) => {
+    if (!showHelper) clearSlot?.(`${wId}_${part.id}_1`);
+    if (sectionName === 'ministry') {
+      updateDraftPart(sectionName, part.id, {
+        roleLabel: showHelper ? '學生/助手' : '學生',
+        hideHelper: false,
+      });
+    } else {
+      setHiddenHelpers((prev) => {
+        const next = new Set(prev);
+        if (showHelper) next.delete(part.id); else next.add(part.id);
+        return next;
+      });
+      updateDraftPart(sectionName, part.id, { hideHelper: !showHelper });
+    }
+  };
 
-  function closePartSheet() {
-    setSheet(null);
-    requestAnimationFrame(() => sheetTriggerRef.current?.focus?.());
-  }
+  const stepDuration = (sectionName, part, minutes) => {
+    const delta = minutes - (parseDuration(part.dur) ?? 0);
+    if (!delta) return;
+    const shifted = retimeClientWeek(shownWeek, { section: sectionName, partNum: part.partNum, delta });
+    const patch = {
+      treasures: shifted.treasures,
+      ministry: shifted.ministry,
+      living: shifted.living,
+      midSongTime: shifted.midSongTime,
+      closingTime: shifted.closingTime,
+      closeSongTime: shifted.closeSongTime,
+    };
+    patch[sectionName] = shifted[sectionName].map((p) => (p.id === part.id ? { ...p, dur: `${minutes} 分鐘` } : p));
+    applyPatch(patch);
+  };
 
   const applyUpdates = (current, data, removedKey) => {
     const next = { ...current };
     const updates = new Map((data.updates ?? []).map((item) => [item.partKey, item]));
-    for (const section of ['treasures', 'ministry', 'living']) {
+    for (const section of SECTIONS) {
       next[section] = (current[section] ?? [])
         .filter((part) => part.id !== removedKey)
         .map((part) => {
@@ -366,8 +504,9 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
           };
         });
     }
-    if (data.closingTime !== undefined) next.closingTime = data.closingTime;
-    if (data.closeSongTime !== undefined) next.closeSongTime = data.closeSongTime;
+    for (const field of ['midSongTime', 'closingTime', 'closeSongTime']) {
+      if (data[field] !== undefined) next[field] = data[field];
+    }
     return next;
   };
 
@@ -389,23 +528,17 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     updateMidweekWeek(week.id, apply);
   };
 
-  const removeDeletedPart = (sectionName, partKey, data) => {
-    const apply = (current) => applyUpdates(current, data, partKey);
-    setDraftWeek(apply);
-    updateMidweekWeek(week.id, apply);
-  };
-
   const submitNewPart = async (partDraft) => {
     setAddingBusy(true);
     try {
       const data = await addMidweekPart?.(shownWeek, partDraft);
       if (!data) return;
       insertCreatedPart(partDraft.section, partDraft.afterPartKey, data);
-      setSheet(null);
+      setOpenEditor(null);
       openSheet?.(
         `${wId}_${data.part.id}_0`,
         slotCat(data.part, '0'),
-        `${ctx} · ${data.part.title}`,
+        `${ctx} ・ ${data.part.title}`,
         data.part.assign?.[0] ?? '',
       );
     } finally {
@@ -413,18 +546,52 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     }
   };
 
+  const focusAfterDelete = (sectionName, partKey) => {
+    requestAnimationFrame(() => {
+      const parts = shownWeek[sectionName] ?? [];
+      const index = parts.findIndex((part) => part.id === partKey);
+      const neighbour = parts[index + 1] ?? parts[index - 1];
+      const selector = neighbour ? `[data-edit-key="${neighbour.id}"]` : `[data-seam="${sectionName}:${partKey}"]`;
+      document.querySelector(selector)?.focus?.();
+    });
+  };
+
   const confirmDelete = async (part) => {
+    const sectionName = SECTIONS.find((s) => shownWeek[s]?.some((p) => p.id === part.id));
+    const beforeEnd = shownWeek.closingTime;
     setDeletingBusy(true);
     try {
-      const sectionName = ['treasures', 'ministry', 'living'].find((s) =>
-        shownWeek[s]?.some((p) => p.id === part.id)
-      );
       const data = await deleteMidweekPart?.(shownWeek, part.id);
       if (!data) return;
-      removeDeletedPart(sectionName, part.id, data);
+      const apply = (current) => applyUpdates(current, data, part.id);
+      setDraftWeek(apply);
+      updateMidweekWeek(week.id, apply);
       setConfirmingDelete(null);
+      setOpenEditor(null);
+      const afterEnd = data.closingTime ?? beforeEnd;
+      const moved = timeDifference(beforeEnd, afterEnd);
+      setSnackbar({
+        msg: `已刪除「${part.title}」${moved ? ` ・ 結束${moved > 0 ? '延後' : '提早'} ${Math.abs(moved)} 分鐘` : ''}`,
+        restore: data.restore,
+      });
+      focusAfterDelete(sectionName, part.id);
     } finally {
       setDeletingBusy(false);
+    }
+  };
+
+  const undoDelete = async () => {
+    const restore = snackbar?.restore;
+    if (!restore) return;
+    setSnackbar(null);
+    setAddingBusy(true);
+    try {
+      const data = await addMidweekPart?.(shownWeek, restore);
+      if (!data) return;
+      insertCreatedPart(restore.section, restore.afterPartKey, data);
+      setSnackbar({ msg: '已復原' });
+    } finally {
+      setAddingBusy(false);
     }
   };
 
@@ -439,9 +606,7 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
       <div className="mw-delconfirm" key={`confirm:${part.id}`}>
         <div className="mw-delconfirm__text">
           <div className="mw-delconfirm__title">刪除「{part.title}」？</div>
-          {names.length > 0 && (
-            <div className="mw-delconfirm__names">已指派的 {names.join('、')} 也會一併清除</div>
-          )}
+          {names.length > 0 && <div className="mw-delconfirm__names">已指派的 {names.join('、')} 也會一併清除</div>}
         </div>
         <div className="mw-delconfirm__actions">
           <button className="btn btn--sm" type="button" disabled={deletingBusy} onClick={() => setConfirmingDelete(null)}>取消</button>
@@ -451,73 +616,137 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     );
   };
 
+  const requestDelete = (part) => {
+    const count = part.roleLabel?.includes('/') ? 2 : 1;
+    const assigned = Array.from({ length: count }, (_, i) => getAssign(`${wId}_${part.id}_${i}`)).some(Boolean);
+    setOpenEditor(null);
+    if (assigned) setConfirmingDelete(part.id);
+    else confirmDelete(part);
+  };
+
+  const renderSeam = (sectionName, afterPartKey, seamKey, label) => {
+    const isOpen = openEditor?.type === 'add' && openEditor.section === sectionName && openEditor.afterPartKey === afterPartKey;
+    return (
+      <Fragment key={`seam:${seamKey}`}>
+        <InsertSeam
+          seamKey={seamKey}
+          label={`在${label}之後插入節目`}
+          onOpen={() => { setConfirmingDelete(null); setOpenEditor({ type: 'add', section: sectionName, afterPartKey }); }}
+        />
+        {isOpen && (
+          <AddInlineEditor
+            section={sectionName}
+            parts={shownWeek[sectionName] ?? []}
+            afterPartKey={afterPartKey}
+            busy={addingBusy}
+            onCancel={() => setOpenEditor(null)}
+            onSubmit={submitNewPart}
+          />
+        )}
+      </Fragment>
+    );
+  };
+
   const renderParts = (sectionName) => {
     const parts = shownWeek[sectionName] ?? [];
-    const rows = [];
+    const out = [];
+    // Domain rule: the first two sections never change — seams only in living.
+    const seams = editMode && sectionName === 'living';
+    if (seams) out.push(renderSeam(sectionName, null, `${sectionName}--start`, `${SECTION_LABELS[sectionName]}開始`));
     for (const part of parts) {
       if (editMode && confirmingDelete === part.id) {
-        rows.push(renderDeleteConfirm(part));
+        out.push(renderDeleteConfirm(part));
       } else {
-        rows.push(
+        const isOpen = editMode && openEditor?.type === 'part' && openEditor.key === part.id;
+        out.push(
           <PartRow
             key={part.id}
-            weekId={wId}
+            wId={wId}
             ctx={ctx}
             sectionName={sectionName}
             part={part}
             editMode={editMode}
-            draftPart={editMode ? shownWeek[sectionName].find((p) => p.id === part.id) : null}
-            onDraftPartChange={(patch) => updateDraftPart(sectionName, part.id, patch)}
-            updateMidweekWeek={updateMidweekWeek}
+            isOpen={isOpen}
+            onOpen={() => { setConfirmingDelete(null); setOpenEditor(isOpen ? null : { type: 'part', key: part.id, section: sectionName, baseEnd: shownWeek.closingTime }); }}
             getAssign={getAssign}
             openSheet={openSheet}
             getSuggestion={getSuggestion}
             onAccept={onAccept}
             onClear={onClear}
-            helperHidden={hiddenHelpers.has(part.id)}
-            onToggleHelper={(hide) => toggleHelper(part.id, hide)}
-            clearSlot={clearSlot}
-            onRequestDelete={() => { setSheet(null); setConfirmingDelete(part.id); }}
-            onAddBelow={() => openPartSheet(sectionName, part.id)}
-            onAddAbove={() => {
-              const index = parts.findIndex((candidate) => candidate.id === part.id);
-              openPartSheet(sectionName, index > 0 ? parts[index - 1].id : null);
-            }}
-          />
+            toggleHelperSlot={toggleHelperSlot}
+          />,
         );
+        if (isOpen) {
+          out.push(
+            <PartInlineEditor
+              key={`editor:${part.id}`}
+              part={part}
+              sectionName={sectionName}
+              baseEnd={openEditor.baseEnd}
+              currentEnd={shownWeek.closingTime}
+              onChange={(patch) => updateDraftPart(sectionName, part.id, patch)}
+              onDuration={(minutes) => stepDuration(sectionName, part, minutes)}
+              onRequestDelete={() => requestDelete(part)}
+              onClose={() => setOpenEditor(null)}
+            />,
+          );
+        }
       }
+      // cbs is editable like any other living part, including insertion after it.
+      if (seams) out.push(renderSeam(sectionName, part.id, `${sectionName}:${part.id}`, part.title));
     }
-    return rows;
+    return out;
   };
 
-  // type/label are edited via the navstrip (which writes to the parent week state),
-  // so read them from `week` — draftWeek wouldn't see those edits live.
+  const renderBand = (sectionName) => (
+    <div className={`band band--${sectionName}`}>
+      <span className="band__title">{SECTION_LABELS[sectionName]}</span>
+      {editMode && <span className="mw-band-end">至 {sectionEnd(shownWeek[sectionName] ?? [])}</span>}
+    </div>
+  );
+
+  const songRow = (partKey, time, number, label, openKey, extraAssign) => {
+    const isOpen = editMode && openEditor?.type === 'song' && openEditor.key === openKey;
+    return (
+      <Fragment key={partKey}>
+        <div className={`row row--song${isOpen ? ' row--open' : ''}`} data-part-key={partKey}>
+          <RowMain
+            as={editMode ? 'button' : 'div'}
+            editKey={partKey}
+            label={`編輯${label}`}
+            onClick={() => { setConfirmingDelete(null); setOpenEditor(isOpen ? null : { type: 'song', key: openKey }); }}
+          >
+            <span className="row__time">{time}</span>
+            <span className="dotwrap"><span className={`dot ${partKey === 'song-open' ? 'dot--treasures' : 'dot--living'}`} /></span>
+            <span className="row__part">唱詩　{number} 首</span>
+          </RowMain>
+          <span className="row__assign">{extraAssign}</span>
+        </div>
+        {isOpen && (
+          <SmallInlineEditor
+            label={label}
+            value={number}
+            type="number"
+            onChange={(value) => applyPatch({ [openKey]: value })}
+            onClose={() => setOpenEditor(null)}
+          />
+        )}
+      </Fragment>
+    );
+  };
+
   const weekType = week.type ?? 'normal';
   const weekLabel = week.label ?? '';
-  // 大會 / 暫停 weeks have no midweek meeting, so the card collapses to a notice
-  // instead of listing a programme nobody will follow. 總覽 already renders these
-  // weeks as a suspended row; this keeps the card, 總覽 and every export saying
-  // the same thing — and the exports screenshot this card, so they cannot drift.
   const suspended = isMidweekSuspended(week);
   const cardClass = weekType === 'special' ? 'card card--special'
                   : suspended ? 'card card--assembly'
                   : 'card';
 
-  // One thin strip, not a card with a header and a body: there is no programme
-  // to show, and in the PDF grid this capture becomes the full-width notice band
-  // between the real weeks. A tall slab there looked like a broken card.
   if (suspended) {
     return (
       <article className={`${cardClass} card--suspended`} ref={cardRef}>
         <div className="mw-susp">
-          <TextField
-            editMode={editMode}
-            value={shownWeek.date}
-            onChange={(value) => updateDraftWeek({ date: value })}
-            className="mw-susp__date"
-            inputClassName="week-edit__input week-edit__input--date"
-            ariaLabel="聚會日期"
-          />
+          <span className="mw-susp__date">{shownWeek.date}</span>
           <span className="mw-susp__sep" aria-hidden="true" />
           <span className="mw-susp__text">{suspendedNotice(week)}</span>
         </div>
@@ -525,255 +754,118 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
     );
   }
 
+  const closingOpen = editMode && openEditor?.type === 'closing';
+
   return (
     <>
-    <article className={cardClass} ref={cardRef}>
-      <div className="mw-head">
-        <div className="mw-head__date">
-          <TextField
-            editMode={editMode}
-            value={shownWeek.date}
-            onChange={(value) => updateDraftWeek({ date: value })}
-            className="mw-head__date-value"
-            inputClassName="week-edit__input week-edit__input--date"
-            ariaLabel="聚會日期"
-          />
-        </div>
-        <div className="mw-head__main">
-          <div className="mw-head__sub">
-            <TextField
-              editMode={editMode}
-              value={shownWeek.weekdayPill}
-              onChange={(value) => updateDraftWeek({ weekdayPill: value })}
-              className="weekday-pill"
-              inputClassName="week-edit__input week-edit__input--pill"
-              ariaLabel="星期與時間"
-            />
-            {weekLabel && (
-              <span className={`mw-type-badge mw-type-badge--${weekType}`}>{weekLabel}</span>
-            )}
-            <span className="mw-head__reading">
-              每週閱讀經文　
-              {editMode ? (
-                <input
-                  className="week-edit__input week-edit__input--reading"
-                  type="text"
-                  value={shownWeek.reading ?? ''}
-                  aria-label="每週閱讀經文"
-                  onChange={(e) => updateDraftWeek({ reading: e.target.value })}
-                />
-              ) : (
-                <b>{shownWeek.reading}</b>
-              )}
-            </span>
+      <article className={cardClass} ref={cardRef}>
+        {editMode && (
+          <div className="mw-editbar">
+            <span>編輯中 ・ 點節目即可修改</span>
+            <button type="button" className="btn btn--primary btn--sm" onClick={onFinishEdit}>完成</button>
+          </div>
+        )}
+        <div className="mw-head">
+          <div className="mw-head__date">
+            <TextField editMode={editMode} value={shownWeek.date} onChange={(value) => applyPatch({ date: value })} className="mw-head__date-value" editClassName="mw-quiet-input--date" ariaLabel="聚會日期" />
+          </div>
+          <div className="mw-head__main">
+            <div className="mw-head__sub">
+              <TextField editMode={editMode} value={shownWeek.weekdayPill} onChange={(value) => applyPatch({ weekdayPill: value })} className="weekday-pill" editClassName="mw-quiet-input--pill" ariaLabel="星期與時間" />
+              {weekLabel && <span className={`mw-type-badge mw-type-badge--${weekType}`}>{weekLabel}</span>}
+              <span className="mw-head__reading">
+                每週閱讀經文　
+                <TextField editMode={editMode} value={shownWeek.reading} onChange={(value) => applyPatch({ reading: value })} className="mw-head__reading-value" editClassName="mw-quiet-input--reading" bold ariaLabel="每週閱讀經文" />
+              </span>
+            </div>
+          </div>
+          <div className="mw-head__roles">
+            <span className="role-label">主席</span>
+            <WhoSlot slotId={`${wId}_chairman`} catKey="chairman" ctxLabel={ctx} defaultName={shownWeek.chairman} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} />
+            <span className="role-label">開始禱告</span>
+            <WhoSlot slotId={`${wId}_openPrayer`} catKey="prayer" ctxLabel={ctx} defaultName={shownWeek.openPrayer} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} />
           </div>
         </div>
-        <div className="mw-head__roles">
-          <span className="role-label">主席</span>
-          <WhoSlot slotId={`${wId}_chairman`} catKey="chairman" ctxLabel={ctx} defaultName={shownWeek.chairman} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} />
-          <span className="role-label">開始禱告</span>
-          <WhoSlot slotId={`${wId}_openPrayer`} catKey="prayer" ctxLabel={ctx} defaultName={shownWeek.openPrayer} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} />
-        </div>
-      </div>
 
-      <div className={weekType === 'assembly' ? 'mw-body mw-body--faint' : 'mw-body'}>
-      <div className="rows">
-        <div className="row row--song">
-          <span className="row__time">7:30</span>
-          <span className="dotwrap"><span className="dot dot--treasures" /></span>
-          <span className="row__part">
-            唱詩　
-            {editMode ? (
-              <input
-                className="week-edit__input week-edit__input--song"
-                type="text"
-                value={shownWeek.openSong ?? ''}
-                aria-label="開場唱詩首數"
-                onChange={(e) => updateDraftWeek({ openSong: e.target.value })}
+        <div className={weekType === 'assembly' ? 'mw-body mw-body--faint' : 'mw-body'}>
+          <div className="rows">
+            {songRow('song-open', '7:30', shownWeek.openSong, '開場唱詩首數', 'openSong')}
+            <div className="row">
+              <RowMain as="div"><span className="row__time">{shownWeek.openIntroTime}</span><span className="dotwrap"><span className="dot dot--treasures" /></span><span className="row__part">開場白 <span className="dur">（1 分鐘）</span></span></RowMain>
+              <span className="row__assign" />
+            </div>
+          </div>
+
+          {renderBand('treasures')}
+          <div className="rows">{renderParts('treasures')}</div>
+
+          {renderBand('ministry')}
+          <div className="rows">{renderParts('ministry')}</div>
+
+          {renderBand('living')}
+          <div className="rows">
+            {songRow('song-mid', shownWeek.midSongTime, shownWeek.midSong, '中場唱詩首數', 'midSong')}
+            {renderParts('living')}
+            <div className={`row${closingOpen ? ' row--open' : ''}`} data-part-key="closing">
+              <RowMain
+                as={editMode ? 'button' : 'div'}
+                editKey="closing"
+                label="編輯結語時長"
+                onClick={() => { setConfirmingDelete(null); setOpenEditor(closingOpen ? null : { type: 'closing' }); }}
+              >
+                <span className="row__time">{shownWeek.closingTime}</span>
+                <span className="dotwrap"><span className="dot dot--living" /></span>
+                <span className="row__part">結語 <span className="dur">（{shownWeek.closingDur}）</span></span>
+              </RowMain>
+              <span className="row__assign" />
+            </div>
+            {closingOpen && (
+              <SmallInlineEditor
+                label="結語時長"
+                value={shownWeek.closingDur}
+                onChange={(value) => applyPatch({ closingDur: value })}
+                onClose={() => setOpenEditor(null)}
               />
-            ) : (
-              `${shownWeek.openSong} 首`
             )}
-          </span>
-          <span className="row__assign" />
+            {songRow('song-close', shownWeek.closeSongTime, shownWeek.closeSong, '結束唱詩首數', 'closeSong', (
+              <>
+                <span className="role-label">結束禱告</span>
+                <WhoSlot slotId={`${wId}_closePrayer`} catKey="prayer" ctxLabel={ctx} defaultName={shownWeek.closePrayer} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} />
+              </>
+            ))}
+          </div>
         </div>
-        <div className="row">
-          <span className="row__time">
-            <TextField
-              editMode={editMode}
-              value={shownWeek.openIntroTime}
-              onChange={(value) => updateDraftWeek({ openIntroTime: value })}
-              className="row__time-value"
-              inputClassName="week-edit__input week-edit__input--time"
-              ariaLabel="開場白時間"
-            />
-          </span>
-          <span className="dotwrap"><span className="dot dot--treasures" /></span>
-          <span className="row__part">
-            開場白 <span className="dur">（1 分鐘）</span>
-          </span>
-          <span className="row__assign" />
-        </div>
-      </div>
+      </article>
 
-        <div className="band band--treasures">
-          <span className="band__title">上帝話語的寶藏</span>
-          {editMode && (
-            <BandAddButton
-              section="treasures"
-              label="上帝話語的寶藏"
-              parts={shownWeek.treasures ?? []}
-              onOpen={openPartSheet}
-            />
-          )}
+      {snackbar && (
+        <div className="mw-snack" role="status" aria-live="polite">
+          <span>{snackbar.msg}</span>
+          {snackbar.restore && <button type="button" className="mw-snack__undo" onClick={undoDelete}>復原</button>}
+          <button type="button" className="mw-snack__close" aria-label="關閉" onClick={() => setSnackbar(null)}>✕</button>
         </div>
-      <div className="rows">
-        {renderParts('treasures')}
-      </div>
-
-        <div className="band band--ministry">
-          <span className="band__title">用心準備傳道工作</span>
-          {editMode && (
-            <BandAddButton
-              section="ministry"
-              label="用心準備傳道工作"
-              parts={shownWeek.ministry ?? []}
-              onOpen={openPartSheet}
-            />
-          )}
-        </div>
-      <div className="rows">
-        {renderParts('ministry')}
-      </div>
-
-      <div className="band band--living">
-          <span className="band__title">基督徒的生活</span>
-          {editMode && (
-            <BandAddButton
-              section="living"
-              label="基督徒的生活"
-              parts={shownWeek.living ?? []}
-              onOpen={openPartSheet}
-            />
-          )}
-      </div>
-      <div className="rows">
-        <div className="row row--song">
-          <span className="row__time">
-            <TextField
-              editMode={editMode}
-              value={shownWeek.midSongTime}
-              onChange={(value) => updateDraftWeek({ midSongTime: value })}
-              className="row__time-value"
-              inputClassName="week-edit__input week-edit__input--time"
-              ariaLabel="中場唱詩時間"
-            />
-          </span>
-          <span className="dotwrap"><span className="dot dot--living" /></span>
-          <span className="row__part">
-            唱詩　
-            {editMode ? (
-              <input
-                className="week-edit__input week-edit__input--song"
-                type="text"
-                value={shownWeek.midSong ?? ''}
-                aria-label="中場唱詩首數"
-                onChange={(e) => updateDraftWeek({ midSong: e.target.value })}
-              />
-            ) : (
-              `${shownWeek.midSong} 首`
-            )}
-          </span>
-          <span className="row__assign" />
-        </div>
-
-        {renderParts('living')}
-
-        <div className="row">
-          <span className="row__time">
-            <TextField
-              editMode={editMode}
-              value={shownWeek.closingTime}
-              onChange={(value) => updateDraftWeek({ closingTime: value })}
-              className="row__time-value"
-              inputClassName="week-edit__input week-edit__input--time"
-              ariaLabel="結語時間"
-            />
-          </span>
-          <span className="dotwrap"><span className="dot dot--living" /></span>
-          <span className="row__part">
-            結語　
-            {editMode ? (
-              <input
-                className="week-edit__input week-edit__input--dur"
-                type="text"
-                value={shownWeek.closingDur ?? ''}
-                aria-label="結語時長"
-                onChange={(e) => updateDraftWeek({ closingDur: e.target.value })}
-              />
-            ) : (
-              <span className="dur">（{shownWeek.closingDur}）</span>
-            )}
-          </span>
-          <span className="row__assign" />
-        </div>
-
-        <div className="row row--song">
-          <span className="row__time">
-            <TextField
-              editMode={editMode}
-              value={shownWeek.closeSongTime}
-              onChange={(value) => updateDraftWeek({ closeSongTime: value })}
-              className="row__time-value"
-              inputClassName="week-edit__input week-edit__input--time"
-              ariaLabel="結束唱詩時間"
-            />
-          </span>
-          <span className="dotwrap"><span className="dot dot--living" /></span>
-          <span className="row__part">
-            唱詩　
-            {editMode ? (
-              <input
-                className="week-edit__input week-edit__input--song"
-                type="text"
-                value={shownWeek.closeSong ?? ''}
-                aria-label="結束唱詩首數"
-                onChange={(e) => updateDraftWeek({ closeSong: e.target.value })}
-              />
-            ) : (
-              `${shownWeek.closeSong} 首`
-            )}
-          </span>
-          <span className="row__assign">
-            <span className="role-label">結束禱告</span>
-            <WhoSlot
-              slotId={`${wId}_closePrayer`}
-              catKey="prayer"
-              ctxLabel={ctx}
-              defaultName={shownWeek.closePrayer}
-              getAssign={getAssign}
-              openSheet={openSheet}
-              getSuggestion={getSuggestion}
-              onAccept={onAccept}
-              onClear={onClear}
-            />
-          </span>
-        </div>
-      </div>
-      </div>{/* mw-body */}
-    </article>
-    {sheet && editMode && (
-      <PartTimelineSheet
-        section={sheet.section}
-        sectionName={SECTION_LABELS[sheet.section]}
-        ctx={ctx}
-        parts={shownWeek[sheet.section] ?? []}
-        afterPartKey={sheet.afterPartKey}
-        busy={addingBusy}
-        onClose={closePartSheet}
-        onSubmit={submitNewPart}
-      />
-    )}
+      )}
     </>
   );
+}
+
+function TextField({ editMode, value, onChange, className, ariaLabel, editClassName, bold }) {
+  if (!editMode) {
+    return bold
+      ? <b className={className}>{value}</b>
+      : <span className={className}>{value}</span>;
+  }
+  return (
+    <input
+      className={`week-edit__input mw-quiet-input ${editClassName ?? ''}`}
+      type="text"
+      value={value ?? ''}
+      aria-label={ariaLabel}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+function initHiddenHelpers(week) {
+  const allParts = [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
+  return new Set(allParts.filter((part) => part.hideHelper).map((part) => part.id));
 }

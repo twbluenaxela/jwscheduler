@@ -96,9 +96,20 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
           </div>
         </div>
 
-        <button type="button" className="sheet__clear" onClick={clearAssign}>
-          ✕ 留空此項{currentName ? `（清除「${currentName}」）` : ''}
-        </button>
+        <div className="sheet__slot-actions">
+          <button type="button" className="sheet__clear" onClick={clearAssign}>
+            ✕ 留空此項{currentName ? `（清除「${currentName}」）` : ''}
+          </button>
+          {sheet.removeLabel && sheet.onRemoveSlot && (
+            <button
+              type="button"
+              className="sheet__remove-slot"
+              onClick={() => { sheet.onRemoveSlot(); onClose(); }}
+            >
+              移除{sheet.removeLabel}欄位
+            </button>
+          )}
+        </div>
 
         <div className="sheet__list">
           {filtered.length === 0 ? (
