@@ -847,6 +847,12 @@ Tests are non-vacuous (verified by mutation: breaking a label produced the expec
 reverting the row-height rule fails `midweekXlsxLayout.test.mjs`; dropping the filler anchor or
 `fitToHeight` fails 44 and 80 of the renderer check's 112 renders respectively).
 
+`npm run test:e2e` drives a real `next dev` with Playwright against the
+`/test-fixtures/midweek-pdf` fixture route (synthetic weeks; 404 in production) and asserts the
+`.mw-pdf-captures` geometry at 390×844 and 1280×900 with `body.editing` on and off, then downloads
+the real PDFs and checks page count, aspect ratios and that nothing edit-only is visible. Run it
+after touching `MidweekWeek` or the PDF/print CSS. Artifacts land in `tests/e2e/artifacts/`.
+
 `scripts/check-xlsx-pagination.mjs` is the renderer-level companion: it builds each case and
 converts it with LibreOffice, asserting the real page count AND that every page opens with a week
 header (a page starting mid-programme is a split week). It renders each case **eight ways** — four

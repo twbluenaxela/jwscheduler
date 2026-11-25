@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 
 import { buildMidweekXlsxBlob } from './midweekXlsxLayout.mjs';
 import { dataUrlToUint8, singleImagePages, writePdf } from './pdfWriter.mjs';
-import { A4_PT, paginate, placeCells } from './pdfLayout.mjs';
+import { A4_PT, MARGIN, paginate, placeCells } from './pdfLayout.mjs';
 import { isMidweekSuspended } from './weekType.mjs';
 
 // Re-exported so the existing import sites (ImportPage, MeetingsPage) don't have
