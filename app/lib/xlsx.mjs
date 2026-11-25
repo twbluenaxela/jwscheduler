@@ -26,6 +26,12 @@ export function cellRef(colIndex, rowIndex) {
   return `${letters}${rowIndex}`;
 }
 
+// Just the column letters, e.g. 5 → "E". For range references such as the
+// $A$1:$E$38 a Print_Area defined name carries.
+export function colLetter(colIndex) {
+  return cellRef(colIndex, 1).replace(/\d+$/, '');
+}
+
 /* ===================== Plain XLSX (used by the weekend export) ===================== */
 
 export function buildPlainSheetXml(rows, cols = [18, 18, 48, 36, 22, 18]) {
@@ -65,12 +71,31 @@ function safeSheetName(value, index) {
   return cleaned || `第${index + 1}頁`;
 }
 
+// `sheet.printArea` (e.g. "$A$1:$E$38") becomes a `_xlnm.Print_Area` defined
+// name scoped to that sheet. Without it a renderer prints the sheet's *used*
+// range, which can grow an empty column or row into a page of its own.
 export function zipXlsxSheets(sheets, stylesXml) {
   const list = (sheets ?? []).map((sheet, index) => ({
     xml: sheet.xml,
     name: safeSheetName(sheet.name, index),
+    printArea: sheet.printArea || null,
   }));
   if (!list.length) list.push({ xml: buildPlainSheetXml([]), name: '週中' });
+
+  // A sheet name is a formula operand, so it must be quoted, and an apostrophe
+  // inside it doubled — exactly what Excel writes for its own defined names.
+  // Only & < > need entity escaping here; an apostrophe is legal element text.
+  const quoteSheet = (name) => `'${String(name).replace(/'/g, "''")}'`
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const definedNames = list
+    .map((sheet, index) => {
+      if (!sheet.printArea) return '';
+      return `<definedName name="_xlnm.Print_Area" localSheetId="${index}">`
+        + `${quoteSheet(sheet.name)}!${sheet.printArea}</definedName>`;
+    })
+    .filter(Boolean);
 
   const zip = new JSZip();
   zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -89,7 +114,10 @@ export function zipXlsxSheets(sheets, stylesXml) {
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
     ${list.map((sheet, index) => `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('\n    ')}
-  </sheets>
+  </sheets>${definedNames.length ? `
+  <definedNames>
+    ${definedNames.join('\n    ')}
+  </definedNames>` : ''}
 </workbook>`);
   zip.file('xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
