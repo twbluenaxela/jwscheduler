@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet } from './literature/PubThumb';
 import Menu from './literature/Menu';
+import HeaderMenu from './HeaderMenu';
+import PrintStage from './PrintStage';
+import ServicesPrintSheet from './ServicesPrint';
 import FieldView from './services/FieldView';
+import { serviceExportFilename } from '../lib/services.mjs';
+import { downloadNodeImage, exportCapturesPdf } from '../lib/printPdf';
 
 const monthOf = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 const shiftMonth = (month, delta) => {
@@ -432,12 +437,20 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
   const [selected, setSelected] = useState(null);
   const [month, setMonth] = useState(() => monthOf(new Date()));
   const [loaded, setLoaded] = useState(null);
+  // The month payload for the 匯出 sheet: every category of the shown month in
+  // one response (dates, slot assignments, 打掃 groups, 帶頭傳道 meetings). It is
+  // kept apart from `loaded` because the live view only ever holds the selected
+  // category's data, and the groups tab loads a whole year instead of a month.
+  const [exportJob, setExportJob] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [error, setError] = useState('');
   const [add, setAdd] = useState(false);
   const [revision, setRevision] = useState(0);
   const [fieldAdd, setFieldAdd] = useState(0);
   const [overflow, setOverflow] = useState({ left: false, right: false });
   const tabsRef = useRef(null);
+  const exportNodesRef = useRef([]);
   function updateOverflow() {
     const node = tabsRef.current;
     if (node)
@@ -579,6 +592,52 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
       setError(e.message);
     }
   }
+  // 匯出 always starts from a fresh /api/services/month payload: the live view
+  // holds one category (or a whole year for 打掃), and the sheet must contain
+  // every active category of the shown month. The payload is parked in
+  // `exportJob` so the PrintStage can render it; a second effect does the
+  // capture after that render (the stage hands over its nodes on mount).
+  async function startExport(format) {
+    if (exporting) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      const payload = await request(`/api/services/month?month=${month}`);
+      setExportJob({ month, format, data: payload });
+    } catch (e) {
+      setExportError(e.message);
+      setExporting(false);
+    }
+  }
+  useEffect(() => {
+    if (!exportJob) return undefined;
+    let live = true;
+    (async () => {
+      try {
+        await document.fonts?.ready;
+        const nodes = exportNodesRef.current.filter(Boolean);
+        if (exportJob.format === 'pdf') {
+          await exportCapturesPdf(nodes, {
+            filename: serviceExportFilename(exportJob.month, 'pdf'),
+            perPage: 1,
+          });
+        } else {
+          if (!nodes[0]) throw new Error('沒有可匯出的內容。');
+          await downloadNodeImage(nodes[0], serviceExportFilename(exportJob.month, 'jpg'), { background: '#ffffff' });
+        }
+      } catch (e) {
+        if (live) setExportError(e.message || '匯出失敗');
+      } finally {
+        if (live) {
+          setExportJob(null);
+          setExporting(false);
+        }
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [exportJob]);
   return (
     <section className="services-page">
       <div className="service-tabs-sticky">
@@ -624,18 +683,35 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
                 ›
               </button>
             </div>
-            {category.kind === 'field' && canEdit && (
-              <div className="service-header-actions">
+            <div className="service-header-actions">
+              {category.kind === 'field' && canEdit && (
                 <Menu items={[{ label: '複製上個月的時段', onSelect: copyMonth }]} />
+              )}
+              {category.kind === 'field' && canEdit && (
                 <button
                   className="btn btn--primary service-add-button"
                   onClick={() => setFieldAdd((n) => n + 1)}
                 >
                   ＋ 新增
                 </button>
-              </div>
-            )}
+              )}
+              {/* The sheet always covers the month's whole schedule, whatever tab
+                  is open, so 匯出 is offered on every category. */}
+              <HeaderMenu label="匯出" disabled={exporting}>
+                <button type="button" role="menuitem" className="menu__item" onClick={() => startExport('pdf')}>
+                  <span className="menu__ic">▤</span>下載 PDF
+                </button>
+                <button type="button" role="menuitem" className="menu__item" onClick={() => startExport('jpg')}>
+                  <span className="menu__ic">▣</span>匯出 JPG
+                </button>
+              </HeaderMenu>
+            </div>
           </div>
+          {exportError && (
+            <div className="service-error" role="alert">
+              匯出失敗：{exportError}
+            </div>
+          )}
           {error && (
             <div className="service-error" role="alert">
               {error}{' '}
@@ -695,6 +771,18 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
         </>
       )}
       <p className="service-hint">這些服務會自動出現在你的行事曆訂閱。</p>
+      {/* The 匯出 sheet: one white page holding every category of the shown
+          month, read-only. It renders while `exportJob` is set and is captured
+          right after that render; `exporting` keeps the button disabled. */}
+      {exportJob && (
+        <PrintStage nodesRef={exportNodesRef} className="print-stage--services">
+          <ServicesPrintSheet
+            month={exportJob.month}
+            categories={categories}
+            monthData={exportJob.data}
+          />
+        </PrintStage>
+      )}
       {add && (
         <AddCategory
           close={() => setAdd(false)}

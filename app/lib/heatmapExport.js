@@ -3,7 +3,8 @@
 // Download layer for the 指派分布 exports — mirrors weekendExport.js: the row
 // builders are pure and live in heatmap.mjs (so they are unit-tested and shared
 // with 複製文字), this file only turns them into a file.
-import { buildXlsxBuffer, triggerDownload } from './midweekExport';
+import { buildXlsxBuffer } from './midweekExport';
+import { triggerDownload } from './printPdf';
 import { buildGridExportRows, buildPersonExportRows } from './heatmap.mjs';
 
 function sanitizeFilename(value) {

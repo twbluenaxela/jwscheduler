@@ -95,26 +95,17 @@ app/
                          credentials from FIREBASE_SERVICE_ACCOUNT JSON blob
     auth-context.js    — AuthProvider + useAuth() hook + getToken() helper
     epubParser.js      — client-side EPUB parser; exports parseEpub(file) → week[]
-    midweekExport.js   — JPG/Excel/PDF/text export. `jpegImagesToPdfBlob()` builds
-                         a multi-page PDF entirely in-browser (baseline-JPEG embed via
-                         DCTDecode) — each page is sized to its image's aspect ratio so the
-                         card fills the page edge-to-edge (no A4 letterbox), no print dialog;
+    midweekExport.js   — JPG/Excel/text filenames and wrappers ONLY (no PDF, no capture —
+                         those live in printPdf.js). `exportNodesJpeg()` = one JPG, or a zip
+                         for many weeks, via printPdf's capture helper;
                          `buildWeekText()` = plain-text week schedule for pasting into LINE;
-                         `triggerDownload()` = blob → download anchor; `captureBox(node)` =
-                         html-to-image size opts pinned to the node's real box (shared with
-                         MeetingsPage and AssignmentHeatmap so captures don't drift); `downloadWeekXlsx` /
-                         `exportWeeksXlsx` = Excel — the workbook itself now lives in
-                         `midweekXlsxLayout.mjs` (re-exported here so import sites don't move).
-                         `buildXlsxBuffer()` (now in `xlsx.mjs`) remains the plain builder used
-                         by weekendExport.js. Multi-week visual
-                         exports are DOM-screenshot based: `exportNodes{Jpeg,Pdf,PdfGrid}` +
-                         `openNodesPrintWindow` take rendered MidweekWeek card nodes and
-                         capture them via html-to-image, so the output matches the live card
-                         exactly. (The old hand-drawn `renderWeekToCanvas` exporters were
-                         removed — they had drifted from the real card; see "What NOT to do".)
-                         `exportNodesPdfGrid(nodes, weeks, layout)` = the 版面 export: N week
-                         cards per A4 page, geometry from `pdfLayout.mjs`, bytes from
-                         `pdfWriter.mjs`
+                         `downloadWeekXlsx` / `exportWeeksXlsx` = Excel — the workbook itself now
+                         lives in `midweekXlsxLayout.mjs` (re-exported here so import sites don't
+                         move). `buildXlsxBuffer()` (now in `xlsx.mjs`) remains the plain builder
+                         used by weekendExport.js. This module has NO PDF or capture code any
+                         more: `exportNodesJpeg` is the only visual export it keeps, and it calls
+                         `printPdf.js`'s `nodeToImageBlob`. PDFs, images, print windows and the
+                         capture options all live in `lib/printPdf.js` (see Export below).
                          All download filenames carry the actual date range, not a generic
                          count: `getMidweekExportFilename(week, ext)` uses the week's label;
                          `getMultiWeekExportFilename(weeks, ext)` (xlsx/zip/pdf) joins the
@@ -159,10 +150,11 @@ app/
                          edges. Shrinking only the week bands left a one-line notice WIDER than
                          the cards above it. A notice is still THIN (capped at `NOTICE_H`) and
                          spans the page only at ONE column; at two it is one column wide
-    pdfWriter.mjs      — `writePdf(pages)`: pages of placed JPEGs, object numbers allocated as
-                         written (the old fixed stride of 3 only worked at one image per page).
-                         `singleImagePages()` keeps the original one-card-per-page behaviour
-                         that `jpegImagesToPdfBlob` and the 指派分布 PDF rely on
+    pdfWriter.mjs      — LOW-LEVEL bytes, imported only by printPdf.js. `writePdf(pages)`:
+                         pages of placed JPEGs, object numbers allocated as written (the old
+                         fixed stride of 3 only worked at one image per page).
+                         `singleImagePages()` is what `exportCapturesPdf(..., { pageFit: 'fill' })`
+                         uses for the 指派分布 PDF (one card per page, page follows the image)
     weekendExport.js   — `getWeekendExportFilename(rows, ext, label)` mirrors the midweek
                          helper for weekend downloads: joins the first/last exported row's
                          `date` with `~` (e.g. `週末_7-12~9-14.xlsx`); `downloadWeekendXlsx`
@@ -384,8 +376,8 @@ app/
                          **Export**: `HeatmapExportMenu` serves BOTH views (匯出 JPG / 複製
                          圖片 / 複製文字 / 匯出 Excel / 下載 PDF) — they differ only in the
                          `buildText` / `buildXlsx` they hand it and the filename. Reuses
-                         `captureBox` / `triggerDownload` / `jpegDataUrlToImage` /
-                         `jpegImagesToPdfBlob` from `midweekExport.js` and the row builders
+                         `exportCapturesPdf([node], { pageFit: 'fill' })` / `downloadNodeImage` /
+                         `copyNodeImageToClipboard` from `printPdf.js`, and the row builders
                          in `heatmap.mjs`; Excel goes through `heatmapExport.js`.
                          The grid card is height-capped (`.hm-root { max-height }`) so
                          `.hm-tablewrap` is a real scrollport and the sticky month header
@@ -738,29 +730,91 @@ Button variants: `.btn--primary`, `.btn--ghost`, `.btn--danger`, `.btn--sm`, `.b
 
 ## Export (JPG / PDF / Excel / Text)
 
-**Meetings page (current week)** — JPG, copy and PDF screenshot the live `article.card`
-DOM element (`cardRef` passed into `MidweekWeek`) via `html-to-image`, so the export matches
-exactly what's on screen:
+### The print pipeline (all visual exports)
 
-- **JPG** — `toJpeg(cardRef.current, { quality: 0.95, pixelRatio: 2 })` → download
-- **複製圖片** — `toPng` → `ClipboardItem`
+Every visual PDF and every image export in the app goes through ONE module, and it never
+screenshots what is on screen:
+
+`PrintStage` (`components/PrintStage.js`) → `exportCapturesPdf` / `exportStagePdf` / `printCaptures`
+(`lib/printPdf.js`) → `planCapturePages` (`lib/pdfLayout.mjs`) → `lib/pdfWriter.mjs` → downloaded
+PDF.
+
+- **`lib/printPdf.js` is the only module that turns DOM into images or images into PDF pages.**
+  It owns `captureBox`, the single html-to-image option set (`nodeToJpegDataUrl` /
+  `nodeToPngDataUrl` / `nodeToImageBlob` / `downloadNodeImage` / `copyNodeImageToClipboard`),
+  `jpegDataUrlToImage`, `triggerDownload`, `ensurePrintStage`, `exportCapturesPdf`,
+  `exportStagePdf` and the two print-window helpers (`printCaptures` for captured pages,
+  `printNodes` for live markup). Nothing else may import `html-to-image`, import `pdfWriter.mjs`,
+  call `window.print`/`window.open`, or build a `*Pdf*Blob`; `printPdf.guard.test.mjs` fails the
+  suite if it does.
+- **`PrintStage`** is a `position: fixed; left: -99999px; width: 960px` container — the ONE
+  off-screen print container. The export must be a real render at print width, so a phone viewport
+  cannot re-flow it and edit controls cannot leak into it. It hands its direct children to
+  `nodesRef` after every render — so an exporter reads `nodesRef.current` *after* the children it
+  wants are mounted (a capture triggered in the same tick as the mount sees an empty list).
+  `className` is how older blocks keep their own hook: ImportPage passes `mw-pdf-captures`, and the
+  print CSS is scoped to `:is(.print-stage, .mw-pdf-captures)`.
+- **`exportCapturesPdf(nodes, { filename, perPage, layout, subjects, isNotice, pageFit,
+  background })`** captures each node at `pixelRatio: 2` on white (never the app's warm page
+  background), then lays the images on pages. `perPage` > 1 and `layout`/`subjects`/`isNotice` are
+  the midweek 版面 grid (a cancelled week rides along as a notice band); `pageFit: 'fill'` sizes
+  each page to its capture's aspect ratio (the 指派分布 export).
+- **`exportStagePdf`** is the same export with `ensurePrintStage` in front: it THROWS unless every
+  node is inside `.print-stage`, so pointing an export back at the live card fails loudly instead
+  of quietly shipping the wrong picture.
+- **`planCapturePages(sizes, opts)`** is the geometry, pure and unit-tested
+  (`pdfLayout.test.mjs`): one capture is contain-fitted inside the 24pt margin and never drawn
+  larger than its natural size (`PT_PER_CAPTURED_PX = 72/96/2 = 0.375`).
+- `lib/midweekExport.js` keeps only the NON-PDF wrappers: filenames, the Excel workbooks, the
+  plain-text schedule, and the JPG/zip download that calls `nodeToImageBlob`.
+
+**Meetings page (current week)** — JPG and 複製圖片 keep screenshotting the live `article.card`
+DOM element (`cardRef` into `MidweekWeek`) through `printPdf.js`'s capture helper, because those are
+for pasting the screen's look into a chat. **下載 PDF** captures the off-screen `PrintStage` instead (a phone
+PDF used to be the stacked phone card; an edit-mode PDF used to carry the edit controls):
+
+- **JPG** — `downloadNodeImage(cardRef.current, filename)`
+- **複製圖片** — `copyNodeImageToClipboard(cardRef.current)`
 - **複製文字** — `buildWeekText(week, getAssign)` → `navigator.clipboard.writeText` (plain-text
   schedule for manually pasting into a LINE group)
-- **下載 PDF** — `toJpeg` → `jpegDataUrlToImage` → `jpegImagesToPdfBlob([img])` → `triggerDownload`.
-  Built entirely client-side and downloaded directly — **no print dialog/popup** (browsers block
-  those). Each PDF page is sized to the image's aspect ratio (no A4 letterbox). Do not reintroduce
+- **下載 PDF** — `exportStagePdf(pdfNodesRef.current, { filename })`. Built entirely client-side
+  and downloaded directly — **no print dialog/popup** (browsers block those). Do not reintroduce
   the `window.open(...).print()` flow.
 - **Excel** — `buildMidweekXlsxBlob()` in `midweekExport.js` (JSZip, hand-built OOXML): styled
   like the card (section-colour bands, grey time/role columns, bold names), A4 portrait page
   setup with a manual page break after every 2nd week → printing from Excel yields two weeks
   per page for the bulletin board
 
+**週末 (公眾演講安排表)** — same rule: the PDF captures a PrintStage. `WeekendView` renders a
+hidden `PrintStage className="print-stage--weekend"` when `printNodesRef` is passed, holding one
+`WeekendPrintTable` per page-sized chunk from `weekendPrintChunks(rows)`
+(`lib/weekendPrint.mjs`, `WEEKEND_PRINT_ROWS_PER_PAGE`). The component always emits the DESKTOP
+table markup, so at ≤720px it prints the table rather than the card list, and `.print-stage--weekend`
+CSS forces the table, drops the screen chrome and pins type sizes. The split is at row boundaries
+with the header repeated, so a long service year never shrinks into illegibility and no row is cut
+in half. JPG / 複製圖片 / Excel keep using the live table.
+
+**服務** — the page shows ONE category at a time, so it cannot screenshot itself. 匯出 ▸ 下載 PDF /
+匯出 JPG prepends a fresh `/api/services/month` payload (all categories of the shown month), renders
+`ServicesPrintSheet` (`components/ServicesPrint.js`) inside a temporary
+`PrintStage className="print-stage--services"`, captures it once, then unmounts it. The sheet is
+read-only — plain tables, no buttons/inputs (the e2e asserts this) — with 帶頭傳道 / 打掃 (chips) /
+每個 slots 類別 / notes. Filenames come from `serviceExportFilename(month, ext)`
+(`服務_2026年11月.pdf`). The 匯出 trigger is `components/HeaderMenu.js`, a `position: fixed`
+measured dropdown (an absolutely-positioned panel is clipped by the sticky header).
+
+**書刊 清點 (S-28 存書月結記錄)** — 列印 is a LONG table the browser should paginate itself, so
+it does not become a screenshot: `printNodes([reportNode], { title })` in `printPdf.js` opens the
+print window, copies the app's stylesheets across (absolute `href`s, because the popup is
+`about:blank`), drops `[data-print-hide]` chrome and prints the live markup.
+
 **Import/匯出 page (multi-week, range-scoped)** — the 匯出與分享 cards call `exportNodesJpeg`
 (single → JPG, many → zip), `exportWeeksXlsx` (one styled workbook, two weeks per printed A4
-page), `exportNodesPdf` (one PDF page per week), and `openNodesPrintWindow`. The visual exporters
-screenshot REAL MidweekWeek cards rendered off-screen (cardRefs) via `html-to-image`, so they
-match the live card exactly — they do NOT hand-redraw on canvas (the old `renderWeekToCanvas`
-path was removed). Excel uses the styled `buildMidweekXlsxBlob` data path (`weekRows` mirrors
+page), and for PDFs `exportCapturesPdf` from `lib/printPdf.js` twice — `perPage: 1` for one page
+per week, and `layout`/`subjects`/`isNotice` for the 版面 grid — plus `printCaptures` for 列印.
+The visual exporters screenshot REAL MidweekWeek cards rendered off-screen inside a `PrintStage`
+(the 匯出 page passes `className="mw-pdf-captures"`), so they match the live card exactly — they
+do NOT hand-redraw on canvas (the old `renderWeekToCanvas` path was removed). Excel uses the styled `buildMidweekXlsxBlob` data path (`weekRows` mirrors
 the card's row order). The 範圍 selector (全部/本月/自訂) filters
 `existingWeeks` by parsed Chinese date before exporting.
 
@@ -841,17 +895,39 @@ for the webhook, a `reply` spy + injectable `now`. Coverage:
   anchored by a cell.
 - `pdfLayout.test.mjs` — the 版面 grid: the ≤4-box invariants, ＋/− growth, cells staying inside
   the margins without overlapping, aspect preserved, bands sized to the cards, and full-width
-  notice bands.
+  notice bands; plus `planCapturePages` (the print pipeline's per-capture A4 placement, incl.
+  natural-size cap and the midweek grid path).
 
 Tests are non-vacuous (verified by mutation: breaking a label produced the expected failures;
 reverting the row-height rule fails `midweekXlsxLayout.test.mjs`; dropping the filler anchor or
 `fitToHeight` fails 44 and 80 of the renderer check's 112 renders respectively).
 
-`npm run test:e2e` drives a real `next dev` with Playwright against the
-`/test-fixtures/midweek-pdf` fixture route (synthetic weeks; 404 in production) and asserts the
-`.mw-pdf-captures` geometry at 390×844 and 1280×900 with `body.editing` on and off, then downloads
-the real PDFs and checks page count, aspect ratios and that nothing edit-only is visible. Run it
-after touching `MidweekWeek` or the PDF/print CSS. Artifacts land in `tests/e2e/artifacts/`.
+`npm run test:e2e` drives a real `next dev` with Playwright against fixture routes (synthetic
+data only, 404 in production) and asserts the print geometry at 390×844 and 1280×900, then
+downloads the real files and checks page count, aspect ratios and that nothing edit-only is
+visible. Run it after touching the print CSS or any of the exporters. Artifacts land in
+`tests/e2e/artifacts/` (gitignored). Shared plumbing lives in `tests/e2e/helpers.mjs` (dev-server
+start/stop, PDF page/image scanning, JPEG width, `assertImageRatios`).
+
+- `midweek-pdf.e2e.mjs` — `/test-fixtures/midweek-pdf`: `.mw-pdf-captures` card geometry with
+  `body.editing` on and off, plus the per-week PDF and the 2-per-page 版面 PDF.
+- `weekend-pdf.e2e.mjs` — `/test-fixtures/weekend-pdf`: the 週末 stage must render the DESKTOP
+  table (not `.wk-cards`) at phone width, every chunk's aspect must fit an A4 page without being
+  shrunk, one page per `weekendPrintChunks` chunk, header repeated, and the download name carries
+  the date range. The test freezes the clock inside the fixture year.
+- `services-pdf.e2e.mjs` — `/test-fixtures/services-pdf`: the 服務 sheet has every category,
+  white background, no controls, 960px stage, then 匯出 ▸ 下載 PDF / 匯出 JPG are pressed for
+  real and the bytes/names (`服務_2026年11月.pdf`) are checked.
+
+`app/lib/printPipeline.test.mjs` pins the plumbing itself: `weekendPrintChunks` page splitting,
+`serviceExportFilename`, `ensurePrintStage`'s refusal, and (by reading the sources) that the
+週中/週末 PDF branches call `exportStagePdf`, that 週末/服務 render into a `PrintStage`, and that
+ImportPage still passes `mw-pdf-captures`.
+
+`app/lib/printPdf.guard.test.mjs` is the single-source guard: it scans `app/**/*.js|mjs` (minus the
+pipeline, the writers, tests, `dev-preview` and `test-fixtures`) and fails if any other file
+imports `html-to-image`, imports `pdfWriter.mjs`, calls `window.print`/`window.open`, or defines a
+`*Pdf*Blob` helper — plus it asserts each page's PDF/print path calls `printPdf.js`.
 
 `scripts/check-xlsx-pagination.mjs` is the renderer-level companion: it builds each case and
 converts it with LibreOffice, asserting the real page count AND that every page opens with a week
@@ -918,8 +994,11 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 - Do not add real congregation member names to `app/data/index.js` — all demo/seed data must use fictional names; real data lives only in the DB
 - Do not overwrite `displayName` in `/api/auth/sync` update block — only set it on `create`. The settings page (`PATCH /api/users/me`) is the authoritative way to change display names
 - Do not apply the `PATCH /api/people/[id]` response back into local `people` state in `PeoplePage`. Rapid edits (e.g. toggling several quals quickly) fire overlapping PATCHes; an out-of-order/stale response would clobber newer optimistic state, making quals appear to "deselect on their own". Writes are serialized through a promise chain (`writeChainRef`) and the optimistic state is authoritative
-- Do not bring back the `window.open(...).print()` popup for PDF export — browsers block it. PDF is generated client-side with `jpegImagesToPdfBlob` and downloaded directly
-- Do not re-add a hand-drawn canvas renderer (`renderWeekToCanvas`) for the 匯出 page exports — it drifted from the real card (invented `週次資訊`/`會眾項目` bands, wrong section colours/blue accents). JPG/PDF/列印 must screenshot REAL off-screen `MidweekWeek` cards via `exportNodes{Jpeg,Pdf}` / `openNodesPrintWindow` so the output always matches the live card
+- Do not build a PDF, capture a DOM node, or open a print window outside `lib/printPdf.js`. That module is the single source for DOM→image and images→PDF; `printPdf.guard.test.mjs` fails if any other file imports `html-to-image`, imports `pdfWriter.mjs`, calls `window.print`/`window.open`, or defines a `*Pdf*Blob`
+- Do not bring back the `window.open(...).print()` popup for PDF export — browsers block it. PDF is generated client-side and downloaded directly (the one print window the app opens is `printPdf.js`'s `printCaptures`/`printNodes`)
+- Do not point a PDF export at the LIVE card/table — capture `PrintStage` (`.print-stage`) instead, or `ensurePrintStage` throws. The live node is the phone layout at ≤720px and carries edit controls in edit mode
+- Do not add a `.print-stage` CSS rule that only sets viewport-independent properties; the capture runs inside the real viewport, so every rule that keeps a phone capture desktop-shaped must live in the `:is(.print-stage, .mw-pdf-captures)` (or `.print-stage--weekend` / `--services`) block and outrank the ≤720px media queries
+- Do not re-add a hand-drawn canvas renderer (`renderWeekToCanvas`) for the 匯出 page exports — it drifted from the real card (invented `週次資訊`/`會眾項目` bands, wrong section colours/blue accents). JPG/PDF/列印 must screenshot REAL off-screen `MidweekWeek` cards via `exportNodesJpeg` / `exportCapturesPdf` / `printCaptures` so the output always matches the live card
 - Do not re-add an auto-fallback to `selectedPerson` in `PeoplePage` (e.g. `?? filteredPeople[0]`) — "nothing selected" must stay a real state so clicking a selected card can deselect/hide the detail and the list recenters (`.people-layout--solo`)
 - Do not move ＋ 新增安排 / ＋ 新增事項 back into the weekend toolbar — they belong at the bottom of the table (`<tfoot>`) and mobile card list so users can add rows without scrolling to the top
 - Do not use `assign.length === 2` to determine `isPair` in `PartRow` — use `roleLabel?.includes('/')`. The assign array collapses to `[]` when no assignments exist (filter strips empty strings), which would incorrectly show only one slot for ministry/CBS parts

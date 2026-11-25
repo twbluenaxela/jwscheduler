@@ -10,10 +10,12 @@ import {
   MAX_COLS,
   MAX_ROWS,
   NOTICE_H,
+  PT_PER_CAPTURED_PX,
   addBox,
   normalizeLayout,
   pageCount,
   paginate,
+  planCapturePages,
   placeCells,
   removeBox,
   setCount,
@@ -298,4 +300,74 @@ test('notices shrink the week bands rather than pushing them off the page', () =
   const rects = placeCells(page, DEFAULT_LAYOUT, {});
   const used = rects.reduce((total, r) => total + r.h, 0) + (rects.length - 1) * GAP;
   assert.ok(used <= A4_PT.h - 2 * MARGIN + 0.01, `content is ${used}pt tall`);
+});
+
+/* ===================== planCapturePages (printPdf.js) ===================== */
+
+test('one capture per page, contain-fitted inside the A4 margin', () => {
+  const sizes = { 0: { width: 1920, height: 1200 } };
+  const pages = planCapturePages(sizes);
+  assert.equal(pages.length, 1);
+  const [page] = pages;
+  assert.equal(page.w, A4_PT.w);
+  assert.equal(page.h, A4_PT.h);
+  const [cell] = page.cells;
+  assert.equal(cell.item, 0);
+  assert.ok(cell.x >= MARGIN - 0.01 && cell.x + cell.w <= A4_PT.w - MARGIN + 0.01);
+  assert.ok(cell.y >= MARGIN - 0.01 && cell.y + cell.h <= A4_PT.h - MARGIN + 0.01);
+  // 1920 px at 2× is 960 CSS px = 720 pt, wider than the text column, so the
+  // width is what constrains: the aspect ratio is preserved exactly.
+  assert.ok(Math.abs(cell.w / cell.h - 1920 / 1200) < 1e-6);
+  assert.ok(Math.abs(cell.h - (A4_PT.w - 2 * MARGIN) * (1200 / 1920)) < 0.01);
+});
+
+test('a capture is never drawn larger than its natural size', () => {
+  // A tiny capture (a notice strip, a short 服務 sheet) must not be blown up to
+  // page width — it stays at its real printed size, centred in its cell.
+  const sizes = { 0: { width: 200, height: 100 } };
+  const [cell] = planCapturePages(sizes)[0].cells;
+  assert.ok(Math.abs(cell.w - 200 * PT_PER_CAPTURED_PX) < 1e-6);
+  assert.ok(Math.abs(cell.h - 100 * PT_PER_CAPTURED_PX) < 1e-6);
+});
+
+test('perPage packs several captures onto one sheet, in order', () => {
+  const sizes = Object.fromEntries(
+    Array.from({ length: 4 }, (_, i) => [i, { width: 1920, height: 900 }]),
+  );
+  const pages = planCapturePages(sizes, { perPage: 2 });
+  assert.equal(pages.length, 2);
+  assert.deepEqual(pages[0].cells.map((cell) => cell.item), [0, 1]);
+  assert.deepEqual(pages[1].cells.map((cell) => cell.item), [2, 3]);
+  // Whatever the grid, no box may overlap another.
+  pages.forEach((page) => {
+    const cells = page.cells;
+    for (let i = 0; i < cells.length; i += 1) {
+      for (let j = i + 1; j < cells.length; j += 1) {
+        const a = cells[i];
+        const b = cells[j];
+        const overlap = a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+        assert.equal(overlap, false, `cells ${a.item} and ${b.item} overlap`);
+      }
+    }
+  });
+});
+
+test('the midweek grid export paginates through subjects + suspended weeks', () => {
+  // The 匯出 page's 版面 export passes the weeks and the suspended predicate, so
+  // a cancelled week becomes a one-line notice band instead of a layout box.
+  const weeks = [normal(1), normal(2), cancelled(3), normal(4), normal(5)];
+  const layout = setCount(2);
+  const sizes = Object.fromEntries(weeks.map((_, i) => [i, { width: 1920, height: 900 }]));
+  const pages = planCapturePages(sizes, { layout, subjects: weeks, isSuspended: (w) => w.type === 'suspended' });
+  assert.equal(pages.length, paginate(weeks, layout, (w) => w.type === 'suspended').length);
+  // The cancelled week is placed as a notice band (NOTICE_H tall), not as a card.
+  const notices = pages.flatMap((page) => page.cells.filter((cell) => cell.kind === 'notice'));
+  assert.equal(notices.length, 1);
+  assert.equal(notices[0].item, 2);
+  assert.ok(notices[0].h <= NOTICE_H + 0.01, `notice is ${notices[0].h}pt tall`);
+});
+
+test('nothing to export yields no pages', () => {
+  assert.deepEqual(planCapturePages({}, { perPage: 1 }), []);
+  assert.deepEqual(planCapturePages(undefined, {}), []);
 });

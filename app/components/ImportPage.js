@@ -3,14 +3,11 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { parseEpub } from '../lib/epubParser';
 import MidweekWeek from './MidweekWeek';
-import {
-  exportNodesJpeg,
-  exportNodesPdf,
-  exportNodesPdfGrid,
-  exportWeeksXlsx,
-  openNodesPrintWindow,
-} from '../lib/midweekExport';
+import { exportNodesJpeg, exportWeeksXlsx, getMultiWeekExportFilename } from '../lib/midweekExport';
+import { exportCapturesPdf, printCaptures } from '../lib/printPdf';
+import { isMidweekSuspended } from '../lib/weekType.mjs';
 import PdfLayoutSheet from './PdfLayoutSheet';
+import PrintStage from './PrintStage';
 import { DEFAULT_LAYOUT, normalizeLayout } from '../lib/pdfLayout.mjs';
 
 const PDF_LAYOUT_KEY = 'mwPdfLayout';
@@ -228,8 +225,12 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
       const present = nodes.filter(Boolean);
       if (action === 'jpg') await exportNodesJpeg(present, selectedWeeks);
       else if (action === 'xlsx') await exportWeeksXlsx(selectedWeeks, getAssign);
-      else if (action === 'pdf') await exportNodesPdf(exportPdfNodes().filter(Boolean), selectedWeeks);
-      else if (action === 'print') await openNodesPrintWindow(exportPdfNodes().filter(Boolean));
+      else if (action === 'pdf') {
+        await exportCapturesPdf(exportPdfNodes(), {
+          filename: getMultiWeekExportFilename(selectedWeeks, 'pdf'),
+          perPage: 1,
+        });
+      } else if (action === 'print') await printCaptures(exportPdfNodes());
     } catch (err) {
       setExportError(err?.message || '匯出失敗');
     } finally {
@@ -241,7 +242,12 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
     setExportError(null);
     setExporting(true);
     try {
-      await exportNodesPdfGrid(exportPdfNodes(), selectedWeeks, layout);
+      await exportCapturesPdf(exportPdfNodes(), {
+        filename: getMultiWeekExportFilename(selectedWeeks, 'pdf'),
+        layout,
+        subjects: selectedWeeks,
+        isNotice: isMidweekSuspended,
+      });
       setLayoutOpen(false);
     } catch (err) {
       setExportError(err?.message || '匯出失敗');
@@ -570,8 +576,10 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
 
       {/* PDF pages have a fixed paper layout. Capture these cards at print width
           even on phones; otherwise the mobile card stacks every assignment and
-          then gets scaled down again to share an A4 page with another week. */}
-      <div className="mw-pdf-captures" aria-hidden="true">
+          then gets scaled down again to share an A4 page with another week.
+          `mw-pdf-captures` is the older name for PrintStage and is still styled
+          (the print rules are scoped to `:is(.print-stage, .mw-pdf-captures)`). */}
+      <PrintStage className="mw-pdf-captures">
         {selectedWeeks.map((w, i) => (
           <MidweekWeek
             key={w.id ?? i}
@@ -583,7 +591,7 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
             cardRef={(el) => { pdfCardRefs.current[i] = el; }}
           />
         ))}
-      </div>
+      </PrintStage>
 
       <PdfLayoutSheet
         open={layoutOpen}

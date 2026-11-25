@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 
 import MidweekWeek from '../../components/MidweekWeek';
-import { exportNodesPdf, exportNodesPdfGrid } from '../../lib/midweekExport';
+import PrintStage from '../../components/PrintStage';
+import { exportCapturesPdf } from '../../lib/printPdf';
+import { getMultiWeekExportFilename } from '../../lib/midweekExport';
 import { DEFAULT_LAYOUT, normalizeLayout } from '../../lib/pdfLayout.mjs';
+import { isMidweekSuspended } from '../../lib/weekType.mjs';
 import { FIXTURE_WEEKS, fixtureGetAssign } from './fixtureWeeks.mjs';
 
 // LOCAL TEST ONLY. Renders the same off-screen capture block the 匯出 page uses
@@ -15,6 +18,7 @@ import { FIXTURE_WEEKS, fixtureGetAssign } from './fixtureWeeks.mjs';
 export default function PdfFixture({ editing = false }) {
   const weeks = FIXTURE_WEEKS;
   const captureRefs = useRef([]);
+  const stageNodesRef = useRef([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -26,11 +30,16 @@ export default function PdfFixture({ editing = false }) {
     const nodes = () => weeks.map((_, i) => captureRefs.current[i] ?? null);
 
     // Called from the page context by the Playwright test.
-    window.__exportPdf = () => exportNodesPdf(nodes(), weeks);
-    window.__exportGrid = (perPage = 2) => {
-      const layout = normalizeLayout({ ...DEFAULT_LAYOUT, count: perPage });
-      return exportNodesPdfGrid(nodes(), weeks, layout);
-    };
+    window.__exportPdf = () => exportCapturesPdf(nodes(), {
+      filename: getMultiWeekExportFilename(weeks, 'pdf'),
+      perPage: 1,
+    });
+    window.__exportGrid = (perPage = 2) => exportCapturesPdf(nodes(), {
+      filename: getMultiWeekExportFilename(weeks, 'pdf'),
+      layout: normalizeLayout({ ...DEFAULT_LAYOUT, count: perPage }),
+      subjects: weeks,
+      isNotice: isMidweekSuspended,
+    });
     setReady(true);
     return () => {
       delete window.__exportPdf;
@@ -41,7 +50,7 @@ export default function PdfFixture({ editing = false }) {
   return (
     <main>
       <p data-testid="fixture-status">{ready ? 'fixture ready' : 'fixture loading'}</p>
-      <div className="mw-pdf-captures" aria-hidden="true">
+      <PrintStage nodesRef={stageNodesRef} className="mw-pdf-captures">
         {weeks.map((week, i) => (
           <MidweekWeek
             key={week.id ?? i}
@@ -53,7 +62,7 @@ export default function PdfFixture({ editing = false }) {
             cardRef={(el) => { captureRefs.current[i] = el; }}
           />
         ))}
-      </div>
+      </PrintStage>
     </main>
   );
 }

@@ -6,6 +6,7 @@ import { matchPublications } from '../../lib/literature.mjs';
 import { localizedName } from '../../lib/publicForm.mjs';
 import { countSection, distributed, expected, groupCountLines, hubReportRows, s28Rows } from '../../lib/literatureInventory.mjs';
 import PubThumb, { Sheet } from './PubThumb';
+import { printNodes } from '../../lib/printPdf';
 
 const json = (method, body) => ({
   method,
@@ -25,6 +26,8 @@ export default function CountSheet({ id, items, request, onBack }) {
   const [adding, setAdding] = useState(false);
   const [checked, setChecked] = useState({});
   const [saving, setSaving] = useState({});
+  const [printing, setPrinting] = useState(false);
+  const printAreaRef = useRef(null);
   const timers = useRef({});
   const pending = useRef({});
   const nameOf = (p) => p && localizedName(p, items);
@@ -118,10 +121,23 @@ export default function CountSheet({ id, items, request, onBack }) {
 
   if (report === 's28') {
     return (
-      <div className="lit-print-area">
-        <div className="lit-report-actions">
+      <div className="lit-print-area" ref={printAreaRef}>
+        <div className="lit-report-actions" data-print-hide>
           <button className="lit-back" onClick={() => setReport('')}><Icon name="back" /> 清點</button>{' '}
-          <button className="btn" onClick={() => window.print()}>列印</button>
+          <button
+            className="btn"
+            disabled={printing}
+            onClick={async () => {
+              setPrinting(true);
+              try {
+                await printNodes([printAreaRef.current], { title: `${count.month} 存書月結記錄 S-28` });
+              } catch (err) {
+                setError(err.message || '列印失敗');
+              } finally {
+                setPrinting(false);
+              }
+            }}
+          >{printing ? '準備中…' : '列印'}</button>
         </div>
         <h1>{count.month} 存書月結記錄 S-28</h1>
         <table className="lit-report-table">

@@ -1,7 +1,8 @@
 // A minimal PDF writer: pages of placed JPEG images, no external library.
 //
-// Extracted from midweekExport.js so the N-weeks-per-page export can put SEVERAL
-// images on one page. The old writer hard-coded a stride of three objects per
+// Extracted from the export module so the N-weeks-per-page export can put SEVERAL
+// images on one page. Only `printPdf.js` imports this file (the single-source
+// guard in printPdf.guard.test.mjs enforces it). The old writer hard-coded a stride of three objects per
 // page (page, content, one image), which only works at one image per page — with
 // a grid the object numbers have to be allocated as they are written, or the
 // xref table points at the wrong bytes and readers reject the file.
@@ -113,8 +114,8 @@ export function writePdf(pages, background = null) {
 
 // The original one-image-per-page behaviour, unchanged: A4 width, page height
 // following the image's aspect ratio so the card fills the page edge to edge
-// with no letterboxing. Used by the meetings page, the 匯出 page's per-week PDF
-// and the 指派分布 export.
+// with no letterboxing. Used by `exportCapturesPdf(..., { pageFit: 'fill' })`
+// (the 指派分布 export).
 export const PAGE_W = 595.28;
 
 export function singleImagePages(images) {
