@@ -81,6 +81,34 @@
 // and count those otherwise invisible filler rows, which stranded the second
 // week's closing song on a page of its own.
 //
+// FIFTH: Android ignores Fit-to; explicit per-sheet scale + print area
+//
+// The Fit-to 1×1 build above still printed wrong on Excel for Android: weeks
+// split across pages, and sometimes a tiny or near-blank page. Two things were
+// measured off the device's print preview and both matter here:
+//
+//   1. Android IGNORES fitToPage (and, per KB 89311, fit-to also makes Excel
+//      discard manual breaks) and it IGNORES <pageMargins> — it applies its own
+//      ~0.83in/0.97in, leaving ≈712.4pt usable. What it DOES honour is an
+//      explicit <pageSetup scale="N">, as long as fitToPage is absent entirely.
+//   2. A near-blank page is a used-range problem, not a height problem: any
+//      empty column or row that Excel considers used can print a page of its own.
+//
+// So every worksheet now ships:
+//   · NO <sheetPr>/<pageSetUpPr fitToPage> and no fitToWidth/fitToHeight;
+//   · `<pageSetup paperSize="9" orientation="portrait" scale="N"/>`, where N is
+//     the largest integer percent that keeps the spread's height inside
+//     PRINT_TARGET_PT (690) AND its column total inside the A4 printable width
+//     (595.28 − 2×0.35in×72 ≈ 544.9pt), clamped to [60, 100]. The width total is
+//     converted from character units the way Excel does: 7px per unit + 5px
+//     padding per column, at 96px/in (see columnWidthPt); the current 72-unit
+//     layout is 397pt, so height is the binding constraint in practice.
+//   · a `_xlnm.Print_Area` defined name per sheet (workbook.xml,
+//     localSheetId = sheet index) covering exactly $A$1:$E$<lastRow>, so the
+//     printed range can never grow past the real rows;
+//   · `<pageMargins … 0.35 … header="0" footer="0"/>` with NO headerFooter.
+// A one-week sheet can therefore never be enlarged past 100%.
+//
 // TWO THEORIES THAT WERE TESTED AND ARE WRONG, so nobody re-derives them: (a)
 // the substituted CJK face wraps titles onto more lines than reserved —
 // measured at 11pt in a real CJK face, wrap counts match TITLE_COL_UNITS exactly
@@ -89,12 +117,35 @@
 // cell) but it was never what the device was doing.
 
 import { isMidweekSuspended, suspendedNotice } from './weekType.mjs';
-import { cellRef, escapeXml, zipXlsxSheets } from './xlsx.mjs';
+import { cellRef, colLetter, escapeXml, zipXlsxSheets } from './xlsx.mjs';
 
 // A4 portrait, minus the 0.35in top/bottom margins the sheet sets. Points.
 export const A4_HEIGHT_PT = 841.89;
 export const PAGE_MARGIN_IN = 0.35;
 export const A4_PRINTABLE_PT = A4_HEIGHT_PT - 2 * PAGE_MARGIN_IN * 72; // ≈791.4
+
+// A4 portrait WIDTH, minus the same 0.35in side margins. The second constraint
+// on the print scale: a sheet wider than this prints a near-empty second
+// column-page — the user's "some remaining information on a third page".
+export const A4_WIDTH_PT = 595.28;
+export const A4_PRINTABLE_WIDTH_PT = A4_WIDTH_PT - 2 * PAGE_MARGIN_IN * 72; // ≈544.9
+
+// How a column's character width converts to printed points. Excel stores a
+// column width in characters of the workbook Normal font's digit width; for the
+// Calibri 11 this workbook keeps as Normal that is 7px per unit plus 5px of cell
+// padding per column, and 96px = 1in = 72pt. Summed over MW_XLSX_COLS (72 units)
+// this is 397pt, comfortably inside 544.9pt at 100%.
+export const COL_UNIT_PX = 7;
+export const COL_PADDING_PX = 5;
+export const PX_TO_PT = 72 / 96;
+
+export function columnWidthPt(units) {
+  return (Math.max(0, units) * COL_UNIT_PX + COL_PADDING_PX) * PX_TO_PT;
+}
+
+export function sheetWidthPt(widths) {
+  return (widths ?? []).reduce((total, width) => total + columnWidthPt(width), 0);
+}
 
 // Width (in `textUnits`) of the 項目 column — MW_XLSX_COLS[2] is 36, and a CJK
 // glyph is two units, so ~17 characters per line.
@@ -287,6 +338,24 @@ export const MOBILE_ROW_ROUNDING_PT = 1;
 export function sheetScale(tallestSpreadPt) {
   const tallest = Math.max(1, tallestSpreadPt ?? 0);
   return Math.max(10, Math.min(100, Math.floor((100 * PRINT_TARGET_PT) / tallest)));
+}
+
+// The scale for ONE shipped worksheet, bounded by BOTH page dimensions.
+//
+// Excel for Android ignores fitToPage but honours <pageSetup scale="N"> when
+// fit-to is off (see FIFTH in the header comment), so this is the only lever
+// left. N is the largest integer percent at which the spread's height still fits
+// PRINT_TARGET_PT and its columns still fit the A4 printable width.
+export const MIN_PRINT_SCALE = 60;
+export const MAX_PRINT_SCALE = 100;
+
+export function printScale(heightPt, widthPt = 0) {
+  const heightLimit = (100 * PRINT_TARGET_PT) / Math.max(1, heightPt ?? 0);
+  const widthLimit = widthPt > 0
+    ? (100 * A4_PRINTABLE_WIDTH_PT) / widthPt
+    : Number.POSITIVE_INFINITY;
+  const largest = Math.floor(Math.min(heightLimit, widthLimit));
+  return Math.max(MIN_PRINT_SCALE, Math.min(MAX_PRINT_SCALE, largest));
 }
 
 // Model height of one page: whatever renders to exactly PRINT_TARGET_PT once the
@@ -513,9 +582,9 @@ export function buildSheetPlan(weeks, getAssign, { perPage = 2, isSuspended = ()
 // Builds one self-contained worksheet spread from actual meeting rows only.
 // This deliberately differs from the legacy multi-page plan above: that plan's
 // filler rows align manual page breaks inside one long worksheet, while a
-// one-spread worksheet has no boundary to align. Keeping the filler here makes
-// it visible content to mobile Excel even though its cell contains only a
-// space, and that extra height is what pushed the final real row onto page 2.
+// one-spread worksheet has no boundary to align. No padding is emitted here at
+// all: a trailing filler is inside the used range, and on Android it can be
+// exactly what strands the closing song on its own page.
 export function buildWorksheetSpread(weeks, getAssign, { isSuspended = () => false } = {}) {
   const opts = { isSuspended };
   const blocks = (weeks ?? []).map((week) => weekRows(week, getAssign, opts));
@@ -528,11 +597,13 @@ export function buildWorksheetSpread(weeks, getAssign, { isSuspended = () => fal
 
   const contentHeight = sumHeights(rows);
   const scaleHeight = contentHeight + rows.length * MOBILE_ROW_ROUNDING_PT;
+  const widthPt = sheetWidthPt(MW_XLSX_COLS);
   return {
     rows,
     contentHeight,
     scaleHeight,
-    scale: sheetScale(scaleHeight),
+    widthPt,
+    scale: printScale(scaleHeight, widthPt),
   };
 }
 
@@ -622,18 +693,17 @@ export function buildMidweekStylesXml() {
     + '</styleSheet>';
 }
 
-export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_MARGIN_IN, fitSinglePage = false) {
+export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_MARGIN_IN) {
   let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
   xml += '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ';
   xml += 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
-  // The child order below is fixed by the OOXML schema: sheetPr, sheetViews,
+  // The child order below is fixed by the OOXML schema: sheetViews,
   // sheetFormatPr, cols, sheetData, mergeCells, printOptions, pageMargins,
   // pageSetup, rowBreaks. Reordering makes Excel reject the file.
   //
-  // A multi-page sheet uses explicit scaling so its manual breaks stay live.
-  // The shipped workbook uses `fitSinglePage`: each worksheet contains exactly
-  // one spread, so Fit to 1×1 has no manual breaks to conflict with.
-  xml += `<sheetPr><pageSetUpPr fitToPage="${fitSinglePage ? 1 : 0}"/></sheetPr>`;
+  // NO <sheetPr>/<pageSetUpPr fitToPage>, NO fitToWidth/fitToHeight: Excel for
+  // Android ignores fit-to (and, per KB 89311, fit-to disables manual breaks) but
+  // honours an explicit `scale`. See FIFTH in the header comment.
   xml += '<sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>';
   xml += '<sheetFormatPr defaultRowHeight="17"/>';
   xml += '<cols>';
@@ -668,18 +738,17 @@ export function buildStyledSheetXml(rows, breaks, scale = 100, marginIn = PAGE_M
     xml += `<mergeCells count="${merges.length}">${merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>`;
   }
   xml += '<printOptions horizontalCentered="1"/>';
+  // 0.35in on every side, and NO header/footer allowance: a header or footer
+  // region is height and width the Android print path will not give back.
   // marginIn is a parameter only so the renderer check can emulate a print path
   // that overrides our margins; the app always ships PAGE_MARGIN_IN.
-  xml += `<pageMargins left="0.3" right="0.3" top="${marginIn}" bottom="${marginIn}" header="0.2" footer="0.2"/>`;
-  // paperSize 9 = A4. Single-spread sheets use Fit to 1×1. The legacy/test path
-  // uses the explicit scale computed against PRINT_TARGET_PT so manual breaks
-  // remain live.
-  xml += fitSinglePage
-    // Conforming readers use Fit to 1×1 and ignore scale. Keep the measured
-    // explicit scale as a fallback for mobile print paths that discard Fit to.
-    ? `<pageSetup paperSize="9" orientation="portrait" scale="${Math.max(10, Math.min(100, Math.round(scale)))}" fitToWidth="1" fitToHeight="1"/>`
-    : `<pageSetup paperSize="9" orientation="portrait" scale="${Math.max(10, Math.min(100, Math.round(scale)))}"/>`;
-  if (!fitSinglePage && breaks.length) {
+  xml += `<pageMargins left="${marginIn}" right="${marginIn}" top="${marginIn}" bottom="${marginIn}" header="0" footer="0"/>`;
+  // paperSize 9 = A4. Explicit scale only — no fitToWidth/fitToHeight, so both
+  // Excel for Android and manual-break-aware readers use OUR percentage. The
+  // [60, 100] budget belongs to printScale(), which owns the per-sheet maths;
+  // this writer only keeps the value a valid percentage.
+  xml += `<pageSetup paperSize="9" orientation="portrait" scale="${Math.max(1, Math.min(100, Math.round(scale)))}"/>`;
+  if (breaks.length) {
     xml += `<rowBreaks count="${breaks.length}" manualBreakCount="${breaks.length}">`;
     breaks.forEach((b) => { xml += `<brk id="${b}" max="16383" man="1"/>`; });
     xml += '</rowBreaks>';
@@ -705,13 +774,16 @@ export function buildMidweekXlsxBlob(weeks, getAssign) {
     const range = first && last && first !== last ? `${first}-${last}` : (first || last || '暫停');
     return {
       name: `第${pageIndex + 1}頁 ${range}`,
-      // One worksheet is one physical page. Fit-to-page is now safe because
-      // there are no manual breaks for Excel to ignore and no following week
-      // that an automatic break can strand on another page. The explicit scale
-      // remains in the XML as a fallback for mobile readers that ignore Fit to.
-      // Do not add the legacy end-of-page filler here: on Android it is part of
-      // the used range and can push the final meeting row onto a second page.
-      xml: buildStyledSheetXml(spread.rows, [], spread.scale, PAGE_MARGIN_IN, true),
+      // One worksheet is one physical page, and the ONLY pagination control we
+      // hand the renderer is the explicit per-sheet `scale` (see FIFTH in the
+      // header comment). Fit-to is gone: Excel for Android ignores it, and fit-to
+      // also disables manual breaks (KB 89311).
+      //
+      // Do not add end-of-page filler here: on Android it is part of the used
+      // range and can push the final meeting row onto a second page. The print
+      // area below pins the used range to the real rows for the same reason.
+      xml: buildStyledSheetXml(spread.rows, [], spread.scale, PAGE_MARGIN_IN),
+      printArea: `$A$1:$${colLetter(MW_XLSX_COLS.length)}$${spread.rows.length}`,
     };
   });
   return zipXlsxSheets(sheets, buildMidweekStylesXml());

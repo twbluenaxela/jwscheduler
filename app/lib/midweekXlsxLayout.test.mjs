@@ -4,6 +4,7 @@ import JSZip from 'jszip';
 
 import {
   A4_PRINTABLE_PT,
+  A4_PRINTABLE_WIDTH_PT,
   MAX_ROW_PT,
   MOBILE_ROW_ROUNDING_PT,
   PRINT_TARGET_PT,
@@ -15,7 +16,9 @@ import {
   buildWorksheetSpread,
   padRows,
   pageHeightFor,
+  printScale,
   sheetScale,
+  sheetWidthPt,
   paginateWeeks,
   partRowHeight,
   partTitleText,
@@ -390,8 +393,14 @@ test('downloaded workbook makes each two-week spread an independent one-page she
     zip.file(`xl/worksheets/sheet${n}.xml`).async('string')
   )));
   sheets.forEach((xml) => {
-    assert.match(xml, /<pageSetUpPr fitToPage="1"\/>/);
-    assert.match(xml, /<pageSetup[^>]*paperSize="9"[^>]*scale="\d+"[^>]*fitToWidth="1" fitToHeight="1"\/>/);
+    // Fit-to is gone outright: Excel for Android ignores it, and per KB 89311 it
+    // also disables manual breaks.
+    assert.doesNotMatch(xml, /fitToPage/);
+    assert.doesNotMatch(xml, /fitToWidth|fitToHeight/);
+    assert.doesNotMatch(xml, /<sheetPr>/);
+    assert.match(xml, /<pageSetup paperSize="9" orientation="portrait" scale="\d+"\/>/);
+    assert.match(xml, /<pageMargins[^>]*header="0" footer="0"\/>/);
+    assert.doesNotMatch(xml, /<headerFooter/);
     assert.doesNotMatch(xml, /<rowBreaks/);
     assert.doesNotMatch(
       xml,
@@ -420,7 +429,7 @@ test('one-page worksheet spread ends on the final real meeting row', () => {
   assert.equal(spread.rows.at(-1).cells[2].v, `唱詩 ${weeks[1].closeSong} 首`);
   assert.equal(spread.contentHeight, sumHeights(spread.rows));
   assert.equal(spread.scaleHeight, spread.contentHeight + spread.rows.length * MOBILE_ROW_ROUNDING_PT);
-  assert.equal(spread.scale, sheetScale(spread.scaleHeight));
+  assert.equal(spread.scale, printScale(spread.scaleHeight, spread.widthPt));
 });
 
 test('Android tall October edge case gets enough rounding headroom for its closing song', async () => {
@@ -437,10 +446,149 @@ test('Android tall October edge case gets enough rounding headroom for its closi
   const blob = await buildMidweekXlsxBlob(weeks, null);
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
   const xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
-  assert.match(xml, /<pageSetup[^>]*scale="87"[^>]*fitToWidth="1" fitToHeight="1"\/>/);
+  assert.match(xml, /<pageSetup paperSize="9" orientation="portrait" scale="87"\/>/);
+  assert.doesNotMatch(xml, /fitToPage|fitToWidth|fitToHeight/);
   assert.doesNotMatch(xml, /<rowBreaks/);
   assert.doesNotMatch(xml, /<t xml:space="preserve"> <\/t>/);
   assert.match(xml, /唱詩 38 首/);
+});
+
+/* ===================== FIFTH: explicit scale + print area ===================== */
+
+// A realistic long week: five or six 傳道 parts whose titles wrap onto two or
+// three lines, plus a three-line 會眾研經班 title. This is the shape that
+// overflows, so it is the one that must be shrunk — and never below 60%.
+function longMinistryWeek(id) {
+  return {
+    ...octoberWeek(id),
+    date: `10月 ${id}日`,
+    ministry: [
+      part('初次交談 — 向住戶作見證，並且說明聖經怎樣回答這個問題', { roleLabel: '學生/助手' }),
+      part('再次交談 — 回覆住戶上次提出的疑問並讀出經文', { roleLabel: '學生/助手' }),
+      part('教導人成為門徒 — 運用《樂享永恆的生命》課文教導對方', { roleLabel: '學生/助手' }),
+      part('解釋自己的信仰 — 演講', { roleLabel: '學生' }),
+      part('你會怎麼說？'),
+      part('生活示範 — 怎樣在學校裡作見證', { roleLabel: '學生/助手' }),
+    ],
+    living: [
+      part('怎樣在傳道工作上保持喜樂，即使一再遇到冷漠的反應'),
+      part('會眾研經班', {
+        roleLabel: '主持/朗讀',
+        cbsRef: '《組織》第 12 章 第 1-9 段，以及附欄「怎樣善用這本書研讀聖經」和複習問題',
+      }),
+    ],
+  };
+}
+
+// A deliberately long title that must wrap onto three lines on its own.
+function wrappedTitleWeek(id) {
+  return {
+    ...septemberWeek(id),
+    date: `10月 ${id}日`,
+    treasures: [
+      part('耶和華的話語怎樣在我們的生活中發揮作用，以及我們可以怎樣回應', { dur: '10 分鐘' }),
+      part('屬靈寶石', { dur: '10 分鐘' }),
+      part('經文朗讀', { dur: '4 分鐘', roleLabel: '學生' }),
+    ],
+  };
+}
+
+function rowsOf(xml) {
+  return [...xml.matchAll(/<row r="\d+" ht="([\d.]+)"/g)].map((m) => Number(m[1]));
+}
+
+function widthsOf(xml) {
+  return [...xml.matchAll(/<col min="\d+" max="\d+" width="([\d.]+)"/g)].map((m) => Number(m[1]));
+}
+
+test('every shipped sheet carries an explicit scale and an exact Print_Area', async () => {
+  const shapes = {
+    // Long 傳道 weeks → 3 sheets of two/one; the last holds only the fifth week.
+    longMinistry: [1, 2, 3, 4, 5].map(longMinistryWeek),
+    // A wrapped long 寶藏 title on every week, ending on a one-week sheet.
+    wrappedTitle: [1, 2, 3].map(wrappedTitleWeek),
+    // A suspended week shares a sheet with two scheduled weeks.
+    withSuspended: [octoberWeek(1), suspendedWeek(2), octoberWeek(3), octoberWeek(4)],
+    // Mixed long + short, an odd count → one-week last sheet.
+    mixedOdd: [1, 2, 3, 4, 5, 6, 7].map((i) => (i % 2 ? longMinistryWeek(i) : septemberWeek(i))),
+    // Four weeks, all long, plus a suspended week → 3 sheets, one 1-week.
+    longWithSuspension: [
+      longMinistryWeek(1), longMinistryWeek(2), suspendedWeek(3),
+      longMinistryWeek(4), longMinistryWeek(5),
+    ],
+  };
+
+  for (const [name, weeks] of Object.entries(shapes)) {
+    const blob = await buildMidweekXlsxBlob(weeks, null);
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const workbook = await zip.file('xl/workbook.xml').async('string');
+
+    const pages = paginateWeeks(weeks, { perPage: 2, isSuspended: isMidweekSuspended });
+    const areas = [...workbook.matchAll(
+      /<definedName name="_xlnm\.Print_Area" localSheetId="(\d+)">([^<]+)<\/definedName>/g,
+    )];
+    assert.equal(areas.length, pages.length, `${name}: one Print_Area per sheet`);
+
+    for (let index = 0; index < pages.length; index += 1) {
+      const xml = await zip.file(`xl/worksheets/sheet${index + 1}.xml`).async('string');
+
+      // No fit-to anywhere; an explicit integer scale in [60, 100].
+      assert.doesNotMatch(xml, /fitToPage|fitToWidth|fitToHeight/, `${name} sheet ${index + 1}`);
+      const scaleMatch = xml.match(/<pageSetup [^>]*scale="(\d+)"\/>/);
+      assert.ok(scaleMatch, `${name} sheet ${index + 1} has no explicit scale`);
+      const scale = Number(scaleMatch[1]);
+      assert.ok(scale >= 60 && scale <= 100, `${name} sheet ${index + 1}: scale ${scale}%`);
+
+      // Both dimensions must fit at that scale, measured off the EMITTED XML.
+      const height = rowsOf(xml).reduce((total, ht) => total + ht, 0);
+      const width = sheetWidthPt(widthsOf(xml));
+      assert.ok(
+        (height * scale) / 100 <= PRINT_TARGET_PT + 0.01,
+        `${name} sheet ${index + 1}: ${height}pt @ ${scale}% = ${(height * scale) / 100}pt`,
+      );
+      assert.ok(
+        (width * scale) / 100 <= A4_PRINTABLE_WIDTH_PT + 0.01,
+        `${name} sheet ${index + 1}: ${width}pt wide @ ${scale}%`,
+      );
+
+      // Print_Area is exactly A1:E<last used row>.
+      const area = areas.find((m) => Number(m[1]) === index);
+      assert.ok(area, `${name} sheet ${index + 1} has no Print_Area`);
+      const lastRow = rowsOf(xml).length;
+      assert.equal(area[2].split('!').pop(), `$A$1:$E$${lastRow}`, `${name} sheet ${index + 1}`);
+
+      // No padding rows: the sheet ends on a real meeting row — the closing song,
+      // or the suspended notice when a cancelled week is the last block.
+      assert.doesNotMatch(xml, /<t xml:space="preserve"> <\/t>/);
+      const lastRowXml = xml.slice(xml.lastIndexOf('<row '));
+      assert.match(lastRowXml, /(唱詩 .* 首|本週聚會暫停)/,
+        `${name} sheet ${index + 1} must end on a real meeting row`);
+
+      // Margins and no header/footer band.
+      assert.match(xml, /<pageMargins left="0.35" right="0.35" top="0.35" bottom="0.35" header="0" footer="0"\/>/);
+      assert.doesNotMatch(xml, /<headerFooter/);
+    }
+  }
+});
+
+test('a one-week sheet is never enlarged past 100%', async () => {
+  const weeks = [1, 2, 3].map(septemberWeek); // pages: [0,1], [2]
+  const blob = await buildMidweekXlsxBlob(weeks, null);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const last = await zip.file('xl/worksheets/sheet2.xml').async('string');
+  const scale = Number(last.match(/<pageSetup [^>]*scale="(\d+)"/)[1]);
+  assert.ok(scale <= 100, `one-week sheet scaled to ${scale}%`);
+  assert.equal(scale, 100, 'a short sheet prints at 100%, never enlarged');
+});
+
+test('the scale is width-bound if the columns are widened', () => {
+  // Height alone would allow 100% here; the printable width caps it.
+  assert.equal(printScale(100, A4_PRINTABLE_WIDTH_PT * 1.25), 80);
+  assert.equal(printScale(100, A4_PRINTABLE_WIDTH_PT), 100);
+  assert.equal(printScale(2000, 100), 60, 'clamped to the floor, never below 60%');
+  assert.equal(printScale(1, 1), 100, 'never enlarged past 100%');
+  // The shipped 72-unit layout is well inside the width, so height binds.
+  assert.ok(sheetWidthPt([6, 3, 36, 9, 18]) < A4_PRINTABLE_WIDTH_PT);
 });
 
 test('cancelled weeks stay with their two scheduled weeks on the same worksheet', async () => {
