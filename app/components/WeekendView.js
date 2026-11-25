@@ -1,5 +1,8 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import PrintStage from './PrintStage';
+import WeekendPrintTable from './WeekendPrint';
+import { weekendPrintChunks } from '../lib/weekendPrint.mjs';
 
 function NamePill({ slotId, defaultName, catKey, ctxLabel, getAssign, openSheet, getSuggestion, onAccept, onClear }) {
   const name = getAssign(slotId, defaultName);
@@ -59,7 +62,7 @@ function EditCell({ value, onCommit, placeholder = '—', mono = false }) {
   );
 }
 
-export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow, addRow, getSuggestion, onAccept, onClear, fetchWeekendSuggestions, captureRef, visibleRowsRef }) {
+export default function WeekendView({ filter, setFilter, weekendRows = [], getAssign, openSheet, editMode = false, updateRow, deleteRow, addRow, getSuggestion, onAccept, onClear, fetchWeekendSuggestions, captureRef, visibleRowsRef, printNodesRef }) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const thisYear = today.getFullYear();
@@ -125,6 +128,12 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
   // exactly what's on screen.
   if (visibleRowsRef) visibleRowsRef.current = rows;
 
+  // The PDF export screenshots this page's rows from an off-screen PrintStage
+  // rather than the live table (which becomes a card list at ≤720px and carries
+  // edit controls in edit mode). The rows are split into page-sized chunks with
+  // the header repeated, so a long table breaks at a row boundary.
+  const printChunks = printNodesRef ? weekendPrintChunks(rows) : [];
+
   // Cycle: schedule → special → schedule (for schedule rows)
   //        event → suspended → event (for event-like rows)
   function cycleType(r) {
@@ -141,6 +150,7 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
   }
 
   return (
+    <>
     <div className="wk-wrap" ref={captureRef}>
       <div className="wk-title">
         <h2>公眾演講安排表</h2>
@@ -399,5 +409,19 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
         <span><i style={{ background: 'var(--living-soft)', border: '1px solid var(--living)' }} />外地演講安排</span>
       </div>
     </div>
+
+    {printNodesRef && (
+      <PrintStage nodesRef={printNodesRef} className="print-stage--weekend">
+        {printChunks.map((chunk, index) => (
+          <WeekendPrintTable
+            key={`weekend-print-${index}`}
+            rows={chunk}
+            getAssign={getAssign}
+            title={`公眾演講安排表${printChunks.length > 1 ? `（${index + 1}/${printChunks.length}）` : ''}`}
+          />
+        ))}
+      </PrintStage>
+    )}
+    </>
   );
 }

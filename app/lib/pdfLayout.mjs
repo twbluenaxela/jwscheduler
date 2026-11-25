@@ -194,3 +194,41 @@ export function placeCells(page, layout, sizes = {}) {
 export function pageCount(weeks, layout, isSuspended = isMidweekSuspended) {
   return paginate(weeks, layout, isSuspended).length;
 }
+
+/* ===================== Capture pages (printPdf.js) ===================== */
+
+// Captures are taken at 2× the CSS pixel size, the same ratio every visual
+// export uses. 96 CSS px = 72 pt, so one captured pixel is 0.375 pt.
+export const CAPTURE_PIXEL_RATIO = 2;
+export const PT_PER_CAPTURED_PX = 72 / 96 / CAPTURE_PIXEL_RATIO;
+
+// Places one capture (or N per page) on A4 pages, the geometry half of
+// `exportCapturesPdf` — pure, so the page count and placements the export uses
+// are unit-tested rather than eyeballed on paper.
+//
+// `sizes` maps an item index to its captured image's { width, height } in
+// pixels. A capture is never drawn larger than its natural size: at 2× a 960 px
+// card is 720 pt, already wider than A4's 547 pt text column, so the cap only
+// stops a small capture from being blown up to page width.
+export function planCapturePages(sizes = {}, { perPage = 1, layout, subjects, isSuspended } = {}) {
+  const grid = normalizeLayout(layout ?? setCount(perPage));
+  const items = subjects ?? Object.keys(sizes).map(Number).sort((a, b) => a - b);
+  return paginate(items, grid, isSuspended ?? (() => false)).map((page) => ({
+    w: A4_PT.w,
+    h: A4_PT.h,
+    cells: placeCells(page, grid, sizes).map((cell) => {
+      const size = sizes[cell.item];
+      const naturalW = size?.width > 0 ? size.width * PT_PER_CAPTURED_PX : 0;
+      if (!(naturalW > 0) || cell.w <= naturalW) return cell;
+      const w = naturalW;
+      const h = size.height * PT_PER_CAPTURED_PX;
+      return {
+        ...cell,
+        x: cell.x + (cell.w - w) / 2,
+        y: cell.y + (cell.h - h) / 2,
+        w,
+        h,
+      };
+    }),
+  }));
+}

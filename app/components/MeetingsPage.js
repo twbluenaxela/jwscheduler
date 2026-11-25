@@ -2,16 +2,13 @@
 import { useEffect, useRef, useState } from 'react';
 import MidweekWeek from './MidweekWeek';
 import WeekendView from './WeekendView';
+import PrintStage from './PrintStage';
 import {
   getMidweekExportFilename,
-  captureBox,
   downloadWeekXlsx,
-  jpegImagesToPdfBlob,
-  jpegImagesToA4PdfBlob,
-  jpegDataUrlToImage,
-  triggerDownload,
   buildWeekText,
 } from '../lib/midweekExport';
+import { copyNodeImageToClipboard, downloadNodeImage, exportStagePdf } from '../lib/printPdf';
 import { buildWeekendText, downloadWeekendXlsx, getWeekendExportFilename } from '../lib/weekendExport';
 import { getToken } from '../lib/auth-context';
 import {
@@ -96,28 +93,15 @@ function WeekPicker({ weeks, currentWeek, onSelect }) {
   );
 }
 
-function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, menuRef }) {
+function ExportMenu({ week, getAssign, captureRef, pdfNodesRef, exportOpen, setExportOpen, menuRef }) {
   const handleExport = async (type) => {
     if (!week) return;
     setExportOpen(false);
     try {
-      const captureOpts = { pixelRatio: 2, skipFonts: false, ...captureBox(captureRef.current) };
       if (type === 'jpg') {
-        const { toJpeg } = await import('html-to-image');
-        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
-        const a = document.createElement('a');
-        a.href = dataUrl;
-        a.download = getMidweekExportFilename(week, 'jpg');
-        a.click();
+        await downloadNodeImage(captureRef.current, getMidweekExportFilename(week, 'jpg'));
       } else if (type === 'copy') {
-        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
-          throw new Error('目前瀏覽器不支援圖片剪貼簿。');
-        }
-        const { toPng } = await import('html-to-image');
-        const dataUrl = await toPng(captureRef.current, captureOpts);
-        const res = await fetch(dataUrl);
-        const blob = await res.blob();
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        await copyNodeImageToClipboard(captureRef.current);
       } else if (type === 'xlsx') {
         await downloadWeekXlsx(week, getAssign);
       } else if (type === 'text') {
@@ -126,13 +110,13 @@ function ExportMenu({ week, getAssign, captureRef, exportOpen, setExportOpen, me
         await navigator.clipboard.writeText(text);
         window.alert('已複製本週節目文字，可貼到 LINE 群組。');
       } else if (type === 'pdf') {
-        // Generate the PDF entirely client-side and download it directly —
-        // no print dialog / popup (which browsers block).
-        const { toJpeg } = await import('html-to-image');
-        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
-        const image = await jpegDataUrlToImage(dataUrl);
-        const blob = jpegImagesToA4PdfBlob([image]);
-        triggerDownload(blob, getMidweekExportFilename(week, 'pdf'));
+        // The PDF captures the off-screen PrintStage, never the live card: on a
+        // phone the live card is the stacked layout and in edit mode it carries
+        // edit controls. Generated client-side and downloaded directly — no
+        // print dialog / popup (which browsers block).
+        await exportStagePdf(pdfNodesRef?.current, {
+          filename: getMidweekExportFilename(week, 'pdf'),
+        });
       }
     } catch (error) {
       window.alert(error?.message || '匯出失敗');
@@ -180,7 +164,7 @@ const WEEKEND_EXPORT_ITEMS = [
   { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
 ];
 
-function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, exportOpen, setExportOpen, menuRef }) {
+function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, pdfNodesRef, exportOpen, setExportOpen, menuRef }) {
   const handleExport = async (type) => {
     setExportOpen(false);
     const rows = visibleRowsRef.current ?? [];
@@ -196,28 +180,20 @@ function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, exportOpen, 
         await downloadWeekendXlsx(rows, getAssign);
         return;
       }
+      if (type === 'pdf') {
+        // One PrintStage capture per page: the rows are rendered as page-sized
+        // chunks with the header repeated, so a long table splits at row
+        // boundaries instead of shrinking into illegibility.
+        await exportStagePdf(pdfNodesRef?.current, {
+          filename: getWeekendExportFilename(rows, 'pdf', '週末聚會'),
+        });
+        return;
+      }
       if (!captureRef.current) throw new Error('沒有可匯出的內容。');
-      const captureOpts = { pixelRatio: 2, skipFonts: false, ...captureBox(captureRef.current) };
       if (type === 'jpg') {
-        const { toJpeg } = await import('html-to-image');
-        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
-        const a = document.createElement('a');
-        a.href = dataUrl;
-        a.download = getWeekendExportFilename(rows, 'jpg', '週末聚會');
-        a.click();
+        await downloadNodeImage(captureRef.current, getWeekendExportFilename(rows, 'jpg', '週末聚會'));
       } else if (type === 'copy') {
-        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
-          throw new Error('目前瀏覽器不支援圖片剪貼簿。');
-        }
-        const { toPng } = await import('html-to-image');
-        const dataUrl = await toPng(captureRef.current, captureOpts);
-        const blob = await (await fetch(dataUrl)).blob();
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      } else if (type === 'pdf') {
-        const { toJpeg } = await import('html-to-image');
-        const dataUrl = await toJpeg(captureRef.current, { ...captureOpts, quality: 0.95 });
-        const image = await jpegDataUrlToImage(dataUrl);
-        triggerDownload(jpegImagesToPdfBlob([image]), getWeekendExportFilename(rows, 'pdf', '週末聚會'));
+        await copyNodeImageToClipboard(captureRef.current);
       }
     } catch (error) {
       window.alert(error?.message || '匯出失敗');
@@ -270,9 +246,11 @@ export default function MeetingsPage({
 }) {
   const menuRef = useRef(null);
   const captureRef = useRef(null);
+  const midweekPdfNodesRef = useRef([]);
   const weekendMenuRef = useRef(null);
   const weekendCaptureRef = useRef(null);
   const weekendVisibleRowsRef = useRef([]);
+  const weekendPdfNodesRef = useRef([]);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState(null); // { sent, failed, total } | { error }
   const [suggestingMw, setSuggestingMw] = useState(false);
@@ -368,6 +346,7 @@ export default function MeetingsPage({
               week={midweekWeeks[week]}
               getAssign={getAssign}
               captureRef={captureRef}
+              pdfNodesRef={midweekPdfNodesRef}
               exportOpen={exportOpen}
               setExportOpen={setExportOpen}
               menuRef={menuRef}
@@ -489,6 +468,21 @@ export default function MeetingsPage({
                 clearSlot={clearSlot}
                 onFinishEdit={finishEdit}
               />
+              {/* The 下載 PDF capture: a read-only copy of THIS week at print
+                  width, so a phone PDF is the desktop card and an edit-mode PDF
+                  carries no edit controls. JPG / 複製圖片 keep using the live
+                  card above. */}
+              <PrintStage nodesRef={midweekPdfNodesRef}>
+                {midweekWeeks[week] && (
+                  <MidweekWeek
+                    week={midweekWeeks[week]}
+                    editMode={false}
+                    getAssign={getAssign}
+                    openSheet={() => {}}
+                    updateMidweekWeek={() => {}}
+                  />
+                )}
+              </PrintStage>
             </>
           )}
         </div>
@@ -515,6 +509,7 @@ export default function MeetingsPage({
               getAssign={getAssign}
               captureRef={weekendCaptureRef}
               visibleRowsRef={weekendVisibleRowsRef}
+              pdfNodesRef={weekendPdfNodesRef}
               exportOpen={weekendExportOpen}
               setExportOpen={setWeekendExportOpen}
               menuRef={weekendMenuRef}
@@ -563,6 +558,7 @@ export default function MeetingsPage({
             fetchWeekendSuggestions={fetchWeekendSuggestions}
             captureRef={weekendCaptureRef}
             visibleRowsRef={weekendVisibleRowsRef}
+            printNodesRef={weekendPdfNodesRef}
           />
         </div>
       )}

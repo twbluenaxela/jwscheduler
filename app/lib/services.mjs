@@ -97,3 +97,11 @@ export function upcomingServiceItems(items, today) {
     .slice()
     .sort((a, b) => a.isoDate.localeCompare(b.isoDate) || (a.time || '').localeCompare(b.time || ''));
 }
+
+// Download name for the 服務 exports. `month` is the "YYYY-MM" the page shows, so
+// a downloaded file says which month it is rather than a generic name.
+export function serviceExportFilename(month, ext) {
+  const [year, part] = String(month ?? '').split('-');
+  const label = year && part ? `服務_${year}年${Number(part)}月` : '服務';
+  return `${label}.${ext}`;
+}

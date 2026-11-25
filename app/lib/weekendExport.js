@@ -1,6 +1,7 @@
 'use client';
 
-import { buildXlsxBuffer, triggerDownload } from './midweekExport';
+import { buildXlsxBuffer } from './midweekExport';
+import { triggerDownload } from './printPdf';
 
 // Weekend rows are the public-talk schedule. `getAssign` lets exports reflect
 // the live (unsaved) overrides the same way the on-screen table does.

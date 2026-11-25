@@ -9,8 +9,8 @@ import {
   downloadHeatmapGridXlsx, downloadHeatmapPersonXlsx, getHeatmapExportFilename,
 } from '../lib/heatmapExport';
 import {
-  captureBox, triggerDownload, jpegDataUrlToImage, jpegImagesToPdfBlob,
-} from '../lib/midweekExport';
+  copyNodeImageToClipboard, downloadNodeImage, exportCapturesPdf,
+} from '../lib/printPdf';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -475,7 +475,7 @@ function HeatmapExportMenu({ cardRef, personName, periodLabel, buildText, buildX
     // Let layout settle before measuring/capturing the unpinned card.
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     try {
-      return await fn(node, { pixelRatio: 2, skipFonts: false, ...captureBox(node) });
+      return await fn(node);
     } finally {
       node.classList.remove('is-capturing');
     }
@@ -496,31 +496,16 @@ function HeatmapExportMenu({ cardRef, personName, periodLabel, buildText, buildX
         return;
       }
       if (type === 'jpg') {
-        await withCapture(async (node, opts) => {
-          const { toJpeg } = await import('html-to-image');
-          const dataUrl = await toJpeg(node, { ...opts, quality: 0.95, backgroundColor: '#ffffff' });
-          const a = document.createElement('a');
-          a.href = dataUrl;
-          a.download = filename('jpg');
-          a.click();
-        });
+        await withCapture((node) => downloadNodeImage(node, filename('jpg'), { background: '#ffffff' }));
       } else if (type === 'copy') {
-        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
-          throw new Error('目前瀏覽器不支援圖片剪貼簿。');
-        }
-        await withCapture(async (node, opts) => {
-          const { toPng } = await import('html-to-image');
-          const dataUrl = await toPng(node, { ...opts, backgroundColor: '#ffffff' });
-          const blob = await (await fetch(dataUrl)).blob();
-          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        });
+        await withCapture((node) => copyNodeImageToClipboard(node, { background: '#ffffff' }));
       } else if (type === 'pdf') {
-        await withCapture(async (node, opts) => {
-          const { toJpeg } = await import('html-to-image');
-          const dataUrl = await toJpeg(node, { ...opts, quality: 0.95, backgroundColor: '#ffffff' });
-          const image = await jpegDataUrlToImage(dataUrl);
-          triggerDownload(jpegImagesToPdfBlob([image]), filename('pdf'));
-        });
+        // One capture per page, each page sized to the capture's aspect ratio —
+        // the same output this export always had.
+        await withCapture((node) => exportCapturesPdf([node], {
+          filename: filename('pdf'),
+          pageFit: 'fill',
+        }));
       }
     } catch (error) {
       window.alert(error?.message || '匯出失敗');

@@ -353,19 +353,25 @@ Applying a stale/out-of-order response is what made qualifications "deselect on
 their own" when toggled quickly. If you need server-canonical data, reload via
 `/api/congregations/data`, not the per-write response.
 
-### Export helpers (`app/lib/midweekExport.js`)
+### Export helpers (`app/lib/printPdf.js` + `app/lib/midweekExport.js`)
 
-- **Silent PDF, no popup.** `jpegImagesToPdfBlob(images)` hand-builds a multi-page
-  PDF in the browser (baseline JPEG embedded with `DCTDecode`, fit to A4) and
-  `triggerDownload` saves it. Do **not** reintroduce a `window.open(...).print()`
-  flow for PDF — browsers block it.
+- **ONE print/PDF module.** `printPdf.js` is the only place that turns DOM into
+  images (`captureBox`, `nodeToJpegDataUrl`, `nodeToImageBlob`, `downloadNodeImage`,
+  `copyNodeImageToClipboard`) or images into a PDF (`exportCapturesPdf`,
+  `exportStagePdf`, `printCaptures`, `printNodes`). Do **not** import
+  `html-to-image` or `pdfWriter.mjs` anywhere else; `printPdf.guard.test.mjs` fails
+  the suite if you do. Silent PDF, no popup — `exportCapturesPdf` writes the bytes
+  and downloads them; `window.open` only exists for the 列印 paths.
+- **Off-screen container.** `PrintStage` (`components/PrintStage.js`) is the one
+  fixed 960px capture target; every PDF capture reads its children.
 - **Text export.** `buildWeekText(week, getAssign)` returns a plain-text schedule
   for pasting into LINE manually (meetings 複製文字 menu item).
 - **Multi-week / range.** ImportPage screenshots REAL off-screen `MidweekWeek`
-  cards via `exportNodes{Jpeg,Pdf}` / `openNodesPrintWindow` (html-to-image) so the
-  output matches the live card. The old hand-drawn `renderWeekToCanvas` exporters
-  were **removed** — do not bring them back (they drifted from the card, inventing
-  blue `週次資訊`/`會眾項目` bands). Excel still uses `exportWeeksXlsx` (data path).
+  cards inside a `PrintStage` via `exportCapturesPdf` (`perPage: 1`, or the 版面
+  `layout`/`subjects`/`isNotice` grid) and `printCaptures` for 列印, so the output
+  matches the live card. The old hand-drawn `renderWeekToCanvas` exporters were
+  **removed** — do not bring them back (they drifted from the card, inventing blue
+  `週次資訊`/`會眾項目` bands). Excel still uses `exportWeeksXlsx` (data path).
   ImportPage filters `existingWeeks` by the 範圍 selector and needs `getAssign`.
 
 ### PWA / service worker
