@@ -364,6 +364,12 @@ their own" when toggled quickly. If you need server-canonical data, reload via
   and downloads them; `window.open` only exists for the 列印 paths.
 - **Off-screen container.** `PrintStage` (`components/PrintStage.js`) is the one
   fixed 960px capture target; every PDF capture reads its children.
+- **Capture quiet layout only.** A capture (on-screen or e2e) must be of the
+  current layout: `printPdf.js`'s private `capture()` waits for
+  `document.fonts.ready` + two frames and re-takes once if the node's box changed
+  mid-capture. If a captured page's top is the table header (not its own title),
+  or its bottom shows the next page's title, the capture was taken across a
+  layout shift — fix the capture, not the page.
 - **Text export.** `buildWeekText(week, getAssign)` returns a plain-text schedule
   for pasting into LINE manually (meetings 複製文字 menu item).
 - **Multi-week / range.** ImportPage screenshots REAL off-screen `MidweekWeek`

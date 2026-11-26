@@ -21,10 +21,14 @@ import { chromium } from 'playwright';
 import { FIXTURE_CATEGORIES, FIXTURE_MONTH } from '../../app/test-fixtures/services-pdf/fixtureMonth.mjs';
 import {
   ARTIFACTS,
-  HIDE_DEV_CHROME,
+  assertCleanTopBand,
   assertImageRatios,
+  captureBoxFailures,
+  captureNodePng,
+  decodePng,
   ensureArtifacts,
   jpegWidth,
+  prepareStageForCapture,
   readPdf,
   startDevServer,
 } from './helpers.mjs';
@@ -125,12 +129,22 @@ async function openExportMenu(page) {
 }
 
 async function screenshotSheet(page, label) {
-  await page.addStyleTag({
-    content: '.print-stage--services { position: static !important; left: auto !important; top: auto !important; pointer-events: auto !important; }',
+  await prepareStageForCapture(page, '.print-stage--services');
+
+  const failures = await captureBoxFailures(page, {
+    stage: '.print-stage--services',
+    title: '.svc-print-head',
   });
-  await page.addStyleTag({ content: HIDE_DEV_CHROME });
-  await page.locator('.print-stage--services > *').first()
-    .screenshot({ path: path.join(ARTIFACTS, `${label}-services-sheet.png`) });
+  assert.deepEqual(failures, [], `${label} services capture boxes:\n${failures.join('\n')}`);
+
+  const sheet = page.locator('.print-stage--services > *').first();
+  const file = path.join(ARTIFACTS, `${label}-services-sheet.png`);
+  const shot = await captureNodePng(page, sheet, file);
+  const image = decodePng(shot.bytes);
+  // The sheet's own heading is the top of the page: an offset capture starts
+  // with table rows instead (the heading is white band + dark text strokes).
+  assertCleanTopBand(image, { band: 24, minRowMean: 160 });
+  return shot;
 }
 
 /* ===================== Tests ===================== */
@@ -174,6 +188,14 @@ for (const viewport of VIEWPORTS) {
       assert.equal(download.suggestedFilename(), `服務_${MONTH_LABEL}.pdf`);
       const { images } = readPdf(file, { pages: 1, images: 1 });
       assertImageRatios(images, nodeSizes, `${label} services PDF`);
+      // 2× the CSS box: a captured image taller/shorter than the sheet means the
+      // capture was of a different layout than the one measured.
+      const sheetHeight = nodeSizes[0].height;
+      const drift = Math.abs(images[0].height / 2 - sheetHeight) / sheetHeight;
+      assert.ok(
+        drift <= 0.02,
+        `${label} services PDF: image is ${(images[0].height / 2).toFixed(0)}px tall, sheet is ${sheetHeight.toFixed(0)}px (${(drift * 100).toFixed(1)}% off)`,
+      );
 
       // The export must leave the page usable: the temporary stage is gone and
       // the menu closed (only the fixture's permanent stage remains).

@@ -30,18 +30,58 @@ export function captureBox(node) {
   return { width: Math.ceil(rect.width), height: Math.ceil(rect.height) };
 }
 
-// The ONLY set of html-to-image options. `background` is what gets painted
-// behind the capture — white for a print sheet, the page colour for a chat
-// image, omitted for the live card (which paints its own).
-async function capture(node, { format = 'jpeg', background, quality = 0.95 } = {}) {
-  const opts = { pixelRatio: 2, skipFonts: false, ...captureBox(node) };
+const nextFrame = () => new Promise((resolve) => {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resolve());
+  else setTimeout(resolve, 0);
+});
+
+// A capture has to happen on a quiet page. `document.fonts.ready` covers
+// webfonts; the two frames cover the layout (and the paint) they trigger. Text
+// set in a fallback face measures taller than the final face, so a capture
+// taken mid-swap photographs a layout that no longer exists.
+async function settle() {
+  try {
+    await document.fonts?.ready;
+  } catch {
+    // No FontFaceSet (older engines) — the frames are the only wait available.
+  }
+  await nextFrame();
+  await nextFrame();
+}
+
+const sameBox = (a, b) => Math.abs(a.width - b.width) < 1 && Math.abs(a.height - b.height) < 1;
+
+// One attempt, measured at the moment it is taken. html-to-image builds the
+// clone at the size it is given, so that size must be the node's CURRENT box:
+// pass a stale one and the image is a slice of the layout as it used to be —
+// which is how a page's own title goes missing from the top while the next
+// page's title appears at the bottom.
+async function captureOnce(node, { format, background, quality }) {
+  const box = captureBox(node);
+  const opts = { pixelRatio: 2, skipFonts: false, ...box };
   if (background) opts.backgroundColor = background;
   if (format === 'png') {
     const { toPng } = await import('html-to-image');
-    return toPng(node, opts);
+    return { dataUrl: await toPng(node, opts), box };
   }
   const { toJpeg } = await import('html-to-image');
-  return toJpeg(node, { ...opts, quality });
+  return { dataUrl: await toJpeg(node, { ...opts, quality }), box };
+}
+
+// The ONLY place a DOM node becomes an image, and the only set of html-to-image
+// options. `background` is what gets painted behind the capture — white for a
+// print sheet, the page colour for a chat image, omitted for the live card
+// (which paints its own).
+//
+// The box is re-checked AFTER each shot: if the node changed size while the
+// capture ran (a font landing, an image decoding), the image no longer matches
+// the node and it is taken again with the settled box.
+async function capture(node, { format = 'jpeg', background, quality = 0.95 } = {}) {
+  await settle();
+  const first = await captureOnce(node, { format, background, quality });
+  if (sameBox(first.box, captureBox(node))) return first.dataUrl;
+  await settle();
+  return (await captureOnce(node, { format, background, quality })).dataUrl;
 }
 
 export function nodeToJpegDataUrl(node, background) {

@@ -759,6 +759,12 @@ PDF.
   background), then lays the images on pages. `perPage` > 1 and `layout`/`subjects`/`isNotice` are
   the midweek 版面 grid (a cancelled week rides along as a notice band); `pageFit: 'fill'` sizes
   each page to its capture's aspect ratio (the 指派分布 export).
+- **Every capture is taken on a quiet, current layout.** The private `capture()` awaits
+  `document.fonts.ready` plus two frames, takes the picture, then compares the node's box with the
+  one it measured — if the node changed size mid-capture it re-takes once with the settled box.
+  A capture is only ever of the box it was measured on: an image that starts with the table header
+  instead of the page title (or ends with the next page's title) is a capture taken across a layout
+  shift, and this is where that is prevented.
 - **`exportStagePdf`** is the same export with `ensurePrintStage` in front: it THROWS unless every
   node is inside `.print-stage`, so pointing an export back at the live card fails loudly instead
   of quietly shipping the wrong picture.
@@ -946,17 +952,12 @@ skips with a message when `soffice` is missing.
 - First publish (`snapshot = null`): sends full upcoming list
 - Subsequent: sends only ✚ added / ✖ removed items; skips if no change
 - Saves new snapshot after sending. LINE messages go ONLY to linked active people, but the saved
-  snapshot covers EVERY assigned name (`collectAssignedNames` fills the rest) so the read-only
-  `GET /api/meetings/changes` group-wide diff has a complete baseline for non-LINE members too
+  snapshot covers EVERY assigned name (`collectAssignedNames` fills the rest), so the snapshot is a
+  complete baseline for non-LINE members too
 
-### Group-wide change summary (複製更新文字)
-
-`GET /api/meetings/changes` (admin only) — read-only sibling of publish. Reuses the same
-`parseCnDate` / `collectAssignments` / `itemKey` logic to diff the current schedule against
-`publishedSnapshot` (future-only) for every name in the current schedule OR the snapshot, then
-returns `{ text, addedCount, removedCount, hasBaseline }`. Sends no LINE messages and does NOT
-write a new snapshot, so it can be run any time without affecting publish state. The
-複製更新文字 export-menu item copies `text` for pasting into a LINE group.
+> The former group-wide change summary (`GET /api/meetings/changes`, and the 複製更新文字 export-menu
+> item that copied its text) was removed in `1a887b5`. Publish is the only path that reads the
+> snapshot diff; there is no read-only diff endpoint.
 
 ### Role labelling in notifications
 

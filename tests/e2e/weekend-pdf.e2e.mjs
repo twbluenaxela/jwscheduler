@@ -28,9 +28,13 @@ import {
 } from '../../app/test-fixtures/weekend-pdf/fixtureRows.mjs';
 import {
   ARTIFACTS,
-  HIDE_DEV_CHROME,
+  assertCleanTopBand,
   assertImageRatios,
+  captureBoxFailures,
+  captureNodePng,
+  decodePng,
   ensureArtifacts,
+  prepareStageForCapture,
   readPdf,
   startDevServer,
 } from './helpers.mjs';
@@ -164,17 +168,29 @@ async function downloadPdf(page, label) {
 }
 
 async function screenshotStage(page, label) {
-  // The stage lives off-screen; put it back in flow just for the picture.
-  await page.addStyleTag({
-    content: `.print-stage--weekend { position: static !important; left: auto !important; top: auto !important; pointer-events: auto !important; }`,
+  await prepareStageForCapture(page, '.print-stage--weekend');
+
+  // Each chunk's own title must sit at its top and no sibling may intrude —
+  // the two symptoms of a capture taken across the layout shift.
+  const failures = await captureBoxFailures(page, {
+    stage: '.print-stage--weekend',
+    title: '.wk-title',
   });
-  await page.addStyleTag({ content: HIDE_DEV_CHROME });
+  assert.deepEqual(failures, [], `${label} weekend capture boxes:\n${failures.join('\n')}`);
+
   const chunks = page.locator('.print-stage--weekend > *');
   const count = await chunks.count();
+  const captured = [];
   for (let i = 0; i < count; i += 1) {
+    const file = path.join(ARTIFACTS, `${label}-weekend-page-${i}.png`);
     // eslint-disable-next-line no-await-in-loop
-    await chunks.nth(i).screenshot({ path: path.join(ARTIFACTS, `${label}-weekend-page-${i}.png`) });
+    const shot = await captureNodePng(page, chunks.nth(i), file);
+    // eslint-disable-next-line no-await-in-loop
+    const image = decodePng(shot.bytes);
+    assertCleanTopBand(image);
+    captured.push({ shot, image });
   }
+  return captured;
 }
 
 /* ===================== Tests ===================== */
@@ -240,7 +256,30 @@ for (const viewport of VIEWPORTS) {
       assertImageRatios(images, nodeSizes, `${label} weekend PDF`);
       assert.match(suggested, /^週末聚會.*\.pdf$/, `unexpected download name: ${suggested}`);
 
-      await screenshotStage(page, label);
+      // The PDF embeds one image per chunk, captured at 2× the CSS box. If a
+      // capture were offset (its own title missing) the image would still have
+      // the chunk's size — so the size check is paired with the title-band and
+      // sibling checks done on the PNGs below.
+      images.forEach((img, index) => {
+        const height = img.height / 2;
+        const expected = nodeSizes[index].height;
+        const drift = Math.abs(height - expected) / expected;
+        assert.ok(
+          drift <= 0.02,
+          `${label} weekend PDF: image ${index} is ${height.toFixed(0)}px tall, chunk is ${expected.toFixed(0)}px (${(drift * 100).toFixed(1)}% off)`,
+        );
+      });
+
+      // The PNGs are the visual record a reviewer looks at: each must be exactly
+      // its own chunk — title at the top, no slice of a sibling.
+      const captured = await screenshotStage(page, label);
+      assert.equal(captured.length, CHUNKS.length, `${label}: one PNG per chunk`);
+      captured.forEach(({ shot }, index) => {
+        assert.ok(
+          Math.abs(shot.height - nodeSizes[index].height) < 1,
+          `${label}: PNG ${index} is ${shot.height}px tall, chunk is ${nodeSizes[index].height.toFixed(0)}px`,
+        );
+      });
     } finally {
       await page.close();
     }

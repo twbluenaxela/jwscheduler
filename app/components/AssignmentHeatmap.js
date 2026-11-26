@@ -452,7 +452,7 @@ const EXPORT_ITEMS = [
 // it renders, so the inner scroll areas are unpinned for the duration of the
 // shot (`is-capturing`) — otherwise html-to-image would photograph only the
 // currently-scrolled slice of the roster / 指派記錄.
-function HeatmapExportMenu({ cardRef, personName, periodLabel, buildText, buildXlsx }) {
+export function HeatmapExportMenu({ cardRef, personName, periodLabel, buildText, buildXlsx }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const btnRef = useRef(null);

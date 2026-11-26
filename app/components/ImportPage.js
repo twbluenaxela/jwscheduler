@@ -221,9 +221,10 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
     if (action === 'pdfgrid') { setLayoutOpen(true); return; }
     setExporting(true);
     try {
+      // Nodes are index-aligned with selectedWeeks. Never `.filter(Boolean)` here:
+      // dropping a hole would rename every later picture after the week before it.
       const nodes = exportNodes();
-      const present = nodes.filter(Boolean);
-      if (action === 'jpg') await exportNodesJpeg(present, selectedWeeks);
+      if (action === 'jpg') await exportNodesJpeg(nodes, selectedWeeks);
       else if (action === 'xlsx') await exportWeeksXlsx(selectedWeeks, getAssign);
       else if (action === 'pdf') {
         await exportCapturesPdf(exportPdfNodes(), {

@@ -1436,7 +1436,14 @@ body.editing .week-edit__input { background: #fff; }
 .wk-card.is-special { background: #fbeeec; border-color: #f0cfca; }
 .wk-card.is-event { background: #f1efe9; }
 .wk-card.is-suspended { background: #fbeeec; border-color: #f0cfca; }
-.wk-card__top { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+/* An explicit line box, not `normal`: while the mono face is still resolving the
+   browser measures this row at 18px and then at 17px once it is loaded. One card
+   header losing 1px re-flows the whole page (42 cards → the document jumps 42px
+   on the first paint after load), which on a phone visibly shifts everything
+   below it — and an off-screen PrintStage with it, so a PDF page captured at that
+   moment is cropped one line off. 17px is the loaded face's own value, so pinning
+   it changes nothing visually; it only removes the jump. */
+.wk-card__top { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; line-height: 17px; }
 .wk-card__date { font-family: var(--mono); font-weight: 700; font-size: 15px; }
 .wk-card.is-special .wk-card__date, .wk-card.is-event .wk-card__date, .wk-card.is-suspended .wk-card__date { color: var(--special); }
 .wk-card__no { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); margin-left: auto; }
