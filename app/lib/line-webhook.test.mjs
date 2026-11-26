@@ -156,3 +156,46 @@ test('我的安排 includes service duties after meeting parts', async () => {
   assert.match(replies[0].text, /共 3 項/);
   assert.match(replies[0].text, /2026-06-03  講台服務/);
 });
+
+// ── 週中 redesign: added x_ part + hidden helper slot ────────────────────────
+
+const redesignSeed = {
+  congregations: [{ id: 1, name: '新屋會眾', code: 'xinwu' }],
+  people: [
+    { id: 7, congregationId: 1, name: '王大明', status: 'active', lineUserId: 'U-wang' },
+    { id: 8, congregationId: 1, name: '朗讀丁', status: 'active', lineUserId: 'U-reader' },
+  ],
+  weeks: [{
+    id: 2, congregationId: 1, date: '6月 10日', isoDate: '2026-06-10',
+    parts: [
+      { partKey: 'cbs1', title: '會眾研經班', roleLabel: '主持/朗讀', cbsRef: '利未記 第1-7章', hideHelper: true },
+      { partKey: 'x_abc', title: '特別演講', roleLabel: null, cbsRef: '' },
+    ],
+  }],
+  assignments: [
+    { slotId: 'mw2_cbs1_0', weekId: 2, name: '王大明' },
+    { slotId: 'mw2_cbs1_1', weekId: 2, name: '朗讀丁' }, // stale row behind hideHelper
+    { slotId: 'mw2_x_abc_0', weekId: 2, name: '王大明' },
+  ],
+  weekendRows: [],
+  pendingLinks: [],
+};
+
+test('我的安排：列出新增的 x_ 節目', async () => {
+  const db = makeFakeDb(redesignSeed);
+  const { replies, reply } = replySpy();
+  await handleMessage(msg('U-wang', '我的安排'), { db, reply, now: NOW });
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].text, /共 2 項/);
+  assert.match(replies[0].text, /6月 10日  會眾研經班（利未記 第1-7章）（主持）/);
+  assert.match(replies[0].text, /6月 10日  特別演講/);
+});
+
+test('我的安排：hideHelper=true 的助手槽不出現', async () => {
+  const db = makeFakeDb(redesignSeed);
+  const { replies, reply } = replySpy();
+  await handleMessage(msg('U-reader', '我的安排'), { db, reply, now: NOW });
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].text, /目前你沒有排定的安排/);
+  assert.doesNotMatch(replies[0].text, /會眾研經班/);
+});

@@ -23,7 +23,14 @@ export { parseCnDate };
 // suspended rows are skipped only when `skipSuspended` is set (the webhook query
 // does; meetings/publish keeps its original behaviour and includes them).
 // Roles carry their role label (學生/助手/主持/朗讀) and CBS textbook reference,
-// matching the UI's PairSlot labels.
+// matching the UI's PairSlot labels. Each item also carries the `slotId` it came
+// from, so a rename (title edit) can be recognised as the same slot with a new
+// role text instead of a cancellation plus a new assignment. `itemKey` stays
+// `date|role` so snapshots written before slotId existed still diff correctly.
+//
+// A part with `hideHelper` true (the 主持/朗讀 pair toggle) must not report its
+// `_1` slot: the row may still be in the DB from before the toggle, but the UI
+// does not show it, so neither the notification nor 我的安排 may list it.
 export function collectAssignments(name, weeks, weekendRows, { today, now = new Date(), skipSuspended = false } = {}) {
   const cutoff = today ?? startOfToday(now);
   const items = [];
@@ -32,16 +39,25 @@ export function collectAssignments(name, weeks, weekendRows, { today, now = new 
     const d = resolveRowDate(week, now);
     if (!d || d < cutoff) continue;
     const aMap = new Map((week.assignments ?? []).map((a) => [a.slotId, a.name]));
-    if (aMap.get(`mw${week.id}_chairman`) === name) items.push({ date: week.date, _d: d, role: '主席' });
-    if (aMap.get(`mw${week.id}_openPrayer`) === name) items.push({ date: week.date, _d: d, role: '開始禱告' });
-    if (aMap.get(`mw${week.id}_closePrayer`) === name) items.push({ date: week.date, _d: d, role: '結束禱告' });
+    const fixed = [
+      ['chairman', '主席'],
+      ['openPrayer', '開始禱告'],
+      ['closePrayer', '結束禱告'],
+    ];
+    for (const [field, role] of fixed) {
+      const slotId = `mw${week.id}_${field}`;
+      if (aMap.get(slotId) === name) items.push({ date: week.date, _d: d, role, slotId });
+    }
     for (const part of week.parts ?? []) {
       const rls = part.roleLabel?.split('/') ?? [];
       const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
-      if (aMap.get(`mw${week.id}_${part.partKey}_0`) === name)
-        items.push({ date: week.date, _d: d, role: rls[0] ? `${base}（${rls[0]}）` : base });
-      if (aMap.get(`mw${week.id}_${part.partKey}_1`) === name)
-        items.push({ date: week.date, _d: d, role: `${base}（${rls[1] ?? '助手'}）` });
+      const slot0 = `mw${week.id}_${part.partKey}_0`;
+      if (aMap.get(slot0) === name)
+        items.push({ date: week.date, _d: d, role: rls[0] ? `${base}（${rls[0]}）` : base, slotId: slot0 });
+      if (part.hideHelper) continue;
+      const slot1 = `mw${week.id}_${part.partKey}_1`;
+      if (aMap.get(slot1) === name)
+        items.push({ date: week.date, _d: d, role: `${base}（${rls[1] ?? '助手'}）`, slotId: slot1 });
     }
   }
 
@@ -49,11 +65,16 @@ export function collectAssignments(name, weeks, weekendRows, { today, now = new 
     if (row.type === 'event' || (skipSuspended && row.type === 'suspended')) continue;
     const d = resolveRowDate(row, now);
     if (!d || d < cutoff) continue;
-    if (row.speaker === name) items.push({ date: row.date, _d: d, role: '公眾演講' });
-    if (row.chair === name) items.push({ date: row.date, _d: d, role: '主席' });
-    if (row.wt === name) items.push({ date: row.date, _d: d, role: '守望台主持' });
-    if (row.read === name) items.push({ date: row.date, _d: d, role: '朗讀' });
-    if (row.host === name) items.push({ date: row.date, _d: d, role: '招待' });
+    const fields = [
+      ['speaker', '公眾演講'],
+      ['chair', '主席'],
+      ['wt', '守望台主持'],
+      ['read', '朗讀'],
+      ['host', '招待'],
+    ];
+    for (const [field, role] of fields) {
+      if (row[field] === name) items.push({ date: row.date, _d: d, role, slotId: `we${row.id}_${field}` });
+    }
   }
 
   // Sort on the resolved dates captured above — re-parsing the year-less
