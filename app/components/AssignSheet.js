@@ -124,6 +124,7 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
                 <button
                   key={c.n}
                   className={`cand${rec ? ' is-rec' : ''}${isCur ? ' is-cur' : ''}${isUsed ? ' is-used' : ''}`}
+                  aria-current={isCur ? 'true' : undefined}
                   onClick={() => pick(c.n)}
                 >
                   <span className={`avatar ${c.g === 'M' ? 'g-m' : 'g-f'}`}>
@@ -200,7 +201,7 @@ export default function AssignSheet({ sheet, assignments, getAssign, onPick, onC
                       <i style={{ width: `${pct}%` }} />
                     </div>
                   </div>
-                  <span className="cand__rank">{rec ? '★ 推薦' : `#${i + 1}`}</span>
+                  <span className="cand__rank">{rec ? '推薦' : `#${i + 1}`}</span>
                 </button>
               );
             })

@@ -70,7 +70,7 @@ export default function Sidebar({ page, setPage, congName, scheduleStats, role, 
       <div className="brand">
         <Image
           src="/jwschedulerlogo.png"
-          alt="聚會安排"
+          alt=""
           width={34}
           height={34}
           className="brand__logo"

@@ -96,7 +96,7 @@ export default function OrderList({ data, loading, error, reload, close, mark, b
                 <span className="lit-order-name">{row.label}</span>
                 <span className="lit-order-quantity">
                   <strong>改成 {row.now}</strong>
-                  <small>現在 {row.now} · 上次到 {row.last}</small>
+                  <small>上次到 {row.last}</small>
                 </span>
                 <span className={`lit-order-diff${row.diff > 0 ? ' lit-order-diff--increase' : ''}`}>
                   {row.diff > 0 ? `+${row.diff}` : `−${Math.abs(row.diff)}`}
