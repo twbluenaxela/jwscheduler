@@ -3512,3 +3512,46 @@ body.editing :is(.print-stage, .mw-pdf-captures) .row { padding: 3px 22px; }
   white-space: pre-wrap;
 }
 .print-stage--services .svc-print-empty { color: var(--ink-2); font-size: 13px; }
+
+/* ============================= Re-import dialog ============================= */
+.reimport-body { padding: 14px 20px 18px; display: flex; flex-direction: column; gap: 14px; }
+.reimport-weeks {
+  max-height: 40vh; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 12px; background: var(--surface-2);
+}
+.reimport-week {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.reimport-week:last-child { border-bottom: 0; }
+.reimport-week__date { font-weight: 800; color: var(--ink); flex-shrink: 0; }
+.reimport-week__summary { color: var(--ink); font-size: 14px; }
+.reimport-week__summary--muted { color: var(--ink-2); }
+.reimport-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 7px;
+  font-size: 11px; font-weight: 700; color: var(--ink-2);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 99px;
+}
+.reimport-options { display: flex; flex-direction: column; gap: 10px; }
+.reimport-option {
+  display: flex; flex-direction: column; gap: 4px;
+  min-height: 44px; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; background: var(--surface);
+  transition: border-color .13s, background .13s;
+}
+.reimport-option:hover { border-color: var(--accent); }
+.reimport-option--selected { border-color: var(--accent); background: var(--accent-soft); }
+.reimport-option:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.reimport-option__radio { position: absolute; opacity: 0; width: 0; height: 0; }
+.reimport-option__title { font-weight: 800; color: var(--ink); font-size: 15px; }
+.reimport-option__desc { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.reimport-note { font-size: 13px; color: var(--ink-2); font-weight: 600; margin: 0; }
+.reimport-actions { display: flex; gap: 10px; }
+.reimport-btn { flex: 1; min-height: 44px; }
+.reimport-btn--secondary { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+@media (max-width: 480px) {
+  .reimport-actions { flex-direction: row; }
+  .reimport-btn { width: 100%; }
+}

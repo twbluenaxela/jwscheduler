@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 import { canEdit } from '../../../lib/roles.mjs';
-import { reconcileImportedWeek } from '../../../lib/midweekImport.mjs';
+import { applyImport } from '../../../lib/midweekImport.mjs';
 
 const MAX_WEEKS = 40;
 const MAX_PARTS_PER_WEEK = 80;
@@ -144,52 +144,16 @@ export async function POST(request) {
     if (!weeksInput.length) return NextResponse.json({ error: '沒有可匯入的週次' }, { status: 400 });
     if (weeksInput.length > MAX_WEEKS) return NextResponse.json({ error: '一次匯入的週次過多' }, { status: 400 });
 
+    const mode = body.mode === 'replace' ? 'replace' : 'keep';
+
     const cleaned = weeksInput.map(cleanWeek);
-    const savedIds = await db.$transaction(async (tx) => {
-      const ids = [];
-
-      for (const item of cleaned) {
-        // Match on the REAL date when we have one. Matching on the display
-        // string would make next September's import overwrite this September's
-        // week, since "9月 16日" repeats every year.
-        const existing = await tx.midweekWeek.findFirst({
-          where: item.week.isoDate
-            ? { congregationId: user.congregationId, isoDate: item.week.isoDate }
-            : {
-                congregationId: user.congregationId,
-                OR: [
-                  ...(item.week.weekStart ? [{ weekStart: item.week.weekStart }] : []),
-                  { date: item.week.date },
-                ],
-              },
-          orderBy: { id: 'asc' },
-        });
-
-        const week = existing
-          ? await tx.midweekWeek.update({
-              where: { id: existing.id },
-              data: item.week,
-            })
-          : await tx.midweekWeek.create({
-              data: { ...item.week, congregationId: user.congregationId },
-            });
-
-        const weekWithParts = await tx.midweekWeek.findFirst({
-          where: { id: week.id, congregationId: user.congregationId },
-          include: { parts: true, assignments: true },
-        });
-
-        await reconcileImportedWeek(tx, {
-          week: weekWithParts ?? { ...week, parts: [], assignments: [] },
-          incomingParts: item.parts,
-          congregationId: user.congregationId,
-          actorName: user.displayName,
-        });
-
-        ids.push(week.id);
-      }
-
-      return ids;
+    const txResult = await db.$transaction(async (tx) => {
+      return applyImport(tx, {
+        congregationId: user.congregationId,
+        actorName: user.displayName,
+        weeks: cleaned,
+        mode,
+      });
     }, 
     {
       maxWait: 5000,
@@ -197,6 +161,7 @@ export async function POST(request) {
     }
   );
 
+    const savedIds = txResult.ids;
     const weeks = await db.midweekWeek.findMany({
       where: { id: { in: savedIds }, congregationId: user.congregationId },
       orderBy: { id: 'asc' },
@@ -206,7 +171,10 @@ export async function POST(request) {
       },
     });
 
-    return NextResponse.json({ weeks: weeks.map(mapWeek) });
+    return NextResponse.json({
+      weeks: weeks.map(mapWeek),
+      results: txResult.results,
+    });
   } catch (err) {
     return dbErrorResponse(err);
   }
