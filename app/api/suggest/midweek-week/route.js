@@ -4,9 +4,7 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 import { suggestMidweekWeek } from '../../../lib/suggest';
-import { partTypeOf, slotCat } from '../../../lib/partTypes.mjs';
-
-const ROLE_TO_CAT = { chairman: 'chairman', openPrayer: 'prayer', closePrayer: 'prayer' };
+import { buildSuggestPastHistory } from '../../../lib/suggestHistory.mjs';
 
 export async function POST(request) {
   try {
@@ -40,37 +38,15 @@ export async function POST(request) {
     const sections = { treasures: [], ministry: [], living: [] };
     for (const part of targetWeek.parts) {
       const s = sections[part.section] ? part.section : 'living';
-      sections[s].push({ id: part.partKey, cat: part.cat, roleLabel: part.roleLabel ?? '', title: part.title });
+      sections[s].push({
+        id: part.partKey, cat: part.cat, roleLabel: part.roleLabel ?? '', title: part.title,
+        hideHelper: part.hideHelper ?? false,
+      });
     }
     const week = { id: targetWeek.id, ...sections };
 
     // Build pastHistory: [{ name, cat, date, type, role, pairId }]
-    const pastHistory = [];
-    for (const w of historyWeeks) {
-      const partMap = new Map(w.parts.map(p => [p.partKey, p]));
-      for (const a of w.assignments) {
-        const roleMatch = a.slotId.match(/^mw\d+_(chairman|openPrayer|closePrayer)$/);
-        if (roleMatch) {
-          pastHistory.push({ name: a.name, cat: ROLE_TO_CAT[roleMatch[1]], date: w.date, isoDate: w.isoDate });
-          continue;
-        }
-        const partMatch = a.slotId.match(/^mw\d+_(.+?)_([01])$/);
-        if (partMatch) {
-          const part = partMap.get(partMatch[1]);
-          // pairId groups the two halves of one pair-capable part so the
-          // engine can recover 學生／助手 pairings (who served WITH whom).
-          if (part) pastHistory.push({
-            name: a.name,
-            cat: slotCat(part, partMatch[2]),
-            date: w.date,
-            isoDate: w.isoDate,
-            type: part.cat === 'ministry' ? partTypeOf(part.title) : null,
-            role: partMatch[2],
-            pairId: String(part.roleLabel ?? '').includes('/') ? `${w.id}_${partMatch[1]}` : null,
-          });
-        }
-      }
-    }
+    const pastHistory = buildSuggestPastHistory(historyWeeks);
 
     const normalPeople = people.map(p => ({
       name: p.name,

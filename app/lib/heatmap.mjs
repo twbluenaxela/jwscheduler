@@ -29,6 +29,7 @@
 //   - Counting: 1 part = 1 count, no weighting by part type.
 
 import { resolveRowDate } from './cnDate.mjs';
+import { isMidweekSuspended } from './weekType.mjs';
 
 const MINISTRY_FAMILY_MARKERS = ['傳道示範', '傳道演講', '助手', '經文朗讀'];
 
@@ -81,6 +82,9 @@ export function buildMonthWindow({ mode = 'rolling', range = 12, offset = 0, ref
 export function coveredMonths(midweekWeeks, weekendRows, refDate = new Date()) {
   const keys = new Set();
   for (const w of midweekWeeks ?? []) {
+    // A cancelled week is not a scheduled meeting: a month whose only entry is
+    // 暫停 must read 無資料, not "0 assignments".
+    if (isMidweekSuspended(w)) continue;
     const d = resolveRowDate(w, refDate);
     if (d) keys.add(keyOfDate(d));
   }
@@ -107,6 +111,11 @@ export function collectPersonEvents(midweekWeeks, assignments, weekendRows, refD
   }
 
   for (const week of midweekWeeks ?? []) {
+    // A cancelled week (大會 / 暫停) prints as a one-line notice and never shows
+    // its parts, so stale assignments left on it must not count toward anyone's
+    // 指派記錄 — otherwise the heatmap flags a double booking on a meeting that
+    // did not happen.
+    if (isMidweekSuspended(week)) continue;
     const date = resolveRowDate(week, refDate);
     if (!date) continue;
 

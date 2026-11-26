@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { getToken } from '../lib/auth-context';
 import AssignmentHeatmap from './AssignmentHeatmap';
 import { resolveRowDate } from '../lib/cnDate.mjs';
+import { isMidweekSuspended } from '../lib/weekType.mjs';
 
 // ─── ChangesPanel ────────────────────────────────────────────────────────────
 
@@ -180,8 +181,10 @@ function buildOverviewRows(midweekWeeks, weekendRows, getAssign = (_, d) => d ??
     // value baked into the week object at load time.
     const ga = (key, fallback = '') => getAssign(`mw${week.id}_${key}`, fallback);
 
-    // Assembly weeks: no gap counting, shown as a suspended event row
-    if (weekType === 'assembly') {
+    // Cancelled weeks (大會 AND 暫停): no gap counting, shown as a suspended
+    // event row. Testing only 'assembly' counted every part of a 暫停 week as a
+    // vacancy. isMidweekSuspended is the one definition (weekType.mjs).
+    if (isMidweekSuspended(week)) {
       return {
         id: `mw_${week.id ?? week.date}`,
         rawDate,

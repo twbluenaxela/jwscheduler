@@ -300,3 +300,38 @@ test('person export rows carry full dates and the same summary as the screen', (
   assert.deepEqual(rows[head], ['日期', '項目', '搭檔']);
   assert.deepEqual(rows[head + 1], ['2026/7/1', '傳道示範（學生）', '張怡君']);
 });
+
+// ── Added parts and cancelled weeks ──────────────────────────────────────────
+// A part added in 基督徒的生活 has `x_<32 hex>` as its id, so the slot it forms
+// is `mw37_x_0123…_0`. The lookup is built from the part id, which is why this
+// module was never broken here — the guard is that it stays that way.
+test('an added part (x_…) is dated and counted like any other', () => {
+  const added = `x_${'a'.repeat(32)}`;
+  const weeks = [mkWeek(37, '8月 6日', {
+    living: [{ id: added, title: '本地需要', cat: 'living', assign: ['甲'] }],
+  })];
+  const evts = collectPersonEvents(weeks, {}, [], REF);
+  assert.equal(evts.get('甲')[0].label, '本地需要');
+  // And the live override reaches it through the full slot ID.
+  const live = collectPersonEvents(weeks, { [`mw37_${added}_0`]: '乙' }, [], REF);
+  assert.equal(live.get('甲'), undefined);
+  assert.equal(live.get('乙')[0].label, '本地需要');
+});
+
+test('a cancelled week contributes no assignments and does not cover its month', () => {
+  // 暫停 and 大會 print as a one-line notice; a stale name left on one must not
+  // count as an assignment, and the month must stay 無資料.
+  const weeks = [
+    { ...mkWeek(1, '8月 5日', { chairman: '甲' }), type: 'suspended' },
+    { ...mkWeek(2, '9月 2日', { chairman: '甲' }), type: 'assembly', label: '區域大會' },
+    mkWeek(3, '7月 1日', { chairman: '乙' }),
+  ];
+  const evts = collectPersonEvents(weeks, {}, [], REF);
+  assert.equal(evts.get('甲'), undefined);
+  assert.ok(evts.get('乙'));
+
+  const covered = coveredMonths(weeks, [], REF);
+  assert.ok(covered.has(monthKey(2026, 7)));
+  assert.ok(!covered.has(monthKey(2026, 8)));
+  assert.ok(!covered.has(monthKey(2026, 9)));
+});

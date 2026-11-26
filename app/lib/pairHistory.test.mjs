@@ -105,3 +105,33 @@ test('counterpartName returns the other half of a demo part, else empty', () => 
   assert.equal(counterpartName('mw42_m0_0', weeks, assignments), '', 'helper slot is empty');
   assert.equal(counterpartName('mw42_chairman', weeks, assignments), '');
 });
+
+// ── Added parts (`x_<hex>` partKeys contain underscores) ─────────────────────
+const ADDED = 'x_0123456789abcdef0123456789abcdef';
+
+test('counterpartName finds the other half of an added pair part', () => {
+  const weeks = [{
+    id: 37, date: '6月 3日',
+    living: [{ id: ADDED, title: '年度服務報告', cat: 'ministry', roleLabel: '學生/助手' }],
+  }];
+  const assignments = { [`mw37_${ADDED}_0`]: '甲', [`mw37_${ADDED}_1`]: '乙' };
+  assert.equal(counterpartName(`mw37_${ADDED}_0`, weeks, assignments), '乙');
+  assert.equal(counterpartName(`mw37_${ADDED}_1`, weeks, assignments), '甲');
+  assert.equal(counterpartName(`mw37_${ADDED}_0`, weeks, {}), '');
+});
+
+test('collectMidweekPairs pairs an added demo part', () => {
+  const weeks = [{
+    id: 37, date: '6月 3日',
+    living: [{ id: ADDED, title: '年度服務報告', cat: 'ministry', roleLabel: '學生/助手' }],
+  }];
+  const assignments = { [`mw37_${ADDED}_0`]: '甲', [`mw37_${ADDED}_1`]: '乙' };
+  const pairs = collectMidweekPairs(weeks, assignments);
+  assert.equal(pairs.length, 1);
+  assert.equal(pairKey(pairs[0].a, pairs[0].b), pairKey('甲', '乙'));
+});
+
+test('counterpartName ignores a non-pair added part', () => {
+  const weeks = [{ id: 37, date: '6月 3日', living: [{ id: ADDED, title: '報告', cat: 'living', roleLabel: '' }] }];
+  assert.equal(counterpartName(`mw37_${ADDED}_0`, weeks, {}), '');
+});

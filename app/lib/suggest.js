@@ -374,7 +374,10 @@ export function suggestMidweekWeek(people, week, existingAssignments, pastHistor
         type, role: '0',
         pairWith: isDemo ? existingAssignments[slot1] || null : null,
       });
-      if (String(part.roleLabel ?? '').includes('/')) {
+      // A hidden helper (`hideHelper`) is not part of this week's programme —
+      // the card renders no second slot for it — so suggesting someone for it
+      // would let 「接受全部」 assign a person to a slot nobody can see or clear.
+      if (String(part.roleLabel ?? '').includes('/') && !part.hideHelper) {
         // Helper prefers the student's gender (S-38); CBS reader has its own pool.
         const student = existingAssignments[slot0] || result[slot0];
         const preferG = part.cat === 'ministry' ? genderOf(student) ?? null : null;

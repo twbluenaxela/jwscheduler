@@ -38,6 +38,15 @@ export function resolveScheduleDate(date, now = todayTaipei()) {
 const sections = { chairman: ['主席', 'chairman'], 主席: ['主席', 'chairman'], openPrayer: ['開會禱告', 'prayer'],
   開會禱告: ['開會禱告', 'prayer'], closePrayer: ['結束禱告', 'prayer'], 結束禱告: ['結束禱告', 'prayer'] };
 const names = (week) => Object.fromEntries((week.assignments ?? []).map((a) => [a.slotId, a.name]));
+// The roles a part actually offers. A '/' roleLabel with `hideHelper` offers
+// only the primary slot — the helper is intentionally not part of this week's
+// programme, so reporting it as empty would invent a permanent vacancy, and
+// formatting it would print a role the card does not show.
+export function partRoles(part) {
+  const labels = String(part?.roleLabel ?? '').split('/');
+  if (part?.hideHelper) return [{ index: 0, label: labels[0] || '' }];
+  return labels.map((label, index) => ({ index, label }));
+}
 export function resolvePart(week, query, role) {
   if (!week) throw new Error('找不到該週週中聚會');
   if (isMidweekSuspended(week)) throw new Error(suspendedNotice(week));
@@ -50,18 +59,23 @@ export function resolvePart(week, query, role) {
   const list = partList(week);
   if (matches.length !== 1) throw new Error(`節目${matches.length ? '不明確' : '找不到'}：${list}`);
   const part = matches[0];
-  const labels = (part.roleLabel || '').split('/');
-  let idx = 0;
+  const roles = partRoles(part);
+  const labels = roles.map((entry) => entry.label);
+  let idx = roles[0].index;
   if (role !== undefined && role !== '') {
-    idx = ['0', '1'].includes(String(role)) ? Number(role) : labels.indexOf(String(role));
-    if (idx < 0 || idx >= labels.length) throw new Error(`角色不明確：${list}`);
-  } else if (labels.length > 1) throw new Error(`請指定角色：${list}`);
+    const asNumber = Number(role);
+    const found = Number.isInteger(asNumber) && ['0', '1'].includes(String(role))
+      ? roles.find((entry) => entry.index === asNumber)
+      : roles.find((entry) => entry.label === String(role));
+    if (!found) throw new Error(`角色不明確：${list}`);
+    idx = found.index;
+  } else if (roles.length > 1) throw new Error(`請指定角色：${list}`);
   return { slotId: `mw${week.id}_${part.partKey}_${idx}`, title: part.title, role: labels[idx] || '', cat: slotCat(part, idx) };
 }
 function partList(week) {
-  return (week.parts ?? []).map((p) => {
-    const labels = (p.roleLabel || '').split('/');
-    return `${p.partNum} ${p.title} ${labels.map((label, i) => `${label || '負責'}：${names(week)[`mw${week.id}_${p.partKey}_${i}`] || '（空）'}`).join('、')}`;
+  return orderedParts(week).map((p) => {
+    const a = names(week);
+    return `${p.partNum} ${p.title} ${partRoles(p).map(({ index, label }) => `${label || '負責'}：${a[`mw${week.id}_${p.partKey}_${index}`] || '（空）'}`).join('、')}`;
   }).join('；');
 }
 async function load(ctx) {
@@ -72,6 +86,10 @@ async function load(ctx) {
   return congregation;
 }
 const line = (title, name) => `${title}：${name || '（空）'}`;
+// Rows come from Prisma without an ORDER BY, and an import or a delete
+// renumbers `partNum` on rows whose insertion order never changed — so the
+// schedule must sort before printing, or items come out in the old order.
+const orderedParts = (week) => [...(week?.parts ?? [])].sort((a, b) => a.partNum - b.partNum);
 function formatWeek(week, row) {
   const lines = [];
   if (week) {
@@ -82,9 +100,8 @@ function formatWeek(week, row) {
       for (const [key, label] of [['chairman', '主席'], ['openPrayer', '開會禱告'], ['closePrayer', '結束禱告']]) {
         lines.push(line(label, a[`mw${week.id}_${key}`]));
       }
-      for (const p of week.parts ?? []) {
-        const labels = (p.roleLabel || '').split('/');
-        lines.push(`${p.partNum} ${p.title}：${labels.map((l, i) => line(l || '負責', a[`mw${week.id}_${p.partKey}_${i}`])).join('；')}`);
+      for (const p of orderedParts(week)) {
+        lines.push(`${p.partNum} ${p.title}：${partRoles(p).map(({ index, label }) => line(label || '負責', a[`mw${week.id}_${p.partKey}_${index}`])).join('；')}`);
       }
     }
   }
@@ -266,8 +283,8 @@ export const scheduleTools = [
         for (const [key, label] of [['chairman', '主席'], ['openPrayer', '開會禱告'], ['closePrayer', '結束禱告']]) {
           if (!map[`mw${w.id}_${key}`]) vacancies.push(`${w.date} ${label}`);
         }
-        for (const p of w.parts ?? []) for (const [i, role] of (p.roleLabel || '').split('/').entries()) {
-          if (!map[`mw${w.id}_${p.partKey}_${i}`]) vacancies.push(`${w.date} ${p.partNum} ${p.title}${role ? `（${role}）` : ''}`);
+        for (const p of orderedParts(w)) for (const { index, label } of partRoles(p)) {
+          if (!map[`mw${w.id}_${p.partKey}_${index}`]) vacancies.push(`${w.date} ${p.partNum} ${p.title}${label ? `（${label}）` : ''}`);
         }
       }
       if (row && row.type !== 'event' && row.type !== 'suspended') {

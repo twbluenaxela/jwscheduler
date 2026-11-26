@@ -19,7 +19,8 @@ function matchField(value, cond) {
     if ('equals' in cond) return norm(value) === norm(cond.equals);
     if ('startsWith' in cond) return norm(value).startsWith(norm(cond.startsWith));
     if ('contains' in cond) return norm(value).includes(norm(cond.contains));
-    if ('in' in cond) return (cond.in ?? []).includes(value);
+    if ('in' in cond) return (cond.in ?? []).some((v) => norm(v) === norm(value));
+    if ('notIn' in cond) return !(cond.notIn ?? []).some((v) => norm(v) === norm(value));
     if ('not' in cond) return value !== cond.not;
     return false;
   }
@@ -52,14 +53,18 @@ export function makeFakeDb(seed = {}) {
     if (include?.assignments) {
       out.assignments = stores.assignments
         .filter((a) => a.weekId === week.id)
-        .map((a) => ({ slotId: a.slotId, name: a.name }));
+        .map((a) => ({ ...a }));
     }
     if (include?.parts) out.parts = clone(week.parts ?? []);
     return out;
   };
 
-  return {
+  const api = {
     __stores: stores,
+
+    // Routes wrap their writes in `db.$transaction(async (tx) => …)`; the fake
+    // has no rollback, it just runs the callback against the same store.
+    async $transaction(fn) { return fn(api); },
 
     serviceCategory: { async findMany({ where }) { return clone(stores.serviceCategories.filter(row => whereMatch(row, where))); } },
     serviceAssignment: { async findMany({ where }) { return clone(stores.serviceAssignments.filter(row => whereMatch(row, where))); } },
@@ -106,10 +111,73 @@ export function makeFakeDb(seed = {}) {
         else stores.assignments.push({ ...create });
         return clone(stores.assignments.find((a) => a.slotId === slotId));
       },
-      async deleteMany({ where: { slotId } }) {
+      async deleteMany({ where }) {
         const before = stores.assignments.length;
-        stores.assignments = stores.assignments.filter((a) => a.slotId !== slotId);
+        stores.assignments = stores.assignments.filter((a) => {
+          if (!where) return false;
+          if (where.id && Array.isArray(where.id.in)) return !where.id.in.includes(a.id);
+          if ('slotId' in where) {
+            const cond = where.slotId;
+            if (cond && typeof cond === 'object') {
+              if ('startsWith' in cond) return !String(a.slotId).startsWith(cond.startsWith);
+              if ('in' in cond) return !cond.in.includes(a.slotId);
+              return true;
+            }
+            return a.slotId !== cond;
+          }
+          if (where.weekId !== undefined) return a.weekId !== where.weekId;
+          return true;
+        });
         return { count: before - stores.assignments.length };
+      },
+    },
+
+    part: {
+      async upsert({ where: { weekId_partKey: key }, update, create }) {
+        const week = stores.weeks.find((w) => w.id === key.weekId);
+        if (!week) return null;
+        week.parts = week.parts ?? [];
+        const existing = week.parts.find((p) => p.partKey === key.partKey);
+        if (existing) Object.assign(existing, update);
+        else {
+          const id = stores.weeks.reduce((max, w) => Math.max(max, ...(w.parts ?? []).map((p) => p.id ?? 0)), 0) + 1;
+          week.parts.push({ id, ...create });
+        }
+        return clone(week.parts.find((p) => p.partKey === key.partKey));
+      },
+      async update({ where: { id }, data }) {
+        for (const week of stores.weeks) {
+          const part = (week.parts ?? []).find((p) => p.id === id);
+          if (part) { Object.assign(part, data); return clone(part); }
+        }
+        return null;
+      },
+      async findMany({ where } = {}) {
+        const out = [];
+        for (const week of stores.weeks) {
+          if (where?.weekId !== undefined && week.id !== where.weekId) continue;
+          for (const part of week.parts ?? []) {
+            if (where?.partKey !== undefined && part.partKey !== where.partKey) continue;
+            out.push(clone(part));
+          }
+        }
+        return out;
+      },
+      async deleteMany({ where }) {
+        let count = 0;
+        for (const week of stores.weeks) {
+          if (where?.weekId !== undefined && week.id !== where.weekId) continue;
+          const keys = where?.partKey;
+          const before = (week.parts ?? []).length;
+          week.parts = (week.parts ?? []).filter((p) => {
+            if (!keys) return true;
+            if (keys.in) return !keys.in.includes(p.partKey);
+            if ('notIn' in keys) return keys.notIn.includes(p.partKey);
+            return p.partKey !== keys;
+          });
+          count += before - week.parts.length;
+        }
+        return { count };
       },
     },
 
@@ -190,4 +258,5 @@ export function makeFakeDb(seed = {}) {
       },
     },
   };
+  return api;
 }

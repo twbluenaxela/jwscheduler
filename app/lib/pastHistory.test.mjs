@@ -163,3 +163,40 @@ test('slotRefDate falls back to today (midnight) for unknown slot', () => {
   todayMidnight.setHours(0, 0, 0, 0);
   assert.equal(d.toDateString(), todayMidnight.toDateString());
 });
+
+// ── Added parts (`x_<hex>` partKeys contain an underscore) ───────────────────
+// Regression: `slotId.split('_')` read only 'x' as the partKey, so an
+// assignment to a user-added part never entered the fairness history.
+test('an added part assignment counts under its own cat', () => {
+  const key = 'x_0123456789abcdef0123456789abcdef';
+  const week = {
+    id: 10, date: '6月 3日', parts: [],
+    living: [{ id: key, partNum: 4, title: '年度服務報告', cat: 'living', roleLabel: '' }],
+  };
+  const assignments = { [`mw10_${key}_0`]: '于樂洋' };
+  const hist = buildPastHistory([week], assignments, [], REF);
+  assert.equal(hist['于樂洋']['生活演講'].halfYearCount, 1);
+  assert.equal(hist['于樂洋']['生活演講'].daysSince, 28);
+});
+
+test('an added cbs part keeps its 主持/朗讀 split in the history', () => {
+  const key = 'x_fedcba9876543210fedcba9876543210';
+  const week = {
+    id: 11, date: '6月 3日', parts: [],
+    living: [{ id: key, partNum: 5, title: '會眾研經班', cat: 'cbs', roleLabel: '主持/朗讀' }],
+  };
+  const hist = buildPastHistory(
+    [week],
+    { [`mw11_${key}_0`]: '甲', [`mw11_${key}_1`]: '乙' },
+    [],
+    REF,
+  );
+  assert.equal(hist['甲']['研經班主持'].halfYearCount, 1);
+  assert.equal(hist['乙']['研經班朗讀'].halfYearCount, 1);
+});
+
+test('slotRefDate resolves an added part slot to the week date', () => {
+  const key = 'x_0123456789abcdef0123456789abcdef';
+  const week = { id: 10, date: '6月 3日', parts: [] };
+  assert.deepEqual(slotRefDate(`mw10_${key}_0`, [week], []), new Date(2026, 5, 3));
+});

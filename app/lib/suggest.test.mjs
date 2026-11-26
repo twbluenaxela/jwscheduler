@@ -562,3 +562,18 @@ test('先驅 does not override the S-38 gender rule', () => {
   const res = suggestMidweekWeek(people, week, {}, [], REF);
   assert.equal(res['mw1_m0_0'], '弟兄');
 });
+
+test('a hidden helper (hideHelper) is never suggested a name', () => {
+  // The card renders no second slot for a hidden helper, so a suggestion on
+  // `_1` could not be seen or cleared — yet 「接受全部」 would have assigned it.
+  const week = {
+    id: 9,
+    treasures: [],
+    ministry: [{ id: 'm0', cat: 'ministry', roleLabel: '學生/助手', title: '初次交談', hideHelper: true }],
+    living: [],
+  };
+  const people = [sister('姊妹甲', ['傳道示範']), sister('姊妹乙', ['傳道示範'])];
+  const res = suggestMidweekWeek(people, week, {}, [], REF);
+  assert.ok(res['mw9_m0_0'], 'the student slot is still suggested');
+  assert.equal(res['mw9_m0_1'], undefined, 'the hidden helper slot must stay empty');
+});
