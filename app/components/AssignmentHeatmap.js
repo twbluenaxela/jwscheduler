@@ -190,7 +190,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
     }),
     [people, midweekWeeks, weekendRows, getAssign, gender, opt.mode, opt.range, offset]
   );
-  const { rows, win, monthMode, coveredCount } = data;
+  const { rows, win, monthMode } = data;
 
   // Names are never truncated — the column is sized to the longest one actually
   // present. If that pushes the grid past the viewport the table scrolls
@@ -247,8 +247,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
   }, [win, size, wrapWidth, wrapRef]);
 
   const periodLabel = windowLabel(win, opt.mode);
-  const attnCount = rows.filter((r) => r.rank > 0).length;
-  const noteText = `${monthMode ? '一格一個月' : '一格一週'}，${canHover ? '移到格子上' : '點一下'}看內容`;
+  const shortNote = (r) => r.dbl ? `同月×${r.dbl}` : `${r.idle} 個月未派`;
 
   function bandStyle(m, mi) {
     const isNow = m.key === nowKey;
@@ -275,9 +274,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
         <div>
           <div className="hm-title">指派分布</div>
           <div className="hm-subhead">
-            {periodLabel} · {rows.length} 位 · {noteText}
-            {coveredCount < win.length && `　·　${win.length - coveredCount} 個月尚無聚會資料`}
-            {attnCount > 0 ? `　·　需要注意的 ${attnCount} 位排在最前面` : '　·　目前沒有需要注意的人'}
+            {periodLabel} · {rows.length} 位
           </div>
         </div>
         <div className="hm-filters hm-noexport">
@@ -343,7 +340,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
                     <span className={`hm-badge hm-badge--${r.person.g === 'F' ? 'f' : 'm'}`}>{r.person.g === 'F' ? '姊' : '兄'}</span>
                     <span className="hm-name__text">{r.person.name}</span>
                   </span>
-                  {showMobileNote && <span className={`hm-chip hm-chip--sm${flagged ? ' hm-chip--warn' : ''}`}>{note}</span>}
+                  {showMobileNote && <span className={`hm-chip hm-chip--sm${flagged ? ' hm-chip--warn' : ''}`} title={note} aria-label={note}>{shortNote(r)}</span>}
                 </button>
 
                 {r.monthly.map((m, mi) => (
@@ -371,7 +368,7 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
 
                 {!isMobile && (
                   <div className="hm-attn" style={{ width: attnW }}>
-                    {r.rank > 0 && <span className={`hm-chip${flagged ? ' hm-chip--warn' : ''}`}>{note}</span>}
+                    {r.rank > 0 && <span className={`hm-chip${flagged ? ' hm-chip--warn' : ''}`} title={note} aria-label={note}>{shortNote(r)}</span>}
                   </div>
                 )}
                 <div className="hm-count" style={{ width: countW, color: flagged ? 'var(--special)' : 'var(--ink-3)' }}>{r.total}</div>

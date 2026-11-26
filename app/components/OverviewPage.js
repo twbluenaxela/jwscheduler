@@ -486,7 +486,6 @@ function AgItem({ row, open, onToggle, onGoToRow }) {
               <TypeBadge type={row.type} />
               <span className="ag-title">{row.title}</span>
             </span>
-            <span className="ag-ready">就緒</span>
             <span className="ag-caret">›</span>
           </button>
           <div className="ag-detail">
