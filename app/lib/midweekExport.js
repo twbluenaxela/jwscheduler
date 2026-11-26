@@ -4,6 +4,7 @@ import JSZip from 'jszip';
 
 import { buildMidweekXlsxBlob } from './midweekXlsxLayout.mjs';
 import { nodeToImageBlob, triggerDownload } from './printPdf';
+import { isMidweekSuspended, suspendedNotice } from './weekType.mjs';
 
 // Files that are NOT a PDF: the styled workbook, the JPEG/zip download and the
 // plain-text schedule. Every capture, every PDF byte and every print window
@@ -55,12 +56,21 @@ export async function exportWeeksXlsx(weeks, getAssign) {
 /* ===================== Plain-text export ===================== */
 
 // Plain-text version of a week's schedule, suitable for pasting into a LINE group.
+//
+// It must say the same thing as the card it replaces: a cancelled week is the
+// one-line 暫停 notice (not an empty heading), and every assigned name carries
+// its role (學生 / 助手 / 主持 / 朗讀), because "陳大文 / 林小華" alone does not
+// tell anyone who is the student and who is the helper.
 export function buildWeekText(week, getAssign) {
   if (!week) return '';
   const wId = `mw${week.id}`;
   const get = (slot, fb) => (typeof getAssign === 'function' ? getAssign(slot, fb) : fb) || '';
   const lines = [];
   lines.push(`📋 週中 — ${getWeekLabel(week)}`);
+  if (isMidweekSuspended(week)) {
+    lines.push(suspendedNotice(week));
+    return lines.join('\n').trim();
+  }
   if (week.weekdayPill) lines.push(week.weekdayPill);
   if (week.reading) lines.push(`每週閱讀經文：${week.reading}`);
   lines.push('');
@@ -71,13 +81,27 @@ export function buildWeekText(week, getAssign) {
   if (openPrayer) lines.push(`開始禱告：${openPrayer}`);
   lines.push('');
 
+  // Same pair rule as the card and the workbook: a second slot exists only for
+  // a '/' roleLabel whose helper is not hidden.
+  const roleNames = (part) => {
+    const roles = part.roleLabel?.split('/') ?? [];
+    const isPair = roles.length > 1 && !part.hideHelper;
+    const count = isPair ? 2 : 1;
+    const out = [];
+    for (let i = 0; i < count; i += 1) {
+      const name = get(`${wId}_${part.id}_${i}`, part.assign?.[i] ?? '');
+      if (!name) continue;
+      const role = roles[i] || (i === 1 ? '助手' : '');
+      out.push(role ? `${name}（${role}）` : name);
+    }
+    return out;
+  };
+
   const section = (title, parts) => {
     if (!parts?.length) return;
     lines.push(`【${title}】`);
     parts.forEach((part) => {
-      const names = part.assign
-        .map((_, i) => get(`${wId}_${part.id}_${i}`, part.assign[i] ?? ''))
-        .filter(Boolean);
+      const names = roleNames(part);
       const hasScenario = part.cat === 'ministry' && part.scenario;
       const duration = hasScenario ? `（${part.dur}）` : '';
       const scenario = hasScenario ? `\n   情境：${part.scenario}` : '';
@@ -102,18 +126,25 @@ export function buildWeekText(week, getAssign) {
 const JPG_BACKGROUND = '#ecebe7';
 
 export async function exportNodesJpeg(nodes, weeks) {
-  if (!nodes.length) return;
-  if (nodes.length === 1) {
-    const blob = await nodeToImageBlob(nodes[0], { background: JPG_BACKGROUND });
-    triggerDownload(blob, getMidweekExportFilename(weeks[0], 'jpg'));
+  // Nodes are index-aligned with `weeks` and may contain holes (a card that has
+  // not mounted yet). Pair before dropping, or the zip's file names slip one
+  // week ahead of the picture they contain.
+  const pairs = (nodes ?? [])
+    .map((node, index) => ({ node, week: weeks?.[index] }))
+    .filter((pair) => pair.node);
+  if (!pairs.length) return;
+  if (pairs.length === 1) {
+    const blob = await nodeToImageBlob(pairs[0].node, { background: JPG_BACKGROUND });
+    triggerDownload(blob, getMidweekExportFilename(pairs[0].week, 'jpg'));
     return;
   }
   const zip = new JSZip();
-  for (let i = 0; i < nodes.length; i += 1) {
+  for (let i = 0; i < pairs.length; i += 1) {
+    const { node, week } = pairs[i];
     // eslint-disable-next-line no-await-in-loop
-    const blob = await nodeToImageBlob(nodes[i], { background: JPG_BACKGROUND });
-    zip.file(`${sanitizeFilename(getWeekLabel(weeks[i]))}.jpg`, blob);
+    const blob = await nodeToImageBlob(node, { background: JPG_BACKGROUND });
+    zip.file(`${sanitizeFilename(getWeekLabel(week))}.jpg`, blob);
   }
   const out = await zip.generateAsync({ type: 'blob' });
-  triggerDownload(out, getMultiWeekExportFilename(weeks, 'zip'));
+  triggerDownload(out, getMultiWeekExportFilename(pairs.map((pair) => pair.week), 'zip'));
 }

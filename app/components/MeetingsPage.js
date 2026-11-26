@@ -93,15 +93,20 @@ function WeekPicker({ weeks, currentWeek, onSelect }) {
   );
 }
 
-function ExportMenu({ week, getAssign, captureRef, pdfNodesRef, exportOpen, setExportOpen, menuRef }) {
+export function ExportMenu({ week, getAssign, captureRef, pdfNodesRef, editMode = false, exportOpen, setExportOpen, menuRef }) {
+  // JPG / 複製圖片 normally screenshot the live card, so a phone gets the card
+  // it is looking at. In EDIT mode that card carries the edit bar, the 新增
+  // ghosts and the inline inputs, which must never reach a picture pasted into
+  // a LINE group — the stage's read-only card is the same week without them.
+  const imageNode = () => (editMode ? pdfNodesRef?.current?.[0] : captureRef.current);
   const handleExport = async (type) => {
     if (!week) return;
     setExportOpen(false);
     try {
       if (type === 'jpg') {
-        await downloadNodeImage(captureRef.current, getMidweekExportFilename(week, 'jpg'));
+        await downloadNodeImage(imageNode(), getMidweekExportFilename(week, 'jpg'));
       } else if (type === 'copy') {
-        await copyNodeImageToClipboard(captureRef.current);
+        await copyNodeImageToClipboard(imageNode());
       } else if (type === 'xlsx') {
         await downloadWeekXlsx(week, getAssign);
       } else if (type === 'text') {
@@ -164,7 +169,7 @@ const WEEKEND_EXPORT_ITEMS = [
   { ic: '▥', label: '下載 PDF', sub: '直接下載檔案', action: 'pdf' },
 ];
 
-function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, pdfNodesRef, exportOpen, setExportOpen, menuRef }) {
+export function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, pdfNodesRef, editMode = false, exportOpen, setExportOpen, menuRef }) {
   const handleExport = async (type) => {
     setExportOpen(false);
     const rows = visibleRowsRef.current ?? [];
@@ -189,11 +194,15 @@ function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, pdfNodesRef,
         });
         return;
       }
-      if (!captureRef.current) throw new Error('沒有可匯出的內容。');
+      // The live table is the phone's card list and, in edit mode, carries the
+      // 編輯中 banner plus per-cell inputs. A chat image must never show those,
+      // so edit mode shoots the read-only print stage instead.
+      const node = editMode ? pdfNodesRef?.current?.[0] : captureRef.current;
+      if (!node) throw new Error('沒有可匯出的內容。');
       if (type === 'jpg') {
-        await downloadNodeImage(captureRef.current, getWeekendExportFilename(rows, 'jpg', '週末聚會'));
+        await downloadNodeImage(node, getWeekendExportFilename(rows, 'jpg', '週末聚會'));
       } else if (type === 'copy') {
-        await copyNodeImageToClipboard(captureRef.current);
+        await copyNodeImageToClipboard(node);
       }
     } catch (error) {
       window.alert(error?.message || '匯出失敗');
@@ -347,6 +356,7 @@ export default function MeetingsPage({
               getAssign={getAssign}
               captureRef={captureRef}
               pdfNodesRef={midweekPdfNodesRef}
+              editMode={editMode}
               exportOpen={exportOpen}
               setExportOpen={setExportOpen}
               menuRef={menuRef}
@@ -468,10 +478,11 @@ export default function MeetingsPage({
                 clearSlot={clearSlot}
                 onFinishEdit={finishEdit}
               />
-              {/* The 下載 PDF capture: a read-only copy of THIS week at print
-                  width, so a phone PDF is the desktop card and an edit-mode PDF
-                  carries no edit controls. JPG / 複製圖片 keep using the live
-                  card above. */}
+              {/* The PDF capture: a read-only copy of THIS week at print width,
+                  so a phone PDF is the desktop card and an edit-mode PDF
+                  carries no edit controls. JPG / 複製圖片 use it too in edit
+                  mode (see ExportMenu's imageNode); in read mode they keep the
+                  live card so a phone gets the layout it is looking at. */}
               <PrintStage nodesRef={midweekPdfNodesRef}>
                 {midweekWeeks[week] && (
                   <MidweekWeek
@@ -510,6 +521,7 @@ export default function MeetingsPage({
               captureRef={weekendCaptureRef}
               visibleRowsRef={weekendVisibleRowsRef}
               pdfNodesRef={weekendPdfNodesRef}
+              editMode={weekendEditMode}
               exportOpen={weekendExportOpen}
               setExportOpen={setWeekendExportOpen}
               menuRef={weekendMenuRef}

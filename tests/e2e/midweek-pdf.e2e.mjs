@@ -25,6 +25,13 @@ import { chromium } from 'playwright';
 import { DEFAULT_LAYOUT, normalizeLayout, paginate } from '../../app/lib/pdfLayout.mjs';
 import { isMidweekSuspended } from '../../app/lib/weekType.mjs';
 import { FIXTURE_WEEKS } from '../../app/test-fixtures/midweek-pdf/fixtureWeeks.mjs';
+import {
+  assertCleanTopBand,
+  captureBoxFailures,
+  captureNodePng,
+  decodePng,
+  prepareStageForCapture,
+} from './helpers.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -243,22 +250,29 @@ async function downloadPdfs(page, label) {
 }
 
 async function screenshotCards(page, label) {
-  // The block lives off-screen (left: -99999px) so it never shows in the app;
-  // put it back into the document flow just long enough to take each card's
-  // picture, so Playwright can scroll a card taller than the viewport into view.
-  // Position does not affect the internal layout the exports depend on.
-  await page.addStyleTag({
-    content: '.mw-pdf-captures { position: static !important; left: auto !important; top: auto !important; pointer-events: auto !important; }',
+  await prepareStageForCapture(page, '.mw-pdf-captures');
+
+  const failures = await captureBoxFailures(page, {
+    stage: '.mw-pdf-captures',
+    // A cancelled week is a one-line notice, not a mw-head card.
+    title: '.mw-head, .mw-susp',
   });
-  // The Next dev-tools badge is fixed to the viewport and would be baked into an
-  // element screenshot; it is dev-only chrome, not part of the card.
-  await page.addStyleTag({ content: 'nextjs-portal { display: none !important; }' });
+  assert.deepEqual(failures, [], `${label} midweek capture boxes:\n${failures.join('\n')}`);
+
   const cards = page.locator('.mw-pdf-captures article');
   const count = await cards.count();
+  const captured = [];
   for (let i = 0; i < count; i += 1) {
+    const file = path.join(ARTIFACTS, `${label}-card-${i}.png`);
     // eslint-disable-next-line no-await-in-loop
-    await cards.nth(i).screenshot({ path: path.join(ARTIFACTS, `${label}-card-${i}.png`) });
+    const shot = await captureNodePng(page, cards.nth(i), file);
+    // eslint-disable-next-line no-await-in-loop
+    const image = decodePng(shot.bytes);
+    // The card's heading band must be at the top of its own capture.
+    assertCleanTopBand(image);
+    captured.push(shot);
   }
+  return captured;
 }
 
 /* ===================== Tests ===================== */
@@ -303,6 +317,19 @@ for (const viewport of VIEWPORTS) {
         checkPdf(pdfPath, FIXTURE_WEEKS.length, cardSizes);
 
         await screenshotCards(page, label);
+
+        // The captured PNGs and the PDF's embedded images must each be exactly
+        // one card, not a shifted window that drops the card's head. Heights
+        // are compared with the card's live box (±2%).
+        const pdfImages = pdfImageSizes(fs.readFileSync(pdfPath));
+        pdfImages.forEach((img, index) => {
+          const expected = cardSizes[index].height;
+          const drift = Math.abs(img.height / 2 - expected) / expected;
+          assert.ok(
+            drift <= 0.02,
+            `${label} PDF: image ${index} is ${(img.height / 2).toFixed(0)}px tall, card is ${expected.toFixed(0)}px (${(drift * 100).toFixed(1)}% off)`,
+          );
+        });
       } finally {
         await page.close();
       }

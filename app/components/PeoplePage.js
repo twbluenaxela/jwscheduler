@@ -47,6 +47,13 @@ function parseDateForCompare(rowOrStr) {
   return resolveRowDate(rowOrStr);
 }
 
+// A week's three programme sections. A cancelled (暫停) week carries no parts at
+// all, and the API can omit an empty section, so this is the one place that
+// knows the fallback — the same `?? []` rule the card itself uses.
+function weekParts(week) {
+  return [...(week.treasures ?? []), ...(week.ministry ?? []), ...(week.living ?? [])];
+}
+
 function collectRecentAssignments(name, midweekWeeks, weekendRows) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -58,15 +65,9 @@ function collectRecentAssignments(name, midweekWeeks, weekendRows) {
     if (week.chairman === name) items.push({ date: week.date, isoDate: week.isoDate, label: '主席', context: week.weekdayPill, _d: d });
     if (week.openPrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '開始禱告', context: week.weekdayPill, _d: d });
     if (week.closePrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '結束禱告', context: week.weekdayPill, _d: d });
-    week.treasures.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill, _d: d });
-    });
-    week.ministry.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill, _d: d });
-    });
-    week.living.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill, _d: d });
-    });
+    for (const part of weekParts(week)) {
+      if (part.assign?.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill, _d: d });
+    }
   });
 
   weekendRows.forEach((row) => {
@@ -96,15 +97,9 @@ function collectUpcomingAssignments(name, midweekWeeks, weekendRows) {
     if (week.chairman === name) items.push({ date: week.date, isoDate: week.isoDate, label: '主席', context: week.weekdayPill });
     if (week.openPrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '開始禱告', context: week.weekdayPill });
     if (week.closePrayer === name) items.push({ date: week.date, isoDate: week.isoDate, label: '結束禱告', context: week.weekdayPill });
-    week.treasures.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill });
-    });
-    week.ministry.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill });
-    });
-    week.living.forEach((part) => {
-      if (part.assign.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill });
-    });
+    for (const part of weekParts(week)) {
+      if (part.assign?.includes(name)) items.push({ date: week.date, isoDate: week.isoDate, label: part.title, context: week.weekdayPill });
+    }
   });
 
   weekendRows.forEach((row) => {

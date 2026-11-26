@@ -136,15 +136,17 @@ export const HIDE_DEV_CHROME = 'nextjs-portal { display: none !important; }';
 // the top and nothing from the sibling below it. Playwright's element
 // screenshot cannot guarantee that here. A print node is usually taller than
 // the viewport, so Chromium scrolls it into view and stitches several frames;
-// the page above the stage may re-lay-out between the geometry read and the
-// stitch (the 週末 fixture's 42 mobile cards each lose a text line box on the
-// first non-zero scroll, shifting the whole stage up 42px), and the crop then
-// follows the OLD box — the title falls off the top and the next chunk's title
-// appears at the bottom. That is the phone-weekend-page-0.png bug.
+// the page may re-lay-out between the geometry read and the stitch (the 週末
+// fixture's 42 mobile cards above the stage each lose a text line box on the
+// first full-page paint, shifting everything below them up 42px), and the crop
+// then follows the OLD box — the title falls off the top and the next chunk's
+// title appears at the bottom. That is the phone-weekend-page-0.png bug.
 //
-// So: settle layout, force the lazy re-layout to happen while nothing is being
-// measured, then take ONE full-page screenshot and crop it to the node's own
-// page box. No element scrolling, no stitching, no clip/geometry drift.
+// So: pin the stage at the document origin (absolute, so it is out of the flow
+// but still contributes its 960px width to the scrollable area), let the one
+// lazy re-layout happen on a throwaway paint, then capture with ONE full-page
+// screenshot cropped to the node's own page box. No element scrolling, no
+// stitching, no clip/geometry drift.
 export async function settleLayout(page) {
   await page.evaluate(async () => {
     await document.fonts?.ready;
@@ -153,34 +155,109 @@ export async function settleLayout(page) {
   });
 }
 
-// Puts an off-screen stage back into the document flow so it can be
-// photographed, then settles the layout and warms up any lazy re-layout by
-// scrolling to the stage and back. Returns nothing; the caller measures after.
+// What "the capture is this node and only this node" means, checked in the page:
+//   - the node's own heading starts within 40px of the node's top edge (an
+//     offset capture loses the heading and shows the body's first row instead),
+//   - no element of a sibling node overlaps this node's box (the same offset
+//     shows the next node's heading at the bottom).
+// The pixel check that goes with it is `assertCleanTopBand`.
+export async function captureBoxFailures(page, { stage, title }) {
+  return page.evaluate(({ stageSelector, titleSelector }) => {
+    const out = [];
+    const root = document.querySelector(stageSelector);
+    if (!root) return [`no ${stageSelector}`];
+    const nodes = [...root.querySelectorAll(':scope > *')];
+    if (!nodes.length) return [`${stageSelector} has no capture nodes`];
+
+    nodes.forEach((node, index) => {
+      const where = `node ${index}`;
+      const rect = node.getBoundingClientRect();
+      const heading = node.querySelector(titleSelector);
+      if (!heading) {
+        out.push(`${where}: no ${titleSelector}`);
+      } else {
+        const offset = heading.getBoundingClientRect().top - rect.top;
+        if (offset >= 40) out.push(`${where}: heading starts ${offset.toFixed(1)}px below its top (limit 40)`);
+      }
+      nodes.forEach((sibling, other) => {
+        if (other === index) return;
+        const siblingRect = sibling.getBoundingClientRect();
+        if (siblingRect.bottom <= rect.top || siblingRect.top >= rect.bottom
+          || siblingRect.right <= rect.left || siblingRect.left >= rect.right) return;
+        const offenders = [...sibling.querySelectorAll('*')].filter((el) => {
+          const box = el.getBoundingClientRect();
+          if (!box.width && !box.height) return false;
+          return box.bottom > rect.top && box.top < rect.bottom
+            && box.right > rect.left && box.left < rect.right;
+        });
+        if (offenders.length) {
+          out.push(`${where}: ${offenders.length} element(s) of node ${other} intersect its box `
+            + `(${offenders.slice(0, 3).map((el) => el.className || el.tagName).join(', ')})`);
+        }
+      });
+    });
+    return out;
+  }, { stageSelector: stage, titleSelector: title });
+}
+
+// Takes an off-screen stage out of the page flow and pins it at the document
+// origin, then forces the first heavy paint (the one that re-lays-out the
+// content above it) and throws the result away. After that it PROVES the page is
+// stable: one more paint must not move a single capture node. If it does, a
+// screenshot measured before that paint would be a slice of the old layout —
+// exactly the 42px offset that put a table header at the top of a page.
 export async function prepareStageForCapture(page, selector) {
   await page.addStyleTag({
-    content: `${selector} { position: static !important; left: auto !important; top: auto !important; pointer-events: auto !important; }`,
+    content: `${selector} { position: absolute !important; left: 0 !important; top: 0 !important; z-index: 2147480000 !important; pointer-events: auto !important; }`,
   });
   await page.addStyleTag({ content: HIDE_DEV_CHROME });
   await settleLayout(page);
-  await page.evaluate(async (sel) => {
-    const node = document.querySelector(sel);
-    if (!node) return;
-    // Warm-up: first scroll past the stage is what triggers the one-time
-    // re-layout (lazy webfont metrics). Do it before anything is measured.
-    const target = node.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo(0, Math.max(0, target - 24));
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    window.scrollTo(0, 0);
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  }, selector);
+  // Warm-up paint: this is what makes the page above settle. Discard it.
+  await page.screenshot({ fullPage: true });
   await settleLayout(page);
+
+  const boxes = await measureStageBoxes(page, selector);
+  // One more paint; nothing may move.
+  await page.screenshot({ fullPage: true });
+  const after = await measureStageBoxes(page, selector);
+
+  assert.equal(
+    after.length,
+    boxes.length,
+    `${selector}: the stage gained or lost capture nodes between paints`,
+  );
+  boxes.forEach((box, index) => {
+    const moved = Math.abs(box.y - after[index].y) > 0.5
+      || Math.abs(box.height - after[index].height) > 0.5;
+    assert.ok(
+      !moved,
+      `${selector}: node ${index} moved between paints `
+        + `(top ${box.y} → ${after[index].y}, height ${box.height} → ${after[index].height}). `
+        + 'A capture taken before that re-layout would be offset by exactly this much.',
+    );
+  });
 }
 
-// Captures `node` and writes `filePath`. Throws if the node moved while the
-// screenshot was taken — the check the old element screenshot silently lacked.
+async function measureStageBoxes(page, selector) {
+  return page.evaluate((sel) => {
+    const stage = document.querySelector(sel);
+    if (!stage) return [];
+    return [...stage.children].map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        y: Math.round((rect.top + window.scrollY) * 100) / 100,
+        height: Math.round(rect.height * 100) / 100,
+      };
+    });
+  }, selector);
+}
+
+// Captures `node` (a Locator or ElementHandle) and writes `filePath`. Retries
+// once if the node moved while the screenshot was taken — the check the old
+// element screenshot silently lacked.
 export async function captureNodePng(page, node, filePath) {
-  const boxOf = () => {
-    const rect = node.getBoundingClientRect();
+  const boxOf = (element) => {
+    const rect = element.getBoundingClientRect();
     return {
       x: rect.left + window.scrollX,
       y: rect.top + window.scrollY,
@@ -188,29 +265,31 @@ export async function captureNodePng(page, node, filePath) {
       height: rect.height,
     };
   };
+  const measure = async () => {
+    await settleLayout(page);
+    return node.evaluate(boxOf);
+  };
 
-  const before = await settleAndMeasure(page, boxOf);
-  const bytes = await page.screenshot({
-    fullPage: true,
-    clip: { x: before.x, y: before.y, width: before.width, height: before.height },
-  });
-  const after = await settleAndMeasure(page, boxOf);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const before = await measure();
+    // eslint-disable-next-line no-await-in-loop
+    const bytes = await page.screenshot({
+      fullPage: true,
+      clip: { x: before.x, y: before.y, width: before.width, height: before.height },
+    });
+    const after = await measure();
 
-  assert.ok(
-    Math.abs(after.y - before.y) < 1 && Math.abs(after.height - before.height) < 1,
-    `${path.basename(filePath)}: the node moved during capture `
-      + `(top ${before.y} → ${after.y}, height ${before.height} → ${after.height}); `
+    if (Math.abs(after.y - before.y) < 1 && Math.abs(after.height - before.height) < 1) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, bytes);
+      return { ...before, bytes };
+    }
+  }
+
+  throw new Error(
+    `${path.basename(filePath)}: the node kept moving during capture; `
       + 'the screenshot is not exactly this node\'s box',
   );
-
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, bytes);
-  return { ...before, bytes };
-}
-
-async function settleAndMeasure(page, boxOf) {
-  await settleLayout(page);
-  return page.evaluate(boxOf);
 }
 
 /* ===================== PNG pixel checks ===================== */
@@ -308,9 +387,11 @@ export function assertCleanTopBand(image, { band = 40, minRowMean = 140, maxDark
   );
 }
 
-// Reads the width out of a JPEG's SOF marker, so a JPG export can be checked
-// without an image decoder (the sheet is captured at 2× the stage width).
-export function jpegWidth(bytes) {
+// Reads the pixel size out of a JPEG's SOF marker, so a JPG export can be
+// checked without an image decoder (the sheet is captured at 2× the stage
+// width). The height matters as much as the width: a capture that picked the
+// wrong node is usually the right width and the wrong shape.
+export function jpegSize(bytes) {
   const buffer = Buffer.from(bytes);
   if (buffer[0] !== 0xff || buffer[1] !== 0xd8) throw new Error('not a JPEG');
   let offset = 2;
@@ -322,10 +403,47 @@ export function jpegWidth(bytes) {
     const marker = buffer[offset + 1];
     // SOF0..SOF15, excluding DHT (C4), JPG (C8) and DAC (CC).
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
-      return buffer.readUInt16BE(offset + 7);
+      return {
+        height: buffer.readUInt16BE(offset + 5),
+        width: buffer.readUInt16BE(offset + 7),
+      };
     }
     const length = buffer.readUInt16BE(offset + 2);
     offset += 2 + length;
   }
   throw new Error('no JPEG SOF marker');
+}
+
+export function jpegWidth(bytes) {
+  return jpegSize(bytes).width;
+}
+
+/* ===================== XLSX reading ===================== */
+
+// Unzips a workbook and returns its sheet XML plus the plain text a spreadsheet
+// cell reader would recover. Enough to prove the export contains the week /
+// person it is named after, without pulling in a full xlsx parser.
+export async function readXlsx(filePath) {
+  const JSZip = (await import('jszip')).default;
+  const bytes = fs.readFileSync(filePath);
+  assert.equal(bytes.subarray(0, 2).toString('latin1'), 'PK', `${path.basename(filePath)} is not a zip/xlsx`);
+  const zip = await JSZip.loadAsync(bytes);
+  const names = Object.keys(zip.files);
+  const sheetFiles = names.filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name)).sort();
+  assert.ok(sheetFiles.length > 0, `${path.basename(filePath)} has no worksheets`);
+  const sheets = [];
+  for (const name of sheetFiles) {
+    // eslint-disable-next-line no-await-in-loop
+    const xml = await zip.file(name).async('string');
+    const text = xml
+      .replace(/<[^>]+>/g, '\n')
+      .split('\n')
+      .map((line) => line.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'"))
+      .filter((line) => line.trim())
+      .join('\n');
+    sheets.push({ name, xml, text });
+  }
+  const workbook = await zip.file('xl/workbook.xml').async('string');
+  const sheetNames = [...workbook.matchAll(/<sheet[^>]*name="([^"]*)"/g)].map((m) => m[1]);
+  return { names, sheets, sheetNames, text: sheets.map((sheet) => sheet.text).join('\n') };
 }
