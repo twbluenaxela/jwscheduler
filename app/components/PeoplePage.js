@@ -317,7 +317,6 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
     <>
       <div className="people-detail__head">
         <div>
-          <div className="people-detail__eyebrow">個人檢視</div>
           <div className="people-detail__name">{selectedPerson.name || '未命名人員'}</div>
           <div className="people-detail__meta">
             {selectedPerson.g === 'M' ? '弟兄' : '姊妹'} · {selectedPerson.appt || '—'}
@@ -479,7 +478,6 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
       <div className="people-detail__section">
         <div className="people-detail__section-head">
           <span>近期指派</span>
-          <small>從本地節目資料自動整理</small>
         </div>
         <div className="timeline">
           {recent.length ? (
