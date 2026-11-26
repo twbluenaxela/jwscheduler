@@ -132,7 +132,7 @@ export function ExportMenu({ week, getAssign, captureRef, pdfNodesRef, editMode 
   return (
     <div className="menuwrap" ref={menuRef}>
       <button
-        className="btn btn--primary"
+        className="btn"
         onClick={(e) => { e.stopPropagation(); setExportOpen(o => !o); }}
       >
         匯出 <span className="caret">▾</span>
@@ -213,7 +213,7 @@ export function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, pdfNo
   return (
     <div className="menuwrap" ref={menuRef}>
       <button
-        className="btn btn--primary"
+        className="btn"
         onClick={(e) => { e.stopPropagation(); setExportOpen(o => !o); }}
       >
         匯出 <span className="caret">▾</span>

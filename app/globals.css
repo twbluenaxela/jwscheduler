@@ -146,6 +146,42 @@ html, body {
 .toolbar__title { font-size: 15px; font-weight: 700; color: var(--ink-2); }
 .toolbar__spacer { flex: 1; }
 
+/* ============================= Toolbar controls ============================= */
+/* One control height for every page toolbar row — primary/secondary buttons,
+   icon buttons, dropdown triggers, tabs, chips, selects and search. The 服務
+   phone header used to put a 17px 匯出 pill next to a 44px ＋新增; every control
+   in the row now comes from the same token, with the same radius and padding.
+   Screen-only: print/PDF keeps its own layout. Specificity is deliberately low
+   so the compact iPad (#54) .mw-container > .toolbar rules still win. */
+@media screen {
+  :root {
+    --ctl-h: 38px;          /* desktop, fine pointer */
+    --ctl-radius: 10px;
+    --ctl-pad-x: 14px;
+  }
+  :is(.toolbar, .page-bar, .page-filters, .service-toolbar, .people-tools,
+      .hm-header, .hm-filters, .lit-header, .ov-chips, .lit-count-filter-row)
+    :is(button, select, input, .btn, .tab, .chip, .search) {
+    height: var(--ctl-h);
+    min-height: var(--ctl-h);
+    border-radius: var(--ctl-radius);
+    padding-inline: var(--ctl-pad-x);
+  }
+  /* The people search keeps its inset outline but both the shell and its input
+     measure exactly one control height — a real border would add 2px and knock
+     the row out of alignment. */
+  :is(.toolbar, .page-bar, .page-filters, .people-tools) .search {
+    border: 0;
+    box-shadow: inset 0 0 0 1px var(--line-2);
+  }
+  :is(.toolbar, .page-bar, .page-filters, .people-tools) .search input {
+    padding-inline: 0;
+  }
+}
+@media screen and (max-width: 900px), screen and (pointer: coarse) {
+  :root { --ctl-h: 44px; --ctl-pad-x: 12px; }  /* phone/touch tap target */
+}
+
 /* Zoom-to-fit (iPad only): the wrapper is the only zoomed element; the card
    inside keeps the untouched desktop markup/CSS. Its layout width is set by
    FitToScreen so the zoomed card spans the content area exactly. Outside
@@ -1448,8 +1484,8 @@ body.editing .week-edit__input { background: #fff; }
   }
   .tab { padding: 8px 18px; font-size: 14px; }
   .toolbar { gap: 7px; flex-wrap: nowrap; }
-  .toolbar .btn { font-size: 12px; padding: 7px 10px; }
-  .toolbar .btn--notify { font-size: 12px; padding: 7px 10px; }
+  .toolbar .btn { font-size: 13px; padding-inline: var(--ctl-pad-x); }
+  .toolbar .btn--notify { font-size: 13px; padding-inline: var(--ctl-pad-x); }
   .people-header { grid-template-columns: 1fr; align-items: stretch; }
   .people-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: none; }
   .people-tools { justify-content: stretch; }
@@ -2571,7 +2607,11 @@ body.editing .week-edit__input { background: #fff; }
 
 /* 服務安排 */
  .services-page { max-width: 720px; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
-.service-tabs-sticky { position: sticky; top: 0; z-index: 32; background: var(--surface); }
+/* The sticky category strip and the toolbar below it are separate rows: keep
+   one consistent gap between them on every width so the toolbar never butts up
+   against the tabs above it (margins collapse to the larger of the two). */
+:root { --strip-gap: 12px; }
+.service-tabs-sticky { position: sticky; top: 0; z-index: 32; margin-bottom: var(--strip-gap); background: var(--surface); }
 .service-tabs-mask.fade-right { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 .service-tabs-mask.fade-left { mask-image: linear-gradient(to right, transparent, #000 24px); }
 .service-tabs-mask.fade-left.fade-right {
@@ -2582,12 +2622,28 @@ body.editing .week-edit__input { background: #fff; }
 .service-tabs.lit-segment button { flex: none; min-height: 44px; padding: 0 14px; white-space: nowrap; }
 .service-tabs.lit-segment .service-add-tab { color: var(--ink-3); font-size: 20px; }
 .service-toolbar, .service-section-head, .service-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.service-toolbar { margin: 16px 0 18px; }
+.service-toolbar { margin: var(--strip-gap) 0 18px; }
 .service-header-actions { display: flex; align-items: center; gap: 4px; }
 .service-add-button { min-height: 44px; padding-inline: 10px; white-space: nowrap; }
-.service-switcher { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
-.service-switcher button { width: 44px; height: 44px; flex: none; border: 0; border-radius: 9px; background: var(--surface-2); color: var(--ink); font-size: 25px; cursor: pointer; }
-.service-switcher strong { white-space: nowrap; }
+/* Month navigator: one grouped segmented control (shared surface + border),
+   not three separate blocks. The ‹ / › hit targets stay a full control height. */
+.service-switcher {
+  display: inline-flex; align-items: stretch; flex: 0 0 auto;
+  min-height: var(--ctl-h); height: var(--ctl-h); overflow: hidden;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+  border-radius: var(--ctl-radius); font-variant-numeric: tabular-nums;
+}
+.service-toolbar .service-switcher button {
+  width: var(--ctl-h); flex: none; padding: 0;
+  border: 0; border-radius: 0; background: transparent;
+  color: var(--ink); font-size: 22px; cursor: pointer;
+}
+.service-switcher strong {
+  display: inline-flex; align-items: center;
+  min-height: var(--ctl-h); padding: 0 10px;
+  border-inline: 1px solid var(--line-2); white-space: nowrap;
+}
 .service-table-wrap { overflow: visible; }
 .service-table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; font-variant-numeric: tabular-nums; }
 .service-table th, .service-table td { border-bottom: 1px solid var(--line); padding: 4px; }
@@ -3682,14 +3738,11 @@ body.editing :is(.print-stage, .mw-pdf-captures) .row { padding: 3px 22px; }
 .service-tabs-sticky { position: sticky; }
 .service-tabs-cue { display: none; }
 @media screen and (max-width: 720px) {
-  .service-toolbar { flex-wrap: nowrap; row-gap: 0; }
+  .service-toolbar { flex-wrap: nowrap; row-gap: 0; gap: 8px; }
   .service-switcher { flex: 0 0 auto; }
-  .service-switcher button { width: 36px; font-size: 20px; }
-  .service-switcher strong { font-size: 14px; }
-  .service-header-actions { margin-left: auto; justify-content: flex-end; flex: 0 0 auto; }
-  .service-header-actions .menuwrap > .btn { width: auto; padding: 0 8px; font-size: 12px; }
-  .service-header-actions .menuwrap > .btn .caret { font-size: 12px; }
-  .service-add-button { padding: 0 10px; }
+  .service-switcher strong { font-size: 14px; padding-inline: 8px; }
+  .service-header-actions { margin-left: auto; justify-content: flex-end; flex: 0 0 auto; gap: 6px; }
+  .service-add-button { font-size: 13px; }
   .service-tabs-cue.is-on {
     display: grid; place-items: center;
     position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
@@ -3822,8 +3875,10 @@ body.editing .fit-to-screen__inner .row {
    line above the card; FitToScreen subtracts their true height from the fit. */
 @media (min-width: 700px) and (max-width: 1366px) {
   .mw-container > .toolbar { margin-bottom: 6px; gap: 8px; }
-  .mw-container > .toolbar .tab { padding: 4px 12px; font-size: 13px; }
-  .mw-container > .toolbar .btn { min-height: 32px; }
+  /* Keep the #54 compact toolbar (the fit subtracts its true height), but give
+     every control in the row the same height. */
+  .mw-container > .toolbar .tab { padding: 4px 12px; font-size: 13px; height: 32px; min-height: 32px; }
+  .mw-container > .toolbar .btn { min-height: 32px; height: 32px; }
   .mw-container > .mw-navstrip { padding: 4px 10px; gap: 6px; }
   .mw-container > .mw-navstrip .iconbtn { width: 32px; height: 32px; }
   .mw-container > .mw-navstrip .wkpick__btn { height: 32px; }
