@@ -571,23 +571,27 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
             />
           </div>
           <select className="settings-role-select" aria-label="小組篩選" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}><option value="all">全部小組</option>{['A','B','C','D','E'].map(g => <option key={g} value={g}>{g}組</option>)}<option value="none">未分組</option></select>
-          {canEdit && <button className="btn btn--primary" onClick={addPerson}>＋ 新增人員</button>}
+          {canEdit && (
+            <button className="btn btn--primary" aria-label="新增人員" onClick={addPerson}>
+              ＋ 新增
+            </button>
+          )}
         </div>
       </div>
 
       {error && <div className="imp-error">{error}</div>}
 
-      <div className="people-subtitle">
-        {loading ? (
-          <span>正在載入會眾人員資料…</span>
-        ) : query ? (
-          <span>搜尋「{query}」· 找到 {filteredPeople.length} 位</span>
-        ) : people.length === 0 ? (
-          <span>目前這個會眾還沒有建立人員資料。</span>
-        ) : (
-          <span>以名單為核心的卡片檢視，適合快速查看資格與個人安排。{selectedPerson ? '　·　再次點選名片可關閉檢視。' : ''}</span>
-        )}
-      </div>
+      {(loading || query || people.length === 0) && (
+        <div className="people-subtitle">
+          {loading ? (
+            <span>正在載入會眾人員資料…</span>
+          ) : query ? (
+            <span>搜尋「{query}」· 找到 {filteredPeople.length} 位</span>
+          ) : (
+            <span>目前這個會眾還沒有建立人員資料。</span>
+          )}
+        </div>
+      )}
 
       <div className={`people-layout${selectedPerson ? '' : ' people-layout--solo'}`}>
         <div className="people-list">

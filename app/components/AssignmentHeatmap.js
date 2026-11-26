@@ -200,7 +200,12 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
   const nameW = useMemo(() => {
     const longest = rows.reduce((n, r) => Math.max(n, [...String(r.person.name ?? '')].length), 2);
     const chrome = 14 + 18 + 7 + 10; // padding-left + badge + gap + padding-right
-    return Math.min(220, Math.max(isMobile ? 84 : 150, chrome + longest * nameFont));
+    // On phones the stacked 「同月 N 次重複」 note sits under the name. At 11px
+    // it needs ~80px plus the name column's padding, so reserve room for it:
+    // widening the sticky column (and its header) is better than eliding the
+    // note or someone's name. Any overflow stays in the grid's sideways scroll.
+    const noteRoom = isMobile && rows.some((r) => r.rank > 0) ? 34 : 0;
+    return Math.min(240, Math.max(isMobile ? 84 + noteRoom : 150, chrome + longest * nameFont + noteRoom));
   }, [rows, isMobile, nameFont]);
   const countW = isMobile ? 44 : 56;
   const attnW = isMobile ? 0 : 150;
