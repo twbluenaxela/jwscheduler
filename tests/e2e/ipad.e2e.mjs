@@ -96,11 +96,20 @@ async function cardGeometry(page) {
     const rows = [...card.querySelectorAll('.rows .row')];
     const closing = rows.find((row) => (row.textContent || '').includes('結語'));
     const names = [...card.querySelectorAll('.who:not(.who--ghost-add)')];
+    const boxes = (sel) => [...card.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
+    const seams = boxes('.mw-seam');
+    const times = boxes('.row__time');
+    const hits = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5
+      && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5;
     return {
       innerHeight: window.innerHeight,
+      innerWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
       chrome: visibleHeight('.topbar') + visibleHeight('.tabbar'),
       card: rect ? { top: rect.top, bottom: rect.bottom, height: rect.height } : null,
       closingBottom: closing?.getBoundingClientRect().bottom ?? null,
+      columnBottoms: boxes('.mw-col').map((b) => b.bottom),
+      seamOverlap: seams.some((s) => times.some((t) => hits(s, t))),
       minFont: Math.min(...[...card.querySelectorAll(
         '.row__part, .who, .row__time, .partnum, .role-label, .band__title, .mw-band-end',
       )].map((el) => parseFloat(getComputedStyle(el).fontSize)).filter(Number.isFinite)),
@@ -132,9 +141,28 @@ for (const vp of VIEWPORTS) {
             + `(card ${g.card.height.toFixed(1)}px, top ${g.card.top.toFixed(1)}px)`,
         );
         assert.ok(
+          g.card.bottom >= usable - 8,
+          `${vp.name} ${mode}: card bottom ${g.card.bottom.toFixed(1)}px leaves a ${(usable - g.card.bottom).toFixed(1)}px gap above the usable bottom ${usable}px`,
+        );
+        assert.ok(
           g.closingBottom !== null && g.closingBottom <= usable + 1,
           `${vp.name} ${mode}: the 結語/結束禱告 row ends at ${g.closingBottom}px, below ${usable}px`,
         );
+        assert.ok(
+          !g.seamOverlap,
+          `${vp.name} ${mode}: a ＋ insert seam overlaps a .row__time box`,
+        );
+        assert.ok(
+          g.scrollWidth <= g.innerWidth + 1,
+          `${vp.name} ${mode}: scrollWidth ${g.scrollWidth} exceeds innerWidth ${g.innerWidth}`,
+        );
+        if (vp.width <= 1199 && vp.height < vp.width) {
+          assert.equal(g.columnBottoms.length, 2, `${vp.name} ${mode}: expected two card columns`);
+          assert.ok(
+            Math.abs(g.columnBottoms[0] - g.columnBottoms[1]) <= 1,
+            `${vp.name} ${mode}: columns end at ${g.columnBottoms.map((b) => b.toFixed(1))} (not level)`,
+          );
+        }
         assert.ok(g.minFont >= 13, `${vp.name} ${mode}: text is ${g.minFont}px, below 13px`);
         assert.ok(g.minTap >= 32, `${vp.name} ${mode}: tap target is ${g.minTap}px, below 32px`);
         assert.deepEqual(g.clippedNames, [], `${vp.name} ${mode}: assignee names are truncated`);

@@ -3254,72 +3254,187 @@ button.service-month-card { cursor: pointer; }
 .lit-order-row--paused .lit-order-code { color: var(--ink-2); }
 
 /* ============================= iPad fit ============================= */
-/* A whole 週中 card has to fit above Safari's toolbars on iPad (viewport minus
-   ~80px), in read AND edit mode. Phones (≤699px) and desktop (≥1367px) keep
-   their own rhythm. Every rule is scoped to the LIVE card with :where(), which
-   contributes zero specificity: the .print-stage / .mw-pdf-captures restoration
-   below still wins for the off-screen PDF capture nodes. */
+/* Tablet-only, height-driven layout: the live 週中 card fills the viewport
+   below the app chrome (100dvh, so mobile Safari's toolbars are respected),
+   and the rows share the leftover height. Phones (≤699px), desktop (≥1367px)
+   and the off-screen print cards keep their own rhythm untouched. Every rule
+   is scoped with :where() so the .print-stage restoration below still wins. */
 @media (min-width: 700px) and (max-width: 1366px) {
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head {
-    align-items: center;
-    gap: 14px;
-    padding: 10px 18px 8px;
+  /* The fixture stands in for the real 聚會 page: 80px emulates Safari's
+     toolbars, the flex column subtracts every real chrome element above the
+     card, and the card takes all that is left. */
+  main:has(> .card) {
+    height: calc(100dvh - 80px);
+    display: flex;
+    flex-direction: column;
   }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__date { font-size: 22px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__sub { margin-top: 4px; gap: 8px; flex-wrap: nowrap; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__roles { gap: 3px 10px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-editbar { padding: 5px 18px; min-height: 32px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-editbar .btn { min-height: 32px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-type-badge { font-size: 13px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .band { padding: 3px 18px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .band__title { font-size: 14px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .rows { padding: 1px 0; }
+  /* Real 聚會 page: 100dvh is the visible viewport on iPadOS. The toolbar,
+     week picker and (in edit mode) type bar are flex siblings above the card. */
+  .content:has(.mw-container) {
+    height: 100dvh;
+    padding-bottom: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .mw-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* One header band: date + weekday/time + reading lead, roles trail on the
+     same baseline. All flex children, no stacked role grid. */
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-editbar {
+    flex: 0 0 auto;
+    padding: 7px 18px;
+    min-height: 36px;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 10px 18px;
+    padding: 12px 18px;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__date {
+    flex: 0 0 auto;
+    font-size: clamp(22px, 3.2dvh, 28px);
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__sub {
+    margin-top: 0;
+    gap: 10px;
+    flex-wrap: nowrap;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__roles {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px 10px;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__roles .who { font-size: 13px; min-height: 32px; }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-type-badge { font-size: clamp(12px, 1.5dvh, 13px); }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-quiet-input {
+    border-bottom-color: var(--line-2);
+  }
+
+  /* Rows stretch to divide the leftover height. Section bands stay fixed.
+     The column wrappers are display:contents outside the two-column layout,
+     so section order and every other viewport are unaffected. */
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0 18px 10px;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col,
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col > .rows {
+    display: contents;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .band {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    min-height: clamp(26px, 3.5dvh, 32px);
+    padding: 4px 14px;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .band__title {
+    font-size: clamp(15px, 1.9dvh, 16px);
+  }
   :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row,
   body.editing :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row {
-    padding: 3px 18px;
-    gap: 8px;
-    min-height: 32px;
+    flex: 1 1 0;
+    min-height: clamp(44px, 5.6dvh, 60px);
+    padding: 8px 14px;
+    gap: 10px;
+    align-items: center;
   }
   :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__main {
-    grid-template-columns: 54px 24px minmax(0, 1fr);
-    column-gap: 8px;
-    min-height: 32px;
+    grid-template-columns: 58px 26px minmax(0, 1fr);
+    column-gap: 10px;
+    min-height: 36px;
   }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__time { font-size: 13px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__part { font-size: 14px; line-height: 1.3; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__part .dur { font-size: 13px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__scenario { font-size: 13px; margin-top: 2px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .partnum { font-size: 13px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .role-label { font-size: 13px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__assign .role-label { font-size: 13px; }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__time {
+    font-size: clamp(13.5px, 1.7dvh, 15px);
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__part {
+    font-size: clamp(15px, 1.95dvh, 17px);
+    line-height: 1.35;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__part .dur,
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__scenario {
+    font-size: clamp(13px, 1.6dvh, 14px);
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .partnum,
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .role-label,
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__assign .role-label {
+    font-size: 13px;
+  }
   :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .who {
     display: inline-flex;
     align-items: center;
     min-height: 32px;
-    padding: 3px 9px;
-    font-size: 13px;
+    padding: 4px 10px;
+    font-size: clamp(13px, 1.6dvh, 14px);
     line-height: 1.2;
   }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .who--pair .who { padding: 3px 7px; }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .who--pair .who { padding: 4px 8px; }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-seam-row { height: 0; flex: 0 0 0; }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-inline,
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-addinline,
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-delconfirm {
+    flex: 0 0 auto;
+  }
 }
 
-/* Landscape iPad: one column cannot hold 13 rows plus three section bands
-   above the Safari toolbar. Flow the card body into two columns — the 寶藏 +
-   傳道 work on the left, 基督徒的生活 (including the closing row) on the right.
-   The forced break sends the living band and everything after it to column 2. */
+/* Landscape iPad: two equal-bottom columns, kept as one card by a shared
+   gutter and a hairline divider. The ＋ seams sit in the left gutter on the
+   row divider, never across a time. */
 @media (min-width: 700px) and (max-width: 1199px) and (orientation: landscape) and (max-height: 900px) {
   :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-body {
-    columns: 2;
-    column-gap: 18px;
-    padding: 0 10px;
+    flex-direction: row;
+    gap: 28px;
+    padding-bottom: 12px;
   }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-body > .rows,
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-body > .band {
-    break-inside: avoid;
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-body > .band--living {
-    break-before: column;
-    -webkit-column-break-before: always;
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col--trail {
+    padding-left: 4px;
+    border-left: 1px solid var(--line);
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col--trail .row--closing {
+    flex: 0 0 auto;
+    min-height: clamp(44px, 5.6dvh, 60px);
+    margin-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-seam-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: 0;
+  }
+  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-seam {
+    grid-column: 1;
+    justify-self: start;
+    margin-left: -2px;
+    width: 22px;
+    height: 22px;
+    transform: translateY(-50%);
   }
 }
 
