@@ -788,51 +788,55 @@ export default function MidweekWeek({ week, editMode, getAssign, openSheet, upda
         </div>
 
         <div className={weekType === 'assembly' ? 'mw-body mw-body--faint' : 'mw-body'}>
-          <div className="rows">
-            <div className={`row row--song${editMode && openEditor?.type === 'song' && openEditor.key === 'openSong' ? ' row--open' : ''}`}>
-              <RowMain as="div">
-                <span className="row__time">7:30</span>
-                <span className="dotwrap"><span className="dot dot--treasures" /></span>
-                <span className="row__part">
-                  {editMode ? <button type="button" className="row__inlinebtn" aria-label="編輯開場唱詩首數" onClick={() => { setConfirmingDelete(null); setOpenEditor(openEditor?.key === 'openSong' ? null : { type: 'song', key: 'openSong' }); }}>唱詩　{shownWeek.openSong} 首</button> : <>唱詩　{shownWeek.openSong} 首</>}
-                  ・開場白 <span className="dur">（1 分鐘）</span>
-                </span>
-              </RowMain>
-              <span className="row__assign" />
+          <div className="mw-col mw-col--lead">
+            <div className="rows">
+              <div className={`row row--song${editMode && openEditor?.type === 'song' && openEditor.key === 'openSong' ? ' row--open' : ''}`}>
+                <RowMain as="div">
+                  <span className="row__time">7:30</span>
+                  <span className="dotwrap"><span className="dot dot--treasures" /></span>
+                  <span className="row__part">
+                    {editMode ? <button type="button" className="row__inlinebtn" aria-label="編輯開場唱詩首數" onClick={() => { setConfirmingDelete(null); setOpenEditor(openEditor?.key === 'openSong' ? null : { type: 'song', key: 'openSong' }); }}>唱詩　{shownWeek.openSong} 首</button> : <>唱詩　{shownWeek.openSong} 首</>}
+                    ・開場白 <span className="dur">（1 分鐘）</span>
+                  </span>
+                </RowMain>
+                <span className="row__assign" />
+              </div>
+              {editMode && openEditor?.type === 'song' && openEditor.key === 'openSong' && <SmallInlineEditor label="開場唱詩首數" value={shownWeek.openSong} type="number" onChange={(value) => applyPatch({ openSong: value })} onClose={() => setOpenEditor(null)} />}
             </div>
-            {editMode && openEditor?.type === 'song' && openEditor.key === 'openSong' && <SmallInlineEditor label="開場唱詩首數" value={shownWeek.openSong} type="number" onChange={(value) => applyPatch({ openSong: value })} onClose={() => setOpenEditor(null)} />}
+
+            {renderBand('treasures')}
+            <div className="rows">{renderParts('treasures')}</div>
+
+            {renderBand('ministry')}
+            <div className="rows">{renderParts('ministry')}</div>
           </div>
 
-          {renderBand('treasures')}
-          <div className="rows">{renderParts('treasures')}</div>
-
-          {renderBand('ministry')}
-          <div className="rows">{renderParts('ministry')}</div>
-
-          {renderBand('living')}
-          <div className="rows">
-            {songRow('song-mid', shownWeek.midSongTime, shownWeek.midSong, '中場唱詩首數', 'midSong')}
-            {renderParts('living')}
-            <div className={`row${closingOpen ? ' row--open' : ''}`} data-part-key="closing">
-              <RowMain as="div">
-                <span className="row__time">{shownWeek.closingTime}</span>
-                <span className="dotwrap"><span className="dot dot--living" /></span>
-                <span className="row__part">
-                  {editMode ? <button type="button" className="row__inlinebtn" aria-label="編輯結語時長" onClick={() => { setConfirmingDelete(null); setOpenEditor(closingOpen ? null : { type: 'closing' }); }}>結語</button> : '結語'} <span className="dur">（{shownWeek.closingDur}）</span>・
-                  {editMode ? <button type="button" className="row__inlinebtn" aria-label="編輯結束唱詩首數" onClick={() => { setConfirmingDelete(null); setOpenEditor(openEditor?.key === 'closeSong' ? null : { type: 'song', key: 'closeSong' }); }}>唱詩　{shownWeek.closeSong} 首</button> : <>唱詩　{shownWeek.closeSong} 首</>}
-                </span>
-              </RowMain>
-              <span className="row__assign"><span className="role-label">結束禱告</span><WhoSlot slotId={`${wId}_closePrayer`} catKey="prayer" ctxLabel={ctx} defaultName={shownWeek.closePrayer} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} /></span>
+          <div className="mw-col mw-col--trail">
+            {renderBand('living')}
+            <div className="rows">
+              {songRow('song-mid', shownWeek.midSongTime, shownWeek.midSong, '中場唱詩首數', 'midSong')}
+              {renderParts('living')}
+              <div className={`row row--closing${closingOpen ? ' row--open' : ''}`} data-part-key="closing">
+                <RowMain as="div">
+                  <span className="row__time">{shownWeek.closingTime}</span>
+                  <span className="dotwrap"><span className="dot dot--living" /></span>
+                  <span className="row__part">
+                    {editMode ? <button type="button" className="row__inlinebtn" aria-label="編輯結語時長" onClick={() => { setConfirmingDelete(null); setOpenEditor(closingOpen ? null : { type: 'closing' }); }}>結語</button> : '結語'} <span className="dur">（{shownWeek.closingDur}）</span>・
+                    {editMode ? <button type="button" className="row__inlinebtn" aria-label="編輯結束唱詩首數" onClick={() => { setConfirmingDelete(null); setOpenEditor(openEditor?.key === 'closeSong' ? null : { type: 'song', key: 'closeSong' }); }}>唱詩　{shownWeek.closeSong} 首</button> : <>唱詩　{shownWeek.closeSong} 首</>}
+                  </span>
+                </RowMain>
+                <span className="row__assign"><span className="role-label">結束禱告</span><WhoSlot slotId={`${wId}_closePrayer`} catKey="prayer" ctxLabel={ctx} defaultName={shownWeek.closePrayer} getAssign={getAssign} openSheet={openSheet} getSuggestion={getSuggestion} onAccept={onAccept} onClear={onClear} /></span>
+              </div>
+              {closingOpen && (
+                <SmallInlineEditor
+                  label="結語時長"
+                  value={shownWeek.closingDur}
+                  onChange={(value) => applyPatch({ closingDur: value })}
+                  onClose={() => setOpenEditor(null)}
+                />
+              )}
+              {editMode && openEditor?.type === 'song' && openEditor.key === 'closeSong' && <SmallInlineEditor label="結束唱詩首數" value={shownWeek.closeSong} type="number" onChange={(value) => applyPatch({ closeSong: value })} onClose={() => setOpenEditor(null)} />}
             </div>
-            {closingOpen && (
-              <SmallInlineEditor
-                label="結語時長"
-                value={shownWeek.closingDur}
-                onChange={(value) => applyPatch({ closingDur: value })}
-                onClose={() => setOpenEditor(null)}
-              />
-            )}
-            {editMode && openEditor?.type === 'song' && openEditor.key === 'closeSong' && <SmallInlineEditor label="結束唱詩首數" value={shownWeek.closeSong} type="number" onChange={(value) => applyPatch({ closeSong: value })} onClose={() => setOpenEditor(null)} />}
           </div>
         </div>
       </article>
