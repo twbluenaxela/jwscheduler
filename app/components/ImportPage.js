@@ -30,11 +30,11 @@ const CAT_LABELS = {
 // paginates depends on whatever app opens it, which is a negotiation we do not
 // control (see app/lib/midweekXlsxLayout.mjs).
 const EXPORT_CARDS = [
-  { ic: '▦', label: '分享圖片', sub: 'JPG · 貼到 LINE 群組', action: 'jpg' },
-  { ic: '⊞', label: 'PDF 版面', sub: '列印用 · 每頁 2–4 週', action: 'pdfgrid' },
-  { ic: '▥', label: '下載 PDF', sub: '每頁一週', action: 'pdf' },
-  { ic: '▤', label: '匯出 Excel', sub: '每 2 週一張工作表', action: 'xlsx' },
-  { ic: '⎙', label: '列印', sub: '直接送印表機', action: 'print' },
+  { label: '分享圖片', sub: 'JPG · 貼到 LINE 群組', action: 'jpg' },
+  { label: 'PDF 版面', sub: '列印用 · 每頁 2–4 週', action: 'pdfgrid' },
+  { label: '下載 PDF', sub: '每頁一週', action: 'pdf' },
+  { label: '匯出 Excel', sub: '每 2 週一張工作表', action: 'xlsx' },
+  { label: '列印', sub: '直接送印表機', action: 'print' },
 ];
 
 function weekDateKey(week) {
@@ -502,7 +502,6 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
                   disabled={exporting || selectedWeeks.length === 0}
                   onClick={() => runExport(c.action)}
                 >
-                  <span className="exp-ic">{c.ic}</span>
                   <b>{c.label}</b>
                   <small>{c.sub}</small>
                 </button>

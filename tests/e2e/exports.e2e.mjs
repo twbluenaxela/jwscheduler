@@ -589,7 +589,7 @@ test('匯出 page: 匯出 Excel holds every week, 列印 opens one page per week
 
     const [popup] = await Promise.all([
       page.waitForEvent('popup', { timeout: 180_000 }),
-      page.getByRole('button', { name: '⎙ 列印 直接送印表機' }).click(),
+      page.locator('.exp-card', { hasText: '直接送印表機' }).click(),
     ]);
     await popup.waitForLoadState('domcontentloaded');
     await popup.waitForFunction(() => (window.__printed ?? 0) > 0, undefined, { timeout: 30_000 });

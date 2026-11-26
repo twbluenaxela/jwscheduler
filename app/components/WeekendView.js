@@ -154,7 +154,7 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
     <div className="wk-wrap" ref={captureRef}>
       <div className="wk-title">
         <h2>公眾演講安排表</h2>
-        <span className="wk-title__meta">共 {scheduleCount} 場</span>
+        {scheduleCount > 0 && <span className="wk-title__meta">共 {scheduleCount} 場</span>}
         <div className="wk-title__spacer" />
         {availableYears.length > 1 && (
           <div className="chips" role="group" style={{ marginRight: 6 }}>
