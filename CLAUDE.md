@@ -878,7 +878,12 @@ for the webhook, a `reply` spy + injectable `now`. Coverage:
 - `mutations.test.mjs` — `applyMidweekAssignment` / `applyWeekendPatch` end-to-end against the fake
   DB: assignment state + the right ChangeLog row, 400/403 paths.
 - `line-webhook.test.mjs` — `handleMessage`: `我的安排` query (post-revert), suspended-row exclusion,
-  help text, and the two-step registration flow.
+  help text, and the two-step registration flow; the added `x_` part shows up and a `hideHelper`
+  part's stale `_1` row does not.
+- `publish.test.mjs` — the publish core against a fake DB + push spy: first publish full list,
+  ✚/✖ for added/deleted parts, delete-then-undo net zero, time cascade silence, ✎ rename (and the
+  ✖+✚ fallback for snapshots without `slotId`), helper removal + `hideHelper`, multi-role ordering,
+  no push for unlinked people (and the full list when they link later), and the 📅 nudge.
 - `roles.test.mjs` — `canEdit`/`isAdmin`/`isGuest` policy + a regression guard asserting every
   schedule-mutating route enforces `canEdit`.
 - `suggest.test.mjs` — the ✦ engine: fairness/bidirectional gap, crowd + monthly demotion,
@@ -946,18 +951,38 @@ skips with a message when `soffice` is missing.
 
 ### Publish diff logic
 
-`POST /api/meetings/publish` (admin only):
+`POST /api/meetings/publish` (admin only) — the diff + text builder live in the framework-free
+`app/lib/publish.mjs` (`buildPublishPlan` / `applyPublish`, db + `push` injected like `mutations.mjs`);
+the route only does auth, the `LINE_CHANNEL_ACCESS_TOKEN` check and HTTP:
 - `collectAssignments(name, weeks, weekendRows)` — includes both midweek and weekend rows, only dates ≥ today
 - Compares `current` vs `prevSnapshot[name]` filtered to future dates only (prevents "false cancellation" notifications when a past meeting date rolls over between two publishes)
-- First publish (`snapshot = null`): sends full upcoming list
-- Subsequent: sends only ✚ added / ✖ removed items; skips if no change
-- Saves new snapshot after sending. LINE messages go ONLY to linked active people, but the saved
-  snapshot covers EVERY assigned name (`collectAssignedNames` fills the rest), so the snapshot is a
-  complete baseline for non-LINE members too
+- First publish (`snapshot = null`): sends full upcoming list. A name **absent** from the snapshot is
+  treated the same way — they were not LINE-linked at the previous publish, so they never received a
+  baseline and must get the full list, not a diff against nothing. `[]` (present but empty) stays a
+  real "you had nothing" baseline.
+- Subsequent: sends only ✚ added / ✖ removed items (and ✎ renames, below); skips if no change
+- Saves the new snapshot after sending. The snapshot holds **only** the LINE-linked active people —
+  exactly the set that was messaged. It is deliberately NOT padded with other assigned names: padding
+  would give a not-yet-linked member a baseline they never received, and their first publish after
+  linking would silently send a diff instead of the full list.
 
 > The former group-wide change summary (`GET /api/meetings/changes`, and the 複製更新文字 export-menu
-> item that copied its text) was removed in `1a887b5`. Publish is the only path that reads the
-> snapshot diff; there is no read-only diff endpoint.
+> item that copied its text) was removed in `1a887b5`, which is why the snapshot is no longer padded
+> for non-LINE members. Publish is the only path that reads the snapshot diff; there is no read-only
+> diff endpoint.
+
+**Renames (✎).** `itemKey` is `date|role` and the part title is inside the role string, so an inline
+title edit (or the MCP `update_midweek_part` tool) would otherwise read as ✖ old + ✚ new. Items
+therefore also carry the `slotId` they came from (`mw<week>_<partKey>_<0|1>`, `mw<week>_chairman`,
+`we<row>_<field>`). When an old and a new item share the same `slotId` and date, the message renders
+one line: `  ✎ <date>  <new role>（原：<old role>）` instead of the cancellation + addition.
+Snapshots written before `slotId` existed have none, so the match is only attempted when **both**
+sides carry it — old snapshots still get the ✖ + ✚ pair.
+
+**Hidden helper slots.** A part with `hideHelper` true (the 主持/朗讀 pair toggle, cleared to hide the
+helper) must never surface its `_1` slot, even if a stale `Assignment` row is still in the DB:
+`collectAssignments` skips `_1` when `part.hideHelper` is set, so both publish and 我的安排 agree
+with the UI. Ministry parts toggle `roleLabel` 學生 ⇄ 學生/助手 instead, which just changes the label.
 
 ### Role labelling in notifications
 

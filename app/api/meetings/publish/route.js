@@ -4,43 +4,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
-import { parseCnDate, collectAssignments, itemKey } from '../../../lib/assignments.mjs';
+import { applyPublish } from '../../../lib/publish.mjs';
 import { canManageCongregation } from '../../../lib/roles.mjs';
-
-
-
-function buildMessage(name, current, previous) {
-  const header = `【新屋會眾 · 聚會節目通知】\n${name}，你好！`;
-
-  // First time — send full list
-  if (previous === null) {
-    if (!current.length) return null; // no assignments, skip
-    const list = current.map((i) => `▸ ${i.date}  ${i.role}`).join('\n');
-    return `${header}\n\n以下是你目前的安排（共 ${current.length} 項）：\n\n${list}\n\n如有疑問請聯絡編排負責人。`;
-  }
-
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const prevFuture = previous.filter((i) => { const d = parseCnDate(i.date); return d && d >= today; });
-
-  const curSet = new Set(current.map(itemKey));
-  const prevSet = new Set(prevFuture.map(itemKey));
-  const added = current.filter((i) => !prevSet.has(itemKey(i)));
-  const removed = prevFuture.filter((i) => !curSet.has(itemKey(i)));
-
-  if (!added.length && !removed.length) return null; // no changes, skip
-
-  const lines = [`${header}\n\n你的安排有更新：`];
-  if (added.length) {
-    lines.push('\n新增：');
-    added.forEach((i) => lines.push(`  ✚ ${i.date}  ${i.role}`));
-  }
-  if (removed.length) {
-    lines.push('\n取消：');
-    removed.forEach((i) => lines.push(`  ✖ ${i.date}  ${i.role}`));
-  }
-  lines.push('\n如有疑問請聯絡編排負責人。');
-  return lines.join('\n');
-}
 
 export async function POST(request) {
   try {
@@ -55,61 +20,8 @@ export async function POST(request) {
       return NextResponse.json({ error: '需要管理員權限' }, { status: 403 });
     }
 
-    const congId = user.congregationId;
-
-    const [congregation, weeks, weekendRows, people] = await Promise.all([
-      db.congregation.findUnique({ where: { id: congId }, select: { publishedSnapshot: true } }),
-      db.midweekWeek.findMany({
-        where: { congregationId: congId },
-        orderBy: { id: 'asc' },
-        include: { parts: true, assignments: true },
-      }),
-      db.weekendRow.findMany({
-        where: { congregationId: congId },
-        orderBy: { sortOrder: 'asc' },
-      }),
-      db.person.findMany({
-        where: { congregationId: congId, lineUserId: { not: null }, status: 'active' },
-      }),
-    ]);
-
-    const feeds = await db.calendarFeed.findMany({
-      where: { personId: { in: people.map((person) => person.id) } },
-      select: { personId: true, lastFetchedAt: true },
-    });
-    const fetchedPeople = new Set(feeds.filter((feed) => feed.lastFetchedAt).map((feed) => feed.personId));
-
-    const prevSnapshot = (congregation.publishedSnapshot ?? null);
-    const newSnapshot = {};
-    let sent = 0, failed = 0, skipped = 0;
-    const errors = [];
-
-    for (const person of people) {
-      const current = collectAssignments(person.name, weeks, weekendRows);
-      newSnapshot[person.name] = current;
-      const previous = prevSnapshot ? (prevSnapshot[person.name] ?? []) : null;
-      let text = buildMessage(person.name, current, previous);
-      if (!text) { skipped++; continue; }
-      if (!fetchedPeople.has(person.id)) {
-        text += '\n\n📅 想讓安排自動出現在手機行事曆？回覆「行事曆」就可以。';
-      }
-      try {
-        const result = await pushLine(person.lineUserId, text);
-        if (!result.ok) throw new Error(result.error);
-        sent++;
-      } catch (err) {
-        failed++;
-        errors.push(`${person.name}: ${err.message}`);
-      }
-    }
-
-    // Save new snapshot
-    await db.congregation.update({
-      where: { id: congId },
-      data: { publishedSnapshot: newSnapshot },
-    });
-
-    return NextResponse.json({ sent, failed, skipped, total: people.length, errors });
+    const result = await applyPublish(db, user, { push: pushLine });
+    return NextResponse.json(result);
   } catch (err) {
     return dbErrorResponse(err);
   }

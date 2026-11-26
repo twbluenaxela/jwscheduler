@@ -51,9 +51,9 @@ const rolesFor = (name, opts) => collectAssignments(name, weeks, weekendRows, op
 test('個別查詢：未來安排排序、排除過去/事項列、暫停列（skipSuspended）', () => {
   const items = collectAssignments('王大明', weeks, weekendRows, webhookOpts);
   assert.deepEqual(items, [
-    { date: '6月 3日', role: '主席' },
-    { date: '6月 3日', role: '寶藏演講' },
-    { date: '6/8', role: '公眾演講' },
+    { date: '6月 3日', role: '主席', slotId: 'mw1_chairman' },
+    { date: '6月 3日', role: '寶藏演講', slotId: 'mw1_t1_0' },
+    { date: '6/8', role: '公眾演講', slotId: 'we10_speaker' },
   ]);
 });
 
@@ -82,6 +82,40 @@ test('發佈行為（預設）保留暫停列，個別查詢（skipSuspended）�
 
 test('itemKey 組合日期與角色', () => {
   assert.equal(itemKey({ date: '6月 3日', role: '主席' }), '6月 3日|主席');
+});
+
+// ── slotId identity + hideHelper (週中 redesign, PRs #34–#39) ─────────────────
+
+test('collectAssignments 每項都帶 slotId（可辨識改名／復原）', () => {
+  const items = collectAssignments('學生甲', weeks, weekendRows, publishOpts);
+  assert.deepEqual(items, [
+    { date: '6月 3日', role: '初次交談（學生）', slotId: 'mw1_m1_0' },
+  ]);
+});
+
+test('collectAssignments：hideHelper=true 時不回報陳舊的 _1 指派', () => {
+  const hiddenWeek = [{
+    id: 3,
+    date: '6月 10日',
+    isoDate: '2026-06-10',
+    parts: [
+      { partKey: 'm1', title: '初次交談', roleLabel: '學生/助手', hideHelper: false },
+      { partKey: 'cbs1', title: '會眾研經班', roleLabel: '主持/朗讀', cbsRef: '利未記 第1-7章', hideHelper: true },
+    ],
+    assignments: [
+      { slotId: 'mw3_m1_1', name: '助手乙' },
+      { slotId: 'mw3_cbs1_0', name: '主持丙' },
+      { slotId: 'mw3_cbs1_1', name: '朗讀丁' },
+    ],
+  }];
+
+  assert.deepEqual(collectAssignments('助手乙', hiddenWeek, [], publishOpts), [
+    { date: '6月 10日', role: '初次交談（助手）', slotId: 'mw3_m1_1' },
+  ]);
+  assert.deepEqual(collectAssignments('朗讀丁', hiddenWeek, [], publishOpts), []);
+  assert.deepEqual(collectAssignments('主持丙', hiddenWeek, [], publishOpts), [
+    { date: '6月 10日', role: '會眾研經班（利未記 第1-7章）（主持）', slotId: 'mw3_cbs1_0' },
+  ]);
 });
 
 // ── Date parsing ──────────────────────────────────────────────────────────────
@@ -203,7 +237,11 @@ test('LINE webhook 路由委派給共用 handler', () => {
   assert.ok(src.includes('handleMessage(event, deps)'), '應呼叫 handleMessage');
 });
 
-test('發佈通知未改動：LINE-only 快照、無 collectAssignedNames 填充', () => {
-  const src = readFileSync(new URL('../api/meetings/publish/route.js', import.meta.url), 'utf8');
-  assert.ok(!src.includes('collectAssignedNames'), '不應再填充全體名單到快照');
+test('發佈通知：快照只涵蓋 LINE 連結者，不填充其他被指派者', () => {
+  const route = readFileSync(new URL('../api/meetings/publish/route.js', import.meta.url), 'utf8');
+  assert.ok(route.includes("from '../../../lib/publish.mjs'"), '路由應委派給 publish core');
+  // The group-wide 複製更新文字 diff was removed in 1a887b5; padding the
+  // snapshot for non-LINE names would suppress their first-publish full list.
+  const core = readFileSync(new URL('./publish.mjs', import.meta.url), 'utf8');
+  assert.ok(!core.includes('collectAssignedNames'), '不應填充非 LINE 成員到快照');
 });

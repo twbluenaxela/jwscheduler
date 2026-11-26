@@ -19,6 +19,7 @@ function matchField(value, cond) {
     if ('equals' in cond) return norm(value) === norm(cond.equals);
     if ('startsWith' in cond) return norm(value).startsWith(norm(cond.startsWith));
     if ('contains' in cond) return norm(value).includes(norm(cond.contains));
+    if ('in' in cond) return (cond.in ?? []).includes(value);
     if ('not' in cond) return value !== cond.not;
     return false;
   }
@@ -64,6 +65,14 @@ export function makeFakeDb(seed = {}) {
     serviceAssignment: { async findMany({ where }) { return clone(stores.serviceAssignments.filter(row => whereMatch(row, where))); } },
     fieldServiceMeeting: { async findMany({ where }) { return clone(stores.fieldServiceMeetings.filter(row => whereMatch(row, where))); } },
     calendarFeed: {
+      async findUnique({ where } = {}) {
+        return clone(stores.calendarFeeds.find((item) => whereMatch(item, where)) ?? null);
+      },
+      async findMany({ where, select } = {}) {
+        const rows = stores.calendarFeeds.filter((item) => whereMatch(item, where));
+        if (!select) return clone(rows);
+        return clone(rows.map((item) => Object.fromEntries(Object.keys(select).map((key) => [key, item[key]]))));
+      },
       async upsert({ where: { personId }, update, create }) {
         let feed = stores.calendarFeeds.find((item) => item.personId === personId);
         if (feed) Object.assign(feed, update);
@@ -125,6 +134,9 @@ export function makeFakeDb(seed = {}) {
         if (include?.congregation) out.congregation = congregationFor(p.congregationId);
         return out;
       },
+      async findMany({ where } = {}) {
+        return clone(stores.people.filter((x) => whereMatch(x, where)));
+      },
       async update({ where: { id }, data }) {
         const p = stores.people.find((x) => x.id === id);
         Object.assign(p, data);
@@ -149,11 +161,19 @@ export function makeFakeDb(seed = {}) {
     },
 
     congregation: {
+      async findUnique({ where }) {
+        return clone(stores.congregations.find((c) => whereMatch(c, where)) ?? null);
+      },
       async findFirst({ where }) {
         return clone(stores.congregations.find((c) => whereMatch(c, where)) ?? null);
       },
       async findMany({ where }) {
         return clone(stores.congregations.filter((c) => whereMatch(c, where)));
+      },
+      async update({ where: { id }, data }) {
+        const row = stores.congregations.find((c) => c.id === id);
+        if (row) Object.assign(row, clone(data));
+        return clone(row ?? null);
       },
     },
 
