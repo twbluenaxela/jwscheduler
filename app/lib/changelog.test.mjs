@@ -106,3 +106,30 @@ test('總覽提供最近變更分頁並讀取 /api/changelog', () => {
   assert.ok(src.includes('最近變更'), '應有最近變更分頁');
   assert.ok(src.includes('/api/changelog'), '應呼叫 changelog API');
 });
+
+// ── Added parts: the partKey contains underscores ─────────────────────────────
+// The label must still resolve for an `x_<hex>` part — a ChangeLog entry for a
+// deleted added part is written BEFORE the row is deleted, so it has to work.
+const weekWithAdded = {
+  ...week,
+  parts: [
+    ...week.parts,
+    { partKey: 'x_0123456789abcdef0123456789abcdef', title: '年度服務報告', roleLabel: '學生/助手', cbsRef: '' },
+  ],
+};
+
+test('describeMidweekSlot resolves an added part slot', () => {
+  assert.deepEqual(
+    describeMidweekSlot(weekWithAdded, 'mw42_x_0123456789abcdef0123456789abcdef_0'),
+    { date: '6月 3日', label: '年度服務報告（學生）' },
+  );
+  assert.deepEqual(
+    describeMidweekSlot(weekWithAdded, 'mw42_x_0123456789abcdef0123456789abcdef_1'),
+    { date: '6月 3日', label: '年度服務報告（助手）' },
+  );
+});
+
+test('describeMidweekSlot still rejects another week and an unparsable id', () => {
+  assert.equal(describeMidweekSlot(weekWithAdded, 'mw41_x_0123456789abcdef0123456789abcdef_0'), null);
+  assert.equal(describeMidweekSlot(weekWithAdded, 'we7_speaker'), null);
+});

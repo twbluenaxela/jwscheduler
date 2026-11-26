@@ -10,6 +10,7 @@ import {
   parseDuration, addMinutes, timeDifference, planPartDeletion, planCascade,
   recomputeSectionTimes, planInsertAtStart, buildRestorePayload, canEditMidweekSection,
 } from '../../../../lib/midweekParts.mjs';
+import { parseMidweekSlotId } from '../../../../lib/slotId.mjs';
 
 const SECTIONS = new Set(['treasures', 'ministry', 'living']);
 
@@ -343,8 +344,15 @@ export async function DELETE(request, context) {
 
       const plan = planPartDeletion(week, partKey);
       const prefix = `mw${week.id}_${partKey}_`;
-      const assignments = await tx.assignment.findMany({
+      const candidates = await tx.assignment.findMany({
         where: { weekId: week.id, slotId: { startsWith: prefix } },
+      });
+      // `startsWith` alone also matches a DIFFERENT part whose key merely begins
+      // with this one (`x_ab…` vs `x_abc…`), which would delete a neighbour's
+      // assignments. Match the parsed partKey exactly.
+      const assignments = candidates.filter((assignment) => {
+        const parsed = parseMidweekSlotId(assignment.slotId);
+        return parsed?.weekId === week.id && parsed.partKey === partKey && parsed.index !== null;
       });
       const restore = buildRestorePayload(week, partKey, assignments);
       for (const assignment of assignments) {

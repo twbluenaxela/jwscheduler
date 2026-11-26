@@ -2,22 +2,24 @@
 // The label resolvers are pure (unit-tested); `logChange` takes the Prisma
 // client as an argument so this module stays import-safe for `node --test`.
 
+import { parseMidweekSlotId } from './slotId.mjs';
+
 const SECTION_LABELS = { chairman: '主席', openPrayer: '開始禱告', closePrayer: '結束禱告' };
 
-// Resolve a midweek slotId (e.g. "mw42_chairman", "mw42_cbs1_1") to a human
-// { date, label } using the week and its parts. Mirrors the PairSlot labels.
+// Resolve a midweek slotId (e.g. "mw42_chairman", "mw42_cbs1_1",
+// "mw37_x_0123…_0") to a human { date, label } using the week and its parts.
+// Mirrors the PairSlot labels. Part keys may contain underscores, so the ID is
+// split by the shared parser, never by string slicing.
 export function describeMidweekSlot(week, slotId) {
   if (!week) return null;
-  const prefix = `mw${week.id}_`;
-  if (!String(slotId).startsWith(prefix)) return null;
-  const rest = slotId.slice(prefix.length);
+  const parsed = parseMidweekSlotId(slotId);
+  if (!parsed || parsed.weekId !== Number(week.id)) return null;
 
-  if (SECTION_LABELS[rest]) return { date: week.date, label: SECTION_LABELS[rest] };
+  if (parsed.key) return { date: week.date, label: SECTION_LABELS[parsed.key] };
+  if (parsed.index === null) return { date: week.date, label: parsed.partKey };
 
-  const m = rest.match(/^(.+)_(\d+)$/);
-  if (!m) return { date: week.date, label: rest };
-  const [, partKey, idxStr] = m;
-  const idx = Number(idxStr);
+  const partKey = parsed.partKey;
+  const idx = parsed.index;
   const part = (week.parts ?? []).find((p) => p.partKey === partKey);
   if (!part) return { date: week.date, label: partKey };
 

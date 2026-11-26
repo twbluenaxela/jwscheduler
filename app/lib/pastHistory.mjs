@@ -20,6 +20,7 @@
 import { CATS } from '../data/index.js';
 import { slotCat } from './partTypes.mjs';
 import { parseCnDate as parseDate, resolveRowDate } from './cnDate.mjs';
+import { parseMidweekSlotId } from './slotId.mjs';
 
 // Returns the meeting date for the slot being assigned.
 // Falls back to today if the slot's week/row can't be found.
@@ -27,7 +28,7 @@ export function slotRefDate(slotId, midweekWeeks, weekendRows) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   if (slotId?.startsWith('mw')) {
-    const weekId = Number(slotId.split('_')[0].slice(2));
+    const weekId = parseMidweekSlotId(slotId)?.weekId;
     const w = midweekWeeks.find(wk => wk.id === weekId);
     if (w) {
       const d = resolveRowDate(w, now);
@@ -79,17 +80,19 @@ export function buildPastHistory(midweekWeeks, assignments, weekendRows, refDate
 
   for (const [slotId, name] of Object.entries(assignments)) {
     if (!name || !slotId.startsWith('mw')) continue;
-    const parts = slotId.split('_');
-    const weekId = Number(parts[0].slice(2));
+    const parsed = parseMidweekSlotId(slotId);
+    if (!parsed) continue;
+    const { weekId, key, partKey, index } = parsed;
     const date = weekDateMap[weekId];
     if (!date) continue;
-    const suffix = parts[1];
-    if (suffix === 'chairman') {
+    if (key === 'chairman') {
       record(name, CATS.chairman.tag, date);
-    } else if (suffix === 'openPrayer' || suffix === 'closePrayer') {
+    } else if (key === 'openPrayer' || key === 'closePrayer') {
       record(name, CATS.prayer.tag, date);
     } else {
-      const partKey = parts[1]; // e.g. 't0', 'm0' — matches part.id in mapped week data
+      // partKey is 't0', 'm0', or an added part's 'x_…'. Splitting on '_' here
+      // took only 'x' for an added part, so those assignments never reached the
+      // fairness history at all.
       const w = midweekWeeks.find(wk => wk.id === weekId);
       // Mapped weeks store parts under section arrays (treasures/ministry/living),
       // not a flat `parts` array. Fall back to `parts` for seed/test data.
@@ -99,7 +102,7 @@ export function buildPastHistory(midweekWeeks, assignments, weekendRows, refDate
       const part = allParts.find(p => p.id === partKey);
       // Slot-level cat: ministry 演講 parts count under 傳道演講, the CBS
       // reader (_1) under 研經班朗讀 — matching the pool the picker offers.
-      const catKey = part ? slotCat(part, parts[2]) : null;
+      const catKey = part ? slotCat(part, index) : null;
       if (catKey && CATS[catKey]) record(name, CATS[catKey].tag, date);
     }
   }

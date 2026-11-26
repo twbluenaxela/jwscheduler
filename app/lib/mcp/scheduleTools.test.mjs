@@ -24,6 +24,42 @@ test('節目解析保持 slot ID 與角色，歧義時列出節目', () => {
   assert.throws(() => resolvePart(week, '示範'), /請指定角色/);
   assert.throws(() => resolvePart(week, ''), /不明確/);
 });
+
+test('藏起助手的配對節目不再提供助手欄位', () => {
+  const hidden = { ...week, parts: [{ ...week.parts[1], hideHelper: true }], assignments: [] };
+  // No role needed: only the primary slot exists, so asking for 助手 must fail.
+  assert.equal(resolvePart(hidden, '示範').slotId, 'mw42_m0_0');
+  assert.throws(() => resolvePart(hidden, '示範', '助手'), /角色不明確/);
+});
+
+test('新增節目的 slot ID 不會被底線截斷', () => {
+  const added = `x_${'b'.repeat(32)}`;
+  const w = { ...week, parts: [...week.parts, { partKey: added, partNum: 9, title: '本地需要', cat: 'living', roleLabel: null }], assignments: [] };
+  assert.equal(resolvePart(w, '本地需要').slotId, `mw42_${added}_0`);
+  // A stale assignment written to the truncated key must not be read as this part's.
+  const stale = { ...w, assignments: [{ slotId: 'mw42_x_0', name: '舊' }] };
+  assert.equal(resolvePart(stale, '本地需要').slotId, `mw42_${added}_0`);
+});
+
+test('空缺清單不把藏起的助手或已刪節目算成空缺，並依 partNum 排序', async () => {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date());
+  // Insertion order deliberately disagrees with partNum, as after an import.
+  const scrambled = { id: 42, congregationId: 1, date: '1月 2日', isoDate: today, parts: [
+    { partKey: 'l0', partNum: 8, title: '本地需要', cat: 'living', roleLabel: null },
+    { partKey: 'm0', partNum: 5, title: '傳道示範', cat: 'ministry', roleLabel: '學生/助手', hideHelper: true },
+  ], assignments: [{ slotId: 'mw42_m0_0', name: '甲' }] };
+  const db = { congregation: { findUnique: async () => ({ people: [], weeks: [scrambled], weekendRows: [] }) } };
+  const call = async (name, args) => (await dispatch({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, { db, congregationId: 1, user: { role: 'ADMIN' } }, scheduleTools)).result;
+
+  const vacancies = (await call('list_vacancies', { weeks: 1 })).structuredContent.data.vacancies;
+  // The hidden helper is not a vacancy...
+  assert.ok(!vacancies.some((v) => v.includes('傳道示範')), JSON.stringify(vacancies));
+  assert.ok(vacancies.some((v) => v.includes('本地需要')));
+
+  const schedule = (await call('get_week_schedule', { date: today })).content[0].text;
+  // ...and the printed order follows partNum, not row insertion order.
+  assert.ok(schedule.indexOf('5 傳道示範') < schedule.indexOf('8 本地需要'), schedule);
+});
 test('權限過濾及呼叫時再次檢查', async () => {
   const lit = { name: 'lit', inputSchema: {}, handler: async () => ({ summary: '', data: {} }) };
   const tools = [lit, ...scheduleTools];

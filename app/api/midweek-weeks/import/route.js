@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { verifyIdToken } from '../../../lib/firebase-admin';
 import db from '../../../lib/db';
 import { canEdit } from '../../../lib/roles.mjs';
+import { reconcileImportedWeek } from '../../../lib/midweekImport.mjs';
 
 const MAX_WEEKS = 40;
 const MAX_PARTS_PER_WEEK = 80;
@@ -84,6 +85,7 @@ function mapPart(part, weekId, assignmentMap) {
     cat: part.cat,
     roleLabel: part.roleLabel ?? undefined,
     cbsRef: part.cbsRef ?? undefined,
+    hideHelper: part.hideHelper ?? false,
     assign,
   };
 }
@@ -100,6 +102,8 @@ function mapWeek(week) {
   return {
     id: week.id,
     date: week.date,
+    isoDate: week.isoDate ?? undefined,
+    weekStartIso: week.weekStartIso ?? undefined,
     dateLabel: week.dateLabel ?? undefined,
     weekStart: week.weekStart ?? undefined,
     weekdayPill: week.weekdayPill,
@@ -170,21 +174,17 @@ export async function POST(request) {
               data: { ...item.week, congregationId: user.congregationId },
             });
 
-        const incomingKeys = item.parts.map((part) => part.partKey);
-        await tx.part.deleteMany({
-          where: {
-            weekId: week.id,
-            partKey: { notIn: incomingKeys.length ? incomingKeys : [''] },
-          },
+        const weekWithParts = await tx.midweekWeek.findFirst({
+          where: { id: week.id, congregationId: user.congregationId },
+          include: { parts: true, assignments: true },
         });
 
-        for (const part of item.parts) {
-          await tx.part.upsert({
-            where: { weekId_partKey: { weekId: week.id, partKey: part.partKey } },
-            update: part,
-            create: { ...part, weekId: week.id },
-          });
-        }
+        await reconcileImportedWeek(tx, {
+          week: weekWithParts ?? { ...week, parts: [], assignments: [] },
+          incomingParts: item.parts,
+          congregationId: user.congregationId,
+          actorName: user.displayName,
+        });
 
         ids.push(week.id);
       }

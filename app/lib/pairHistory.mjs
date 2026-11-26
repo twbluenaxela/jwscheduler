@@ -6,6 +6,7 @@
 // A repeat is allowed - it is a warning and a demotion, never a block - but
 // only once the pair has had time to breathe.
 import { resolveRowDate } from './cnDate.mjs';
+import { parseMidweekSlotId, buildMidweekSlotId } from './slotId.mjs';
 
 export const PAIR_REPEAT_WINDOW_DAYS = 180;
 
@@ -137,16 +138,17 @@ export function collectMidweekPairs(midweekWeeks, assignments, cats = ['ministry
 // The name holding the OTHER half of the pair-capable part that `slotId`
 // belongs to — the person a candidate for this slot would be paired with.
 // Returns '' for non-pair parts, non-demo parts, or when the other half is
-// still empty. slotId shape: mw{weekId}_{partKey}_{0|1}.
+// still empty. slotId shape: mw{weekId}_{partKey}_{0|1}; the partKey may contain
+// underscores (added parts), so it is parsed by slotId.mjs.
 export function counterpartName(slotId, midweekWeeks, assignments, cats = ['ministry']) {
-  const m = String(slotId ?? '').match(/^mw(\d+)_(.+)_([01])$/);
-  if (!m) return '';
-  const [, weekId, partKey, idx] = m;
-  const w = (midweekWeeks ?? []).find(wk => String(wk.id) === weekId);
+  const parsed = parseMidweekSlotId(slotId);
+  if (!parsed || parsed.partKey === null || parsed.index === null) return '';
+  const { weekId, partKey, index } = parsed;
+  const w = (midweekWeeks ?? []).find(wk => String(wk.id) === String(weekId));
   if (!w) return '';
   const parts = [...(w.treasures ?? []), ...(w.ministry ?? []), ...(w.living ?? []), ...(w.parts ?? [])];
   const part = parts.find(p => p.id === partKey);
   if (!part || !cats.includes(part.cat)) return '';
   if (!String(part.roleLabel ?? '').includes('/')) return '';
-  return assignments?.[`mw${weekId}_${partKey}_${idx === '0' ? '1' : '0'}`] ?? '';
+  return assignments?.[buildMidweekSlotId(weekId, partKey, index === 0 ? 1 : 0)] ?? '';
 }

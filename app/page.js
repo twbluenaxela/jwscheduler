@@ -20,6 +20,7 @@ import { buildPastHistory, slotRefDate } from './lib/pastHistory.mjs';
 import { parseIsoDate, toIsoDate, resolveRowDate } from './lib/cnDate.mjs';
 import { buildPairIndex, collectMidweekPairs, counterpartName } from './lib/pairHistory.mjs';
 import { syncWeeksToDrive } from './lib/driveSync';
+import { isMidweekSuspended } from './lib/weekType.mjs';
 
 const DAY_NAMES = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
 
@@ -777,14 +778,22 @@ export default function App({ initialPage = 'meetings' }) {
     const upcoming = midweekWeeks.slice(week);
     let vacancies = 0;
     for (const w of upcoming) {
+      // A cancelled week (大會 / 暫停) has no meeting to fill: counting its
+      // parts made the sidebar claim vacancies that can never be filled.
+      if (isMidweekSuspended(w)) continue;
       const fixed = ['chairman', 'openPrayer', 'closePrayer'];
       for (const key of fixed) {
         if (!(assignments[`mw${w.id}_${key}`] ?? w[key] ?? '')) vacancies++;
       }
       for (const section of ['treasures', 'ministry', 'living']) {
         for (const part of (w[section] ?? [])) {
-          const primary = assignments[`mw${w.id}_${part.id}_0`] ?? part.assign?.[0] ?? '';
-          if (!primary) vacancies++;
+          // A pair-capable part needs BOTH halves; a hidden helper does not.
+          // Counting only slot 0 under-reported every 傳道示範 missing its 助手.
+          const isPair = String(part.roleLabel ?? '').includes('/') && !part.hideHelper;
+          const a0 = assignments[`mw${w.id}_${part.id}_0`] ?? (part.assign ?? [])[0] ?? '';
+          const a1 = isPair ? (assignments[`mw${w.id}_${part.id}_1`] ?? (part.assign ?? [])[1] ?? '') : '';
+          if (!a0) vacancies++;
+          if (isPair && !a1) vacancies++;
         }
       }
     }
