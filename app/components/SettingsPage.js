@@ -7,7 +7,6 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase-client';
 
 const DAY_SHORT = ['一','二','三','四','五','六','日'];
-const DAY_NAMES = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'];
 
 function addException(list, defaults) {
   return [...list, { id: Date.now(), fromMonth: 1, fromDay: 1, toMonth: 12, toDay: 31, dayOffset: defaults.dayOffset, time: defaults.time }];
@@ -249,19 +248,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
           <div className="settings-card">
             <div className="settings-row">
               <span className="settings-row__label">會眾名稱</span>
-              {isAdmin
-                ? <input className="settings-input" value={nameEdit} onChange={e => setNameEdit(e.target.value)} />
-                : <span className="settings-row__val">{cong?.name}</span>}
-            </div>
-            <div className="settings-row">
-              <span className="settings-row__label">會眾代碼</span>
-              <span className="settings-row__val settings-row__val--mono">{cong?.code}</span>
-            </div>
-            <div className="settings-row">
-              <span className="settings-row__label">你的身份</span>
-              <span className={`settings-badge ${(dbUser?.role === 'ADMIN' || dbUser?.role === 'SYSADMIN') ? 'settings-badge--admin' : ''}`}>
-                {roleLabel(dbUser?.role)}
-              </span>
+              <input className="settings-input" value={nameEdit} onChange={e => setNameEdit(e.target.value)} />
             </div>
           </div>
 
@@ -396,7 +383,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
             <div className="settings-member__avatar">{(m.displayName || m.email)?.[0]?.toUpperCase()}</div>
             <div className="settings-member__info">
               <div className="settings-member__name">{m.displayName || m.email} {m.canLiterature && <span className="settings-badge">書刊</span>}</div>
-              <div className="settings-member__email">{m.displayName ? m.email : ''}</div>
+              {m.displayName && m.email && <div className="settings-member__email">{m.email}</div>}
             </div>
             {isAdmin && <label className="lit-permission"><input type="checkbox" checked={!!m.canLiterature} onChange={e => changeLiterature(m.id, e.target.checked)} /> 書刊</label>}
             {isAdmin && m.id !== dbUser?.id && m.role !== 'SYSADMIN' ? (
@@ -419,7 +406,7 @@ export default function SettingsPage({ congSettings, setCongSettings, onReapplyS
       </div>
       </>)}
       {canUseMcp && <div className="settings-mcp">
-        <h3 className="settings-h">Claude 連線（MCP）</h3>
+        <h3 className="settings-h">Claude 連線</h3>
         <p>用 Claude 語音或文字管理書刊。把連結加到 Claude 的「自訂連接器」。</p>
         {mcpTokens.map((item) => <div className="settings-mcp__row" key={item.id}>
           <span>{item.name} · {item.prefix}… · 建立 {new Date(item.createdAt).toLocaleDateString('zh-TW')}

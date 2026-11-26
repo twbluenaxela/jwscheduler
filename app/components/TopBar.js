@@ -8,7 +8,7 @@ export default function TopBar({ page }) {
     <header className="topbar">
       <Image
         src="/jwschedulerlogo.png"
-        alt="聚會安排"
+        alt=""
         width={28}
         height={28}
         className="brand__logo"

@@ -137,10 +137,8 @@ export default function InventoryView({ items, people, request, reloadCatalog })
           />
         </>}
       </div>
-      <div className="lit-inventory-controls">
-        {!counts.some((count) => count.month === month) && (
-          <button className="btn btn--primary" onClick={start}>開始 {Number(month.slice(5))} 月清點</button>
-        )}
+      {!counts.some((count) => count.month === month) && <div className="lit-inventory-controls">
+        <button className="btn btn--primary" onClick={start}>開始 {Number(month.slice(5))} 月清點</button>
         {!counts.length && <label className="btn btn--sm">
           匯入 JW Hub 庫存報告
           <input className="lit-file" type="file" accept="application/pdf" disabled={busy} onChange={(e) => {
@@ -149,13 +147,13 @@ export default function InventoryView({ items, people, request, reloadCatalog })
             if (chosen) upload(chosen, true);
           }} />
         </label>}
-      </div>
+      </div>}
       {error && <div className="imp-error" role="alert">{error}</div>}
       <div className="lit-shipment-list">
         {counts.map((count) => (
           <button className="lit-shipment" key={count.id} onClick={() => setSelected(count.id)}>
             <strong>
-              {count.month.replace(/^(\d{4})-(\d{2})$/, (_, year, number) => `${year}年${Number(number)}月`)} <span className="lit-badge">{count.status === 'done' ? '完成' : '草稿'}</span>
+              {count.month.replace(/^(\d{4})-(\d{2})$/, (_, year, number) => `${year}年${Number(number)}月`)} {count.status !== 'done' && <span className="lit-badge">草稿</span>}
             </strong>
             <span>已清點 {count.counted} / {count.total}</span>
           </button>
