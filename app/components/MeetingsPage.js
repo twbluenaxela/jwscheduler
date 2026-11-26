@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import MidweekWeek from './MidweekWeek';
+import FitToScreen from './FitToScreen';
 import WeekendView from './WeekendView';
 import PrintStage from './PrintStage';
 import {
@@ -35,7 +36,7 @@ function getDateLabel(week) {
   return `${m[1]}月${m[2]}-${parseInt(m[2]) + 6}日`;
 }
 
-function WeekPicker({ weeks, currentWeek, onSelect }) {
+export function WeekPicker({ weeks, currentWeek, onSelect }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
   const currentItemRef = useRef(null);
@@ -65,7 +66,7 @@ function WeekPicker({ weeks, currentWeek, onSelect }) {
         aria-expanded={open}
         aria-label="選取週次"
       >
-        <span className="wkpick__label">{getDateLabel(weeks[currentWeek])}</span>
+        <span className="wkpick__label" data-testid="week-label">{getDateLabel(weeks[currentWeek])}</span>
         <span className="wkpick__caret">▾</span>
       </button>
 
@@ -241,6 +242,164 @@ export function WeekendExportMenu({ getAssign, captureRef, visibleRowsRef, pdfNo
   );
 }
 
+/* The real 聚會 midweek chrome — toolbar, publish banner, navstrip and the
+   edit-mode type bar — shared by MeetingsPage and the layout fixture so an iPad
+   audit exercises the same JSX the app renders. Only the card/children differ. */
+export function MidweekChrome({
+  weeks, week, setWeek, view, setView, editMode, setEditMode,
+  canEdit = true, publishResult, publishing, onPublish, onFinishEdit,
+  exportOpen, setExportOpen, menuRef, captureRef, pdfNodesRef, getAssign,
+  hasMwSuggestions = false, mwPrefix, acceptAllSuggestions, clearSuggestions,
+  setPage, suggestingMw = false, setSuggestingMw, fetchMidweekSuggestions, onDeleteWeek, updateMidweekWeek,
+  children,
+}) {
+  const prev = () => {
+    if (mwPrefix) clearSuggestions?.(mwPrefix);
+    setWeek((w) => (w - 1 + weeks.length) % weeks.length);
+  };
+  const next = () => {
+    if (mwPrefix) clearSuggestions?.(mwPrefix);
+    setWeek((w) => (w + 1) % weeks.length);
+  };
+  const tabs = (
+    <div className="tabs" role="tablist">
+      <button className="tab" role="tab"
+        aria-selected={view === 'midweek' ? 'true' : 'false'}
+        onClick={() => setView('midweek')}>週中</button>
+      <button className="tab" role="tab"
+        aria-selected={view === 'weekend' ? 'true' : 'false'}
+        onClick={() => setView('weekend')}>週末</button>
+    </div>
+  );
+
+  return (
+    <div className="mw-container">
+      <div className="toolbar" data-testid="week-toolbar">
+        {tabs}
+        <div className="toolbar__spacer" />
+        {canEdit && (
+          <button
+            className={`btn${editMode ? ' btn--primary' : ''}`}
+            onClick={() => { if (editMode) onFinishEdit(); else setEditMode(true); }}
+          >
+            <span className="pen">{editMode ? '✓' : '✎'}</span>
+            <span>{editMode ? '完成' : '編輯'}</span>
+          </button>
+        )}
+        <ExportMenu
+          week={weeks[week]}
+          getAssign={getAssign}
+          captureRef={captureRef}
+          pdfNodesRef={pdfNodesRef}
+          editMode={editMode}
+          exportOpen={exportOpen}
+          setExportOpen={setExportOpen}
+          menuRef={menuRef}
+        />
+        {canEdit && hasMwSuggestions && (
+          <>
+            <button className="btn btn--primary btn--sm" onClick={() => acceptAllSuggestions?.(mwPrefix)}>接受全部</button>
+            <button className="btn btn--sm" onClick={() => clearSuggestions?.(mwPrefix)}>清除建議</button>
+          </>
+        )}
+        {canEdit && weeks.length > 0 && (
+          <button className="btn btn--notify" onClick={onPublish} disabled={publishing}>
+            {publishing ? '發送中…' : '發布通知'}
+          </button>
+        )}
+      </div>
+      {publishResult && (
+        <div className={`publish-banner${publishResult.error || publishResult.failed > 0 ? ' publish-banner--err' : ' publish-banner--ok'}`}>
+          {publishResult.error
+            ? `發送失敗：${publishResult.error}`
+            : `已發送 ${publishResult.sent} / ${publishResult.total} 人${publishResult.failed > 0 ? `，${publishResult.failed} 人失敗` : ''}`}
+        </div>
+      )}
+
+      {weeks.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state__ic">📂</div>
+          <div className="empty-state__title">尚未匯入任何週次</div>
+          <div className="empty-state__sub">前往「匯入 / 匯出」上傳聚會手冊 EPUB 即可開始編排</div>
+          <button className="btn btn--primary" onClick={() => setPage?.('import')}>
+            前往匯入
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="mw-navstrip" data-testid="week-bar">
+            <button className="iconbtn" data-testid="week-prev" aria-label="上一週" onClick={prev}>‹</button>
+            <WeekPicker weeks={weeks} currentWeek={week} onSelect={setWeek} />
+            <button className="iconbtn" data-testid="week-next" aria-label="下一週" onClick={next}>›</button>
+            {editMode && (
+              <button
+                className="iconbtn iconbtn--suggest"
+                aria-label="自動建議"
+                title="自動建議空缺"
+                disabled={suggestingMw}
+                onClick={async () => {
+                  const w = weeks[week];
+                  if (!w) return;
+                  setSuggestingMw?.(true);
+                  await fetchMidweekSuggestions?.(w.id);
+                  setSuggestingMw?.(false);
+                }}
+              >{suggestingMw ? '…' : '✦'}</button>
+            )}
+            {editMode && (
+              <button
+                className="iconbtn iconbtn--danger"
+                aria-label="刪除此週"
+                title="刪除此週"
+                onClick={async () => {
+                  if (!window.confirm(`確定要刪除「${weeks[week]?.dateLabel || weeks[week]?.date}」？`)) return;
+                  await onDeleteWeek?.(weeks[week]);
+                }}
+              >−</button>
+            )}
+          </div>
+          {editMode && weeks[week] && (() => {
+            const w = weeks[week];
+            const wType = w.type ?? 'normal';
+            const setType = (t) => updateMidweekWeek(w.id, (cur) => ({ ...cur, type: t, label: t === 'normal' ? '' : (cur.label ?? '') }));
+            const setLabel = (v) => updateMidweekWeek(w.id, (cur) => {
+              const suggested = (cur.type ?? 'normal') === 'normal' ? suggestTypeFromLabel(v) : null;
+              return { ...cur, label: v, ...(suggested ? { type: suggested } : {}) };
+            });
+            const placeholder = isMidweekSuspended(w)
+              ? '國際大會、區域大會、總部代表…'
+              : '分區監督探訪、特別演講…';
+            return (
+              <div className="mw-type-bar">
+                <div className="mw-type-chips">
+                  {MIDWEEK_TYPES.map((val) => (
+                    <button
+                      key={val}
+                      className={`mw-type-chip${wType === val ? ' mw-type-chip--active' : ''}`}
+                      onClick={() => setType(val)}
+                    >{MIDWEEK_TYPE_LABELS[val]}</button>
+                  ))}
+                </div>
+                {wType !== 'normal' && (
+                  <input
+                    className="week-edit__input mw-type-label-input"
+                    type="text"
+                    placeholder={placeholder}
+                    value={w.label ?? ''}
+                    onChange={(e) => setLabel(e.target.value)}
+                    aria-label="週次標籤"
+                  />
+                )}
+              </div>
+            );
+          })()}
+          {children}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function MeetingsPage({
   midweekWeeks,
   view, setView, week, setWeek,
@@ -338,146 +497,37 @@ export default function MeetingsPage({
     <section>
       {view === 'midweek' && (
         /* mw-container caps everything (toolbar + navstrip + card) at the same max-width */
-        <div className="mw-container">
-          <div className="toolbar">
-            {tabs}
-            <div className="toolbar__spacer" />
-            {canEdit && (
-              <button
-                className={`btn${editMode ? ' btn--primary' : ''}`}
-                onClick={() => { if (editMode) finishEdit(); else setEditMode(true); }}
-              >
-                <span className="pen">{editMode ? '✓' : '✎'}</span>
-                <span>{editMode ? '完成' : '編輯'}</span>
-              </button>
-            )}
-            <ExportMenu
-              week={midweekWeeks[week]}
-              getAssign={getAssign}
-              captureRef={captureRef}
-              pdfNodesRef={midweekPdfNodesRef}
-              editMode={editMode}
-              exportOpen={exportOpen}
-              setExportOpen={setExportOpen}
-              menuRef={menuRef}
-            />
-            {canEdit && hasMwSuggestions && (
-              <>
-                <button className="btn btn--primary btn--sm" onClick={() => acceptAllSuggestions?.(mwPrefix)}>接受全部</button>
-                <button className="btn btn--sm" onClick={() => clearSuggestions?.(mwPrefix)}>清除建議</button>
-              </>
-            )}
-            {canEdit && midweekWeeks.length > 0 && (
-              <button className="btn btn--notify" onClick={handlePublish} disabled={publishing}>
-                {publishing ? '發送中…' : '發布通知'}
-              </button>
-            )}
-          </div>
-          {publishResult && (
-            <div className={`publish-banner${publishResult.error || publishResult.failed > 0 ? ' publish-banner--err' : ' publish-banner--ok'}`}>
-              {publishResult.error
-                ? `發送失敗：${publishResult.error}`
-                : `已發送 ${publishResult.sent} / ${publishResult.total} 人${publishResult.failed > 0 ? `，${publishResult.failed} 人失敗` : ''}`}
-            </div>
-          )}
-
-          {midweekWeeks.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-state__ic">📂</div>
-              <div className="empty-state__title">尚未匯入任何週次</div>
-              <div className="empty-state__sub">前往「匯入 / 匯出」上傳聚會手冊 EPUB 即可開始編排</div>
-              <button className="btn btn--primary" onClick={() => setPage?.('import')}>
-                前往匯入
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="mw-navstrip">
-                <button className="iconbtn" aria-label="上一週" onClick={prev}>‹</button>
-                <WeekPicker weeks={midweekWeeks} currentWeek={week} onSelect={setWeek} />
-                <button className="iconbtn" aria-label="下一週" onClick={next}>›</button>
-                {editMode && (
-                  <button
-                    className="iconbtn iconbtn--suggest"
-                    aria-label="自動建議"
-                    title="自動建議空缺"
-                    disabled={suggestingMw}
-                    onClick={async () => {
-                      const w = midweekWeeks[week];
-                      if (!w) return;
-                      setSuggestingMw(true);
-                      await fetchMidweekSuggestions?.(w.id);
-                      setSuggestingMw(false);
-                    }}
-                  >{suggestingMw ? '…' : '✦'}</button>
-                )}
-                {editMode && (
-                  <button
-                    className="iconbtn iconbtn--danger"
-                    aria-label="刪除此週"
-                    title="刪除此週"
-                    onClick={async () => {
-                      const w = midweekWeeks[week];
-                      if (!window.confirm(`確定要刪除「${w.dateLabel || w.date}」？`)) return;
-                      setEditMode(false);
-                      await deleteMidweekWeek(w.id);
-                    }}
-                  >−</button>
-                )}
-              </div>
-              {editMode && midweekWeeks[week] && (() => {
-                const w = midweekWeeks[week];
-                const wType = w.type ?? 'normal';
-                const setType = (t) => updateMidweekWeek(w.id, (cur) => ({ ...cur, type: t, label: t === 'normal' ? '' : (cur.label ?? '') }));
-                // Typing a label suggests a type, but only while the week is
-                // still 一般 — once the admin has picked a chip, that choice is
-                // authoritative and the keyword must never override it.
-                const setLabel = (v) => updateMidweekWeek(w.id, (cur) => {
-                  const suggested = (cur.type ?? 'normal') === 'normal' ? suggestTypeFromLabel(v) : null;
-                  return { ...cur, label: v, ...(suggested ? { type: suggested } : {}) };
-                });
-                const placeholder = isMidweekSuspended(w)
-                  ? '國際大會、區域大會、總部代表…'
-                  : '分區監督探訪、特別演講…';
-                return (
-                  <div className="mw-type-bar">
-                    <div className="mw-type-chips">
-                      {MIDWEEK_TYPES.map((val) => (
-                        <button
-                          key={val}
-                          className={`mw-type-chip${wType === val ? ' mw-type-chip--active' : ''}`}
-                          onClick={() => setType(val)}
-                        >{MIDWEEK_TYPE_LABELS[val]}</button>
-                      ))}
-                    </div>
-                    {wType !== 'normal' && (
-                      <input
-                        className="week-edit__input mw-type-label-input"
-                        type="text"
-                        placeholder={placeholder}
-                        value={w.label ?? ''}
-                        onChange={(e) => setLabel(e.target.value)}
-                        aria-label="週次標籤"
-                      />
-                    )}
-                  </div>
-                );
-              })()}
-              <MidweekWeek
-                week={midweekWeeks[week]}
-                editMode={editMode}
-                getAssign={getAssign}
-                openSheet={openSheet}
-                updateMidweekWeek={updateMidweekWeek}
-                addMidweekPart={addMidweekPart}
-                deleteMidweekPart={deleteMidweekPart}
-                cardRef={captureRef}
-                getSuggestion={getSuggestion}
-                onAccept={onAccept}
-                onClear={onClear}
-                clearSlot={clearSlot}
-                onFinishEdit={finishEdit}
-              />
+        <MidweekChrome
+          weeks={midweekWeeks} week={week} setWeek={setWeek} view={view} setView={setView}
+          editMode={editMode} setEditMode={setEditMode} canEdit={canEdit}
+          publishResult={publishResult} publishing={publishing} onPublish={handlePublish}
+          onFinishEdit={finishEdit}
+          exportOpen={exportOpen} setExportOpen={setExportOpen} menuRef={menuRef}
+          captureRef={captureRef} pdfNodesRef={midweekPdfNodesRef} getAssign={getAssign}
+          hasMwSuggestions={hasMwSuggestions} mwPrefix={mwPrefix}
+          acceptAllSuggestions={acceptAllSuggestions} clearSuggestions={clearSuggestions}
+          setPage={setPage} suggestingMw={suggestingMw} setSuggestingMw={setSuggestingMw}
+          fetchMidweekSuggestions={fetchMidweekSuggestions}
+          onDeleteWeek={async (w) => { setEditMode(false); await deleteMidweekWeek(w.id); }}
+          updateMidweekWeek={updateMidweekWeek}
+        >
+              <FitToScreen>
+                <MidweekWeek
+                  week={midweekWeeks[week]}
+                  editMode={editMode}
+                  getAssign={getAssign}
+                  openSheet={openSheet}
+                  updateMidweekWeek={updateMidweekWeek}
+                  addMidweekPart={addMidweekPart}
+                  deleteMidweekPart={deleteMidweekPart}
+                  cardRef={captureRef}
+                  getSuggestion={getSuggestion}
+                  onAccept={onAccept}
+                  onClear={onClear}
+                  clearSlot={clearSlot}
+                  onFinishEdit={finishEdit}
+                />
+              </FitToScreen>
               {/* The PDF capture: a read-only copy of THIS week at print width,
                   so a phone PDF is the desktop card and an edit-mode PDF
                   carries no edit controls. JPG / 複製圖片 use it too in edit
@@ -494,11 +544,8 @@ export default function MeetingsPage({
                   />
                 )}
               </PrintStage>
-            </>
-          )}
-        </div>
+        </MidweekChrome>
       )}
-
       {view === 'weekend' && (
         <div className="mw-container">
           <div className="toolbar">

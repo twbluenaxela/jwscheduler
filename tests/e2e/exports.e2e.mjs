@@ -125,8 +125,10 @@ async function openFixture(ctx, route, { query = '', init = null } = {}) {
 }
 
 // Opens the 匯出 trigger and waits for the panel to be on screen.
-async function openExport(page, label = /匯出/) {
-  await page.getByRole('button', { name: label }).first().click();
+async function openExport(page) {
+  // Scope to the fixture's main: the midweek fixture now mounts the real
+  // sidebar, whose 匯入 / 匯出 nav item would otherwise match a role-name query.
+  await page.locator('.menuwrap > .btn').first().click();
   await page.locator('.menu__item').first().waitFor({ state: 'visible', timeout: 30_000 });
 }
 

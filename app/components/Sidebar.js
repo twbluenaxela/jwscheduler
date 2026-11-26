@@ -1,7 +1,7 @@
 'use client';
 import Image from 'next/image';
 
-export default function Sidebar({ page, setPage, congName, scheduleStats, role, onAdmin, canLiterature }) {
+export default function Sidebar({ page, setPage, congName, scheduleStats, role, onAdmin, canLiterature, newFormCount = 0 }) {
   const canEdit = role === 'ADMIN' || role === 'SYSADMIN';
   const isSysadmin = role === 'SYSADMIN';
   const items = [
@@ -84,15 +84,20 @@ export default function Sidebar({ page, setPage, congName, scheduleStats, role, 
           <button
             key={item.id}
             className="navitem"
+            aria-label={item.label}
+            title={item.label}
             aria-current={page === item.id ? 'true' : 'false'}
             onClick={() => setPage(item.id)}
           >
-            {item.icon}
+            <span className="navitem__icon">
+              {item.icon}
+              {item.id === 'literature' && newFormCount > 0 && <span className="lit-nav-dot" aria-label={`${newFormCount} 筆新申請`} />}
+            </span>
             <span>{item.label}</span>
           </button>
         ))}
         {isSysadmin && (
-          <button className="navitem" onClick={onAdmin}>
+          <button className="navitem" aria-label="系統管理" title="系統管理" onClick={onAdmin}>
             <svg viewBox="0 0 24 24" className="navicon"><path d="M12 3l7 3v6c0 4-3 6.5-7 9-4-2.5-7-5-7-9V6z" /></svg>
             <span>系統管理</span>
           </button>
