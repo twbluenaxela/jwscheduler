@@ -835,7 +835,7 @@ export default function App({ initialPage = 'meetings' }) {
   return (
     <>
       <div className="shell">
-        <Sidebar page={page} setPage={setPage} congName={congName} scheduleStats={scheduleStats} role={role} canLiterature={canLiterature} onAdmin={() => router.push('/admin')} />
+        <Sidebar page={page} setPage={setPage} congName={congName} scheduleStats={scheduleStats} role={role} canLiterature={canLiterature} newFormCount={newFormCount} onAdmin={() => router.push('/admin')} />
         <TopBar page={page} />
         <div className="content">
           {page === 'meetings' && (

@@ -86,6 +86,7 @@ html, body {
 }
 .navitem:hover { background: var(--surface-2); color: var(--ink); }
 .navitem[aria-current="true"] { background: var(--ink); color: #fff; }
+.navitem__icon { position: relative; display: inline-flex; flex: none; }
 .navicon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .sidenav__foot { margin-top: auto; }
 .sidenav__health {
@@ -144,6 +145,13 @@ html, body {
 .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
 .toolbar__title { font-size: 15px; font-weight: 700; color: var(--ink-2); }
 .toolbar__spacer { flex: 1; }
+
+/* Zoom-to-fit (iPad only): the wrapper is the only zoomed element; the card
+   inside keeps the untouched desktop markup/CSS. Its layout width is set by
+   FitToScreen so the zoomed card spans the content area exactly. Outside
+   700–1366px the component renders a fragment, so none of this applies. */
+.fit-to-screen { display: block; }
+.fit-to-screen__inner { width: 100%; }
 
 /* ── Midweek container: nav strip + card as one unit ── */
 .mw-container { width: 100%; }
@@ -1675,15 +1683,17 @@ body.editing .week-edit__input { background: #fff; }
 }
 
 /* ============================= Tablet (iPad) ============================= */
-/* 721–1080px (iPad portrait is 768/810/834px): the full 236px sidenav steals so
-   much width that part titles wrap and the card grows past the screen. Collapse
-   it to an icon rail so rows stay single-line. */
-@media (min-width: 721px) and (max-width: 1080px) {
+/* 721–1366px: every iPad (portrait and landscape) keeps the compact 68px icon
+   rail, so the card is not robbed of 236px by the desktop sidebar. The full
+   sidebar and the centred max-width shell return only at ≥1367px (desktop);
+   phones (≤720px) keep their topbar/tabbar and no sidebar. */
+@media (min-width: 721px) and (max-width: 1366px) {
+  .shell { max-width: none; }
   .sidenav { width: 68px; padding: 20px 10px 14px; gap: 18px; }
   .sidenav .brand { justify-content: center; }
   .sidenav .brand__name, .sidenav .brand__cong { display: none; }
   .navitem { justify-content: center; padding: 12px 0; gap: 0; }
-  .navitem > span { display: none; }
+  .navitem > span:not(.navitem__icon) { display: none; }
   .sidenav__health { display: none; }
   .content { padding: 20px 22px 32px; }
 }
@@ -3289,190 +3299,6 @@ button.service-month-card { cursor: pointer; }
 .lit-order-row--paused .lit-order-quantity small,
 .lit-order-row--paused .lit-order-code { color: var(--ink-2); }
 
-/* ============================= iPad fit ============================= */
-/* Tablet-only, height-driven layout: the live 週中 card fills the viewport
-   below the app chrome (100dvh, so mobile Safari's toolbars are respected),
-   and the rows share the leftover height. Phones (≤699px), desktop (≥1367px)
-   and the off-screen print cards keep their own rhythm untouched. Every rule
-   is scoped with :where() so the .print-stage restoration below still wins. */
-@media (min-width: 700px) and (max-width: 1366px) {
-  /* The fixture stands in for the real 聚會 page: 80px emulates Safari's
-     toolbars, the flex column subtracts every real chrome element above the
-     card, and the card takes all that is left. */
-  main:has(> .card) {
-    height: calc(100dvh - 80px);
-    display: flex;
-    flex-direction: column;
-  }
-  /* Real 聚會 page: 100dvh is the visible viewport on iPadOS. The toolbar,
-     week picker and (in edit mode) type bar are flex siblings above the card. */
-  .content:has(.mw-container) {
-    height: 100dvh;
-    padding-bottom: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .mw-container {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* One header band: date + weekday/time + reading lead, roles trail on the
-     same baseline. All flex children, no stacked role grid. */
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-editbar {
-    flex: 0 0 auto;
-    padding: 7px 18px;
-    min-height: 36px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head {
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 10px 18px;
-    padding: 12px 18px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__date {
-    flex: 0 0 auto;
-    font-size: clamp(22px, 3.2dvh, 28px);
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__main {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__sub {
-    margin-top: 0;
-    gap: 10px;
-    flex-wrap: nowrap;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__roles {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 4px 10px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-head__roles .who { font-size: 13px; min-height: 32px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-type-badge { font-size: clamp(12px, 1.5dvh, 13px); }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-quiet-input {
-    border-bottom-color: var(--line-2);
-  }
-
-  /* Rows stretch to divide the leftover height. Section bands stay fixed.
-     The column wrappers are display:contents outside the two-column layout,
-     so section order and every other viewport are unaffected. */
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-body {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    padding: 0 18px 10px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col,
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col > .rows {
-    display: contents;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .band {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    min-height: clamp(26px, 3.5dvh, 32px);
-    padding: 4px 14px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .band__title {
-    font-size: clamp(15px, 1.9dvh, 16px);
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row,
-  body.editing :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row {
-    flex: 1 1 0;
-    min-height: clamp(44px, 5.6dvh, 60px);
-    padding: 8px 14px;
-    gap: 10px;
-    align-items: center;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__main {
-    grid-template-columns: 58px 26px minmax(0, 1fr);
-    column-gap: 10px;
-    min-height: 36px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__time {
-    font-size: clamp(13.5px, 1.7dvh, 15px);
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__part {
-    font-size: clamp(15px, 1.95dvh, 17px);
-    line-height: 1.35;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__part .dur,
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__scenario {
-    font-size: clamp(13px, 1.6dvh, 14px);
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .partnum,
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .role-label,
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .row__assign .role-label {
-    font-size: 13px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .who {
-    display: inline-flex;
-    align-items: center;
-    min-height: 32px;
-    padding: 4px 10px;
-    font-size: clamp(13px, 1.6dvh, 14px);
-    line-height: 1.2;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .who--pair .who { padding: 4px 8px; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-seam-row { height: 0; flex: 0 0 0; }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-inline,
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-addinline,
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-delconfirm {
-    flex: 0 0 auto;
-  }
-}
-
-/* Landscape iPad: two equal-bottom columns, kept as one card by a shared
-   gutter and a hairline divider. The ＋ seams sit in the left gutter on the
-   row divider, never across a time. */
-@media (min-width: 700px) and (max-width: 1199px) and (orientation: landscape) and (max-height: 900px) {
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-body {
-    flex-direction: row;
-    gap: 28px;
-    padding-bottom: 12px;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col {
-    display: flex;
-    flex: 1 1 0;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col--trail {
-    padding-left: 4px;
-    border-left: 1px solid var(--line);
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-col--trail .row--closing {
-    flex: 0 0 auto;
-    min-height: clamp(44px, 5.6dvh, 60px);
-    margin-top: 14px;
-    border-top: 1px solid var(--line);
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-seam-row {
-    grid-template-columns: 24px minmax(0, 1fr);
-    column-gap: 0;
-  }
-  :where(.card:not(:is(.print-stage, .mw-pdf-captures) .card)) .mw-seam {
-    grid-column: 1;
-    justify-self: start;
-    margin-left: -2px;
-    width: 22px;
-    height: 22px;
-    transform: translateY(-50%);
-  }
-}
 
 /* PDF/print captures use a fixed desktop-width card even when exported on a
    phone. Viewport media queries still apply off-screen, so explicitly restore
@@ -3890,4 +3716,118 @@ body.editing :is(.print-stage, .mw-pdf-captures) .row { padding: 3px 22px; }
   .person .quals { grid-column: 6; grid-row: 1; }
   .person .person__note { grid-column: 2 / 5; grid-row: 2; margin: 0; }
   .person .ov-caret { grid-column: 7; }
+}
+
+/* ============================= iPad spreadsheet rhythm ============================= */
+/* Only the zoomed (tablet) card lives inside .fit-to-screen__inner, so every
+   rule here is automatically scoped to iPad widths — phones, desktop and the
+   off-screen print stages keep their untouched styles. One line per part, fixed
+   even row height, a fixed right-aligned assignee column: the whole week reads
+   like a spreadsheet without losing the desktop colours, chips or bands. */
+.fit-to-screen__inner .card { position: relative; }
+
+.fit-to-screen__inner .mw-head {
+  display: flex; align-items: center; flex-wrap: nowrap; gap: 10px;
+  height: 44px; padding: 0 18px;
+}
+.fit-to-screen__inner .mw-head__date { flex: none; font-size: 22px; }
+.fit-to-screen__inner .mw-head__main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
+.fit-to-screen__inner .mw-head__sub { margin: 0; gap: 8px; flex-wrap: nowrap; min-width: 0; }
+.fit-to-screen__inner .weekday-pill { flex: none; }
+.fit-to-screen__inner .mw-type-badge { font-size: 12px; }
+.fit-to-screen__inner .mw-head__reading { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fit-to-screen__inner .mw-head__reading-value { display: inline-block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fit-to-screen__inner .mw-head__roles { flex: none; display: flex; align-items: center; gap: 4px 10px; }
+.fit-to-screen__inner .mw-head__roles .who { font-size: 15px; min-height: 26px; }
+
+/* The 完成 control becomes a small overlay in the header line, so edit mode
+   adds zero height to the card. */
+.fit-to-screen__inner .mw-editbar {
+  position: absolute; top: 9px; right: 18px; z-index: 5;
+  height: 0; padding: 0; border: 0; background: transparent;
+  display: flex; align-items: flex-start; overflow: visible;
+}
+.fit-to-screen__inner .mw-editbar > span { display: none; }
+.fit-to-screen__inner .mw-editbar .btn {
+  min-height: 26px; height: 26px; padding: 2px 9px; font-size: 12px;
+  transform: none;
+}
+body.editing .fit-to-screen__inner .mw-head { padding-right: 96px; }
+
+.fit-to-screen__inner .mw-body { padding: 0 18px; }
+.fit-to-screen__inner .band { height: 24px; padding: 0 14px; }
+.fit-to-screen__inner .band__title { font-size: 15px; }
+.fit-to-screen__inner .mw-band-end { font-size: 13px; }
+.fit-to-screen__inner .rows { padding: 0; }
+
+.fit-to-screen__inner .row,
+body.editing .fit-to-screen__inner .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  align-items: center; gap: 8px;
+  height: 44px; min-height: 44px; padding: 0;
+  border-bottom: 1px solid var(--line);
+}
+.fit-to-screen__inner .row__main {
+  display: grid; grid-template-columns: 58px 26px minmax(0, 1fr);
+  align-items: center; gap: 8px;
+  width: 100%; min-height: 0; height: 100%; padding: 0;
+  border: 0; border-radius: 0; background: transparent; color: inherit;
+  font: inherit; text-align: left;
+}
+.fit-to-screen__inner .row__time { font-size: 13px; white-space: nowrap; }
+.fit-to-screen__inner .dotwrap { gap: 4px; white-space: nowrap; }
+.fit-to-screen__inner .partnum { font-size: 12px; }
+.fit-to-screen__inner .row__part { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 15px; line-height: 1.25; }
+.fit-to-screen__inner .row__part-main { min-width: 0; overflow-wrap: anywhere; }
+.fit-to-screen__inner .row__part .dur,
+.fit-to-screen__inner .row__scenario,
+.fit-to-screen__inner .cbs-ref { font-size: 14px; }
+.fit-to-screen__inner .row__assign {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center; column-gap: 6px;
+  width: 240px; justify-self: end;
+}
+.fit-to-screen__inner .row__assign > .role-label { grid-column: 1; text-align: right; font-size: 13px; }
+/* One spreadsheet row: role, name, and (in edit mode) the ＋ ghost chip each
+   get their own track, so a ghost can never wrap under the name. Pair rows span
+   the name + ghost tracks, exactly where the second chip sits. */
+.fit-to-screen__inner .row__assign > .who:not(.who--ghost-add) { grid-column: 2; }
+.fit-to-screen__inner .row__assign > .who--ghost-add { grid-column: 3; }
+.fit-to-screen__inner .row__assign > .who--pair { grid-column: 2 / 4; }
+.fit-to-screen__inner .row__assign > .who,
+.fit-to-screen__inner .row__assign > .who--pair { justify-self: start; }
+.fit-to-screen__inner .who { font-size: 15px; min-height: 26px; padding: 3px 9px; white-space: nowrap; }
+.fit-to-screen__inner .who--pair .who { padding: 3px 7px; }
+.fit-to-screen__inner .role-label { font-size: 13px; white-space: nowrap; }
+.fit-to-screen__inner .mw-seam-row { height: 0; }
+
+/* Portrait has a narrower layout width after zooming; give each part a little
+   more room so long titles settle on at most two lines, still in an even
+   spreadsheet rhythm. Landscape keeps the tighter 48px row. */
+@media (orientation: portrait) {
+  .fit-to-screen__inner .row,
+  body.editing .fit-to-screen__inner .row {
+    height: 72px; min-height: 72px;
+    grid-template-columns: minmax(0, 1fr) 200px;
+  }
+  .fit-to-screen__inner .row__assign {
+    width: 190px; grid-template-columns: 54px minmax(0, 1fr) auto;
+  }
+}
+
+
+
+/* Real midweek chrome at iPad widths: toolbar and navstrip stay on one compact
+   line above the card; FitToScreen subtracts their true height from the fit. */
+@media (min-width: 700px) and (max-width: 1366px) {
+  .mw-container > .toolbar { margin-bottom: 6px; gap: 8px; }
+  .mw-container > .toolbar .tab { padding: 4px 12px; font-size: 13px; }
+  .mw-container > .toolbar .btn { min-height: 32px; }
+  .mw-container > .mw-navstrip { padding: 4px 10px; gap: 6px; }
+  .mw-container > .mw-navstrip .iconbtn { width: 32px; height: 32px; }
+  .mw-container > .mw-navstrip .wkpick__btn { height: 32px; }
+  .mw-type-bar { padding: 3px 10px; gap: 6px; }
+  .mw-type-chip { min-height: 24px; padding: 2px 8px; }
+  .mw-type-label-input { min-height: 26px; }
 }
