@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet } from './literature/PubThumb';
-import Menu from './literature/Menu';
 import HeaderMenu from './HeaderMenu';
 import PrintStage from './PrintStage';
 import ServicesPrintSheet from './ServicesPrint';
@@ -639,7 +638,7 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
     };
   }, [exportJob]);
   return (
-    <section className="services-page">
+    <section className="services-page wide-grid">
       <div className="service-tabs-sticky">
         <div
           className={`service-tabs-mask ${overflow.left ? 'fade-left' : ''} ${overflow.right ? 'fade-right' : ''}`}
@@ -662,10 +661,11 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
             )}
           </div>
         </div>
+        <span className={`service-tabs-cue${overflow.right ? ' is-on' : ''}`} aria-hidden="true">›</span>
       </div>
       {category && (
         <>
-          <div className="service-toolbar">
+          <div className="service-toolbar page-bar">
             <div className="service-switcher">
               <button
                 aria-label={category.kind === 'groups' ? '上一年' : '上個月'}
@@ -683,10 +683,7 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
                 ›
               </button>
             </div>
-            <div className="service-header-actions">
-              {category.kind === 'field' && canEdit && (
-                <Menu items={[{ label: '複製上個月的時段', onSelect: copyMonth }]} />
-              )}
+            <div className="service-header-actions page-bar__actions">
               {category.kind === 'field' && canEdit && (
                 <button
                   className="btn btn--primary service-add-button"
@@ -696,8 +693,14 @@ export default function ServicesPage({ firebaseUser, canEdit, people = [] }) {
                 </button>
               )}
               {/* The sheet always covers the month's whole schedule, whatever tab
-                  is open, so 匯出 is offered on every category. */}
+                  is open, so 匯出 is offered on every category. The field-only
+                  copy action shares this one overflow menu on phones. */}
               <HeaderMenu label="匯出" disabled={exporting}>
+                {category.kind === 'field' && canEdit && (
+                  <button type="button" role="menuitem" className="menu__item" onClick={copyMonth}>
+                    複製上個月的時段
+                  </button>
+                )}
                 <button type="button" role="menuitem" className="menu__item" onClick={() => startExport('pdf')}>
                   <span className="menu__ic">▤</span>下載 PDF
                 </button>

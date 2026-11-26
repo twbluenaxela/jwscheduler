@@ -551,7 +551,9 @@ body.editing .mw-quiet-input:focus { background: var(--accent-soft); }
 @media (max-width: 720px) { .mw-snack { bottom: 78px; } }
 
 /* ============================= Weekend table ============================= */
-.wk-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+/* `clip` keeps the rounded card edge without creating a scroll container, so
+   the sticky title/chips and table head below can stick to the viewport. */
+.wk-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: clip; }
 .wk-title {
   padding: 20px 24px 16px; border-bottom: 1px solid var(--line);
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
@@ -566,6 +568,23 @@ body.editing .mw-quiet-input:focus { background: var(--accent-soft); }
   position: sticky; top: 0; z-index: 5;
   background: var(--ink); color: #fff; font-weight: 700; font-size: 13px;
   letter-spacing: .05em; text-align: left; padding: 11px 12px; white-space: nowrap;
+}
+/* Wide screens: the table fits, so nothing between the head and the viewport
+   scrolls. Stick the title (with its filter chips) and park the head directly
+   beneath it — 68px is the measured title height at these widths.
+   Narrower screens keep `.tablescroll`'s own horizontal scroller; the head
+   sticks inside that instead. */
+@media (min-width: 961px) {
+  .wk-title {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--surface);
+  }
+  .tablescroll { overflow: visible; }
+  .wk-table thead th { top: 68px; z-index: 9; }
+}
+@media (max-width: 720px) {
+  /* The app's own topbar is sticky at top:0 with z-index 40 on phones. */
+  .wk-title { position: sticky; top: 58px; z-index: 30; background: var(--surface); }
 }
 .wk-table thead th:first-child { padding-left: 24px; }
 .wk-table thead th:last-child { padding-right: 24px; }
@@ -832,7 +851,15 @@ body.editing .mw-quiet-input:focus { background: var(--accent-soft); }
 
 /* ============================= Overview — action-first agenda ============================= */
 #ovBody { max-width: 720px; }
-.ov-chips { margin-bottom: 18px; }
+/* Keep the filter chips reachable while scanning a long schedule. On phones the
+   app's sticky topbar occupies top:0 (z-index 40), so sit below it. */
+.ov-chips {
+  display: flex; width: 100%; margin-bottom: 12px;
+  padding: 6px 0;
+  position: sticky; top: 0; z-index: 30;
+  background: var(--bg);
+}
+@media (max-width: 720px) { .ov-chips { top: 58px; } }
 
 .ag-alert {
   background: color-mix(in srgb, var(--ministry-soft) 40%, var(--surface));
@@ -968,7 +995,7 @@ body.editing .mw-quiet-input:focus { background: var(--accent-soft); }
   transition: grid-template-columns .4s cubic-bezier(.4, 0, .2, 1);
 }
 /* No card selected: collapse the detail column and recenter the list */
-.people-layout--solo { grid-template-columns: minmax(0, 1fr) minmax(0, 0fr); }
+.people-layout--solo { grid-template-columns: minmax(0, 1fr) minmax(0, 0fr); gap: 0; }
 .people-layout--solo .people-list { margin-inline: auto; }
 .people-detail--inline { grid-column: 1 / -1; margin: 2px 0 4px; border-color: var(--accent); box-shadow: 0 0 0 1px rgba(47,111,143,.14), var(--shadow); }
 .people-detail { animation: people-detail-in .28s cubic-bezier(.4, 0, .2, 1); }
@@ -1449,7 +1476,8 @@ body.editing .week-edit__input { background: #fff; }
   .mw-delconfirm__actions { width: 100%; }
   .mw-delconfirm__actions .btn { min-height: 44px; flex: 1; justify-content: center; }
   .band { padding: 8px 16px; }
-  .wk-wrap .tablescroll, .wk-wrap .legend { display: none; }
+  .wk-wrap .tablescroll { display: none; }
+  .wk-wrap .legend { padding: 10px 16px; gap: 12px; font-size: 12px; }
   .wk-cards { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
   .wk-title { padding: 16px 16px 14px; }
   .wk-title h2 { font-size: 18px; }
@@ -2178,6 +2206,14 @@ body.editing .week-edit__input { background: #fff; }
 .lit-detail { max-width: 720px; }
 .lit-count-filters { max-width: 420px; }
 .lit-back { display: inline-flex; align-items: center; min-width: 44px; }
+/* Screen-only: let the back button keep its label on one line (the 25px icon
+   plus two characters do not fit in the old 44px box). Print/PDF is unaffected. */
+@media screen {
+  .lit-back { flex: none; min-width: 0; gap: 6px; padding: 0 8px; white-space: nowrap; }
+}
+@media screen and (max-width: 720px) {
+  .lit-count-value input { width: 72px; height: 44px; font-size: 17px; }
+}
 .lit-remainder-details summary::-webkit-details-marker { display: none; }
 .lit-remainder-details summary { display: flex; align-items: center; list-style: none; }
 .lit-remainder-details summary svg { transition: transform 150ms; }
@@ -3589,6 +3625,7 @@ body.editing :is(.print-stage, .mw-pdf-captures) .row { padding: 3px 22px; }
   overflow: visible;
 }
 .print-stage--weekend .wk-title {
+  position: static;
   padding: 14px 18px 12px;
   border-bottom: 2px solid var(--ink);
   flex-wrap: nowrap;
@@ -3738,7 +3775,7 @@ body.editing :is(.print-stage, .mw-pdf-captures) .row { padding: 3px 22px; }
   padding: 8px 12px; background: var(--surface-2);
 }
 .reimport-week {
-  display: flex; align-items: baseline; gap: 8px;
+  display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: baseline; gap: 8px;
   padding: 6px 0; border-bottom: 1px solid var(--line);
 }
 .reimport-week:last-child { border-bottom: 0; }
@@ -3760,6 +3797,12 @@ body.editing :is(.print-stage, .mw-pdf-captures) .row { padding: 3px 22px; }
 }
 .reimport-option:hover { border-color: var(--accent); }
 .reimport-option--selected { border-color: var(--accent); background: var(--accent-soft); }
+/* Visual warning only — the option, its label and its click behaviour are
+   unchanged, and 保留之前的修改 stays the default selection. */
+.reimport-option--danger .reimport-option__title::before { content: '⚠ '; color: var(--special); }
+.reimport-option--danger.reimport-option--selected {
+  border-color: var(--special); background: var(--living-soft);
+}
 .reimport-option:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .reimport-option__radio { position: absolute; opacity: 0; width: 0; height: 0; }
 .reimport-option__title { font-weight: 800; color: var(--ink); font-size: 15px; }
@@ -3771,4 +3814,80 @@ body.editing :is(.print-stage, .mw-pdf-captures) .row { padding: 3px 22px; }
 @media (max-width: 480px) {
   .reimport-actions { flex-direction: row; }
   .reimport-btn { width: 100%; }
+}
+
+/* ============================= Round 2: shared desktop grid ============= */
+/* One width contract for the four list pages. 820px iPads keep their existing
+   single column; the two-column break starts at 1180px (iPad landscape). */
+@media screen and (min-width: 961px) {
+  #ovBody, .services-page, .lit-detail, .people-list { max-width: 1240px; }
+  /* Header and content share this wrapper, so their right edges always agree. */
+  .wide-grid { max-width: 1240px; }
+  .people-layout--solo .people-list { margin-inline: 0; }
+}
+@media screen and (min-width: 1180px) {
+  .ag-months, .lit-count-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; }
+  .service-field-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Shared page header language: identity left, actions right, filters beneath. */
+.page-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.page-bar__id { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.page-bar__title { font-size: 20px; font-weight: 900; letter-spacing: .01em; }
+.page-bar__meta { font-size: 13px; color: var(--ink-3); font-weight: 600; }
+.page-bar__actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.page-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+/* Heatmap on a phone: the whole roster scrolls with the page, not inside a
+   fixed-height card. Horizontal month scrolling stays inside the grid. */
+.hm-scrollcue { display: none; }
+@media screen and (max-width: 720px) {
+  .hm-root { max-height: none; }
+  .hm-tablewrap { flex: none; overflow-x: auto; }
+  .hm-scrollcue {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 16px 0; font-size: 12px; font-weight: 700; color: var(--ink-3);
+  }
+  .hm-scrollcue::before { content: '↕'; font-size: 14px; color: var(--accent); }
+}
+
+/* Services phone: month + primary action on one row; 複製 + 匯出 share one
+   overflow menu, and the clipped tab edge gets a visible cue. */
+.service-tabs-sticky { position: sticky; }
+.service-tabs-cue { display: none; }
+@media screen and (max-width: 720px) {
+  .service-toolbar { flex-wrap: nowrap; row-gap: 0; }
+  .service-switcher { flex: 0 0 auto; }
+  .service-switcher button { width: 36px; font-size: 20px; }
+  .service-switcher strong { font-size: 14px; }
+  .service-header-actions { margin-left: auto; justify-content: flex-end; flex: 0 0 auto; }
+  .service-header-actions .menuwrap > .btn { width: auto; padding: 0 8px; font-size: 12px; }
+  .service-header-actions .menuwrap > .btn .caret { font-size: 12px; }
+  .service-add-button { padding: 0 10px; }
+  .service-tabs-cue.is-on {
+    display: grid; place-items: center;
+    position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+    width: 26px; height: 34px; font-size: 22px; font-weight: 700;
+    color: var(--accent); background: var(--surface); pointer-events: none;
+  }
+}
+
+/* People desktop: a column-aligned dense list instead of a centered island. */
+@media screen and (min-width: 1024px) {
+  .people-list { display: flex; flex-direction: column; gap: 4px; }
+  .person {
+    display: grid; align-items: center; gap: 12px 10px;
+    grid-template-columns: 40px minmax(150px, 1.5fr) 72px 76px 100px minmax(150px, 1.4fr) 18px;
+    padding: 9px 14px;
+  }
+  .person__body, .person__top { display: contents; }
+  .avatar { grid-column: 1; }
+  .person__name { grid-column: 2; }
+  .person .g-badge { grid-column: 3; justify-self: start; }
+  .person .settings-badge { grid-column: 4; justify-self: start; }
+  .person .appt { grid-column: 5; justify-self: start; }
+  .person .preference-tag { grid-column: 5; grid-row: 2; justify-self: start; }
+  .person .quals { grid-column: 6; grid-row: 1; }
+  .person .person__note { grid-column: 2 / 5; grid-row: 2; margin: 0; }
+  .person .ov-caret { grid-column: 7; }
 }

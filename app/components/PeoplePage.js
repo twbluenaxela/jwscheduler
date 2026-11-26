@@ -552,14 +552,22 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
 
   return (
     <section>
-      <div className="people-header">
-        <div>
-          <div className="toolbar">
-            <span className="toolbar__title">人員 · 共 {people.length} 位</span>
-          </div>
+      <div className="wide-grid">
+      <div className="people-header page-bar">
+        <div className="page-bar__id">
+          <span className="page-bar__title">人員</span>
+          <span className="page-bar__meta">共 {people.length} 位</span>
         </div>
 
-        <div className="people-tools">
+        <div className="page-bar__actions">
+          {canEdit && (
+            <button className="btn btn--primary" aria-label="新增人員" onClick={addPerson}>
+              ＋ 新增
+            </button>
+          )}
+        </div>
+
+        <div className="people-tools page-filters">
           <div className="search">
             <span className="search__ic">⌕</span>
             <input
@@ -569,11 +577,6 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
             />
           </div>
           <select className="settings-role-select" aria-label="小組篩選" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}><option value="all">全部小組</option>{['A','B','C','D','E'].map(g => <option key={g} value={g}>{g}組</option>)}<option value="none">未分組</option></select>
-          {canEdit && (
-            <button className="btn btn--primary" aria-label="新增人員" onClick={addPerson}>
-              ＋ 新增
-            </button>
-          )}
         </div>
       </div>
 
@@ -637,6 +640,7 @@ export default function PeoplePage({ people, setPeople, midweekWeeks = [], weeke
         {!isMobile && selectedPerson && (
           <aside className="people-detail">{detailBody}</aside>
         )}
+      </div>
       </div>
     </section>
   );

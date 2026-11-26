@@ -243,7 +243,7 @@ export default function CountSheet({ id, items, request, onBack }) {
   }
 
   return (
-    <div className="lit-detail">
+    <div className="lit-detail wide-grid">
       <button
         className="lit-back"
         onClick={async () => {
@@ -253,13 +253,16 @@ export default function CountSheet({ id, items, request, onBack }) {
       >
         <Icon name="back" /> 清點
       </button>
-      <div className="lit-header lit-count-header">
-        <h1>{monthLabel}</h1>
-        {!done && <Menu items={[
+      <div className="lit-header lit-count-header page-bar">
+        <div className="page-bar__id">
+          <h1 className="page-bar__title">{monthLabel}</h1>
+          <span className="page-bar__meta">已清點 {counted}/{lines.length}</span>
+        </div>
+        {!done && <div className="page-bar__actions"><Menu items={[
           { label: 'S-28 表', onSelect: () => setReport('s28') },
           { label: 'JW Hub 填寫清單', onSelect: () => setReport('hub') },
           { label: '加入品項', onSelect: () => { setAddQuery(''); setAdding(true); } },
-        ]} />}
+        ]} /></div>}
       </div>
       {done && <div className="lit-count-complete">
         <div className="lit-count-reports">
@@ -296,7 +299,7 @@ export default function CountSheet({ id, items, request, onBack }) {
         <button aria-label="清除搜尋" onClick={() => setQuery('')}><Icon name="close" /></button>
       </div>}
       {error && <div className="imp-error" role="alert">{error}</div>}
-      {searching ? visible.map(renderRow) : sections.map((section) => {
+      {searching ? visible.map(renderRow) : <div className="lit-count-sections">{sections.map((section) => {
         const isExpanded = !!expanded[section.group];
         const uncountedZeros = section.zeros.filter((line) => line.onHand === null);
         return (
@@ -330,7 +333,7 @@ export default function CountSheet({ id, items, request, onBack }) {
             </>}
           </section>
         );
-      })}
+      })}</div>}
       {!done && <div className="lit-count-footer">
         <span>已清點 {counted} / {lines.length}</span>
         <button className="btn btn--primary" onClick={finish}>完成清點</button>

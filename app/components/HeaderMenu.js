@@ -60,6 +60,7 @@ export default function HeaderMenu({ label = '匯出', disabled = false, childre
         type="button"
         className="btn"
         disabled={disabled}
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={(event) => {

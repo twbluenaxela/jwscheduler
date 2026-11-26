@@ -56,7 +56,7 @@ export default function ReimportDialog({
               <span className="reimport-option__title">保留之前的修改</span>
               <span className="reimport-option__desc">已在資料庫的週次不變，只匯入新的週次</span>
             </label>
-            <label className={`reimport-option${mode === 'replace' ? ' reimport-option--selected' : ''}`}>
+            <label className={`reimport-option reimport-option--danger${mode === 'replace' ? ' reimport-option--selected' : ''}`}>
               <input
                 type="radio"
                 name="reimportMode"
