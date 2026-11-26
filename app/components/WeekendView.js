@@ -180,6 +180,12 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
         </div>
       </div>
 
+      <div className="legend">
+        <span><i style={{ background: 'var(--special)' }} />特別週／國際大會</span>
+        <span><i style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)' }} />招待組別</span>
+        <span><i style={{ background: 'var(--living-soft)', border: '1px solid var(--living)' }} />外地演講安排</span>
+      </div>
+
       {/* Desktop table */}
       {rows.length === 0 && !editMode ? (
         <div className="people-empty">目前沒有週末安排資料。</div>
@@ -401,12 +407,6 @@ export default function WeekendView({ filter, setFilter, weekendRows = [], getAs
             <button className="we-add-btn" onClick={() => addRow('event')}>＋ 新增事項</button>
           </div>
         )}
-      </div>
-
-      <div className="legend">
-        <span><i style={{ background: 'var(--special)' }} />特別週／國際大會</span>
-        <span><i style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)' }} />招待組別</span>
-        <span><i style={{ background: 'var(--living-soft)', border: '1px solid var(--living)' }} />外地演講安排</span>
       </div>
     </div>
 

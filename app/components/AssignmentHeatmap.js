@@ -270,14 +270,24 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
 
   return (
     <div className="hm-root" ref={cardRef}>
-      <div className="hm-header">
-        <div>
-          <div className="hm-title">指派分布</div>
-          <div className="hm-subhead">
-            {periodLabel} · {rows.length} 位
+      <div className="hm-header page-bar">
+        <div className="page-bar__id">
+          <div>
+            <div className="hm-title">指派分布</div>
+            <div className="hm-subhead">
+              {periodLabel} · {rows.length} 位
+            </div>
+          </div>
+          <div className="page-bar__actions hm-noexport">
+            <HeatmapExportMenu
+              cardRef={cardRef}
+              periodLabel={periodLabel}
+              buildText={() => buildGridText(data, opt.mode)}
+              buildXlsx={() => downloadHeatmapGridXlsx(data, opt.mode, periodLabel)}
+            />
           </div>
         </div>
-        <div className="hm-filters hm-noexport">
+        <div className="hm-filters hm-noexport page-filters">
           <div className="hm-seg">
             {GENDER_OPTS.map(([v, label]) => (
               <button key={v} className={`hm-seg__btn${gender === v ? ' is-on' : ''}`} onClick={() => setGender(v)}>{label}</button>
@@ -292,14 +302,9 @@ function OverviewGrid({ people, midweekWeeks, weekendRows, getAssign, view, setV
             <button className="hm-arrow" onClick={goPrev} aria-label="上一段期間">‹</button>
             <button className="hm-arrow" disabled={offset <= 0} onClick={goNext} aria-label="下一段期間">›</button>
           </div>
-          <HeatmapExportMenu
-            cardRef={cardRef}
-            periodLabel={periodLabel}
-            buildText={() => buildGridText(data, opt.mode)}
-            buildXlsx={() => downloadHeatmapGridXlsx(data, opt.mode, periodLabel)}
-          />
         </div>
       </div>
+      <div className="hm-scrollcue">滑動查看全部 {rows.length} 位 · 左右滑動看月份</div>
 
       <div className="hm-tablewrap" ref={wrapRef} onMouseLeave={canHover ? close : undefined}>
         <div className="hm-colhead" style={{ height: isMobile ? 30 : 34 }}>

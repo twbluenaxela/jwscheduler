@@ -704,7 +704,8 @@ export default function OverviewPage({
 
   return (
     <section className="ov-section">
-      <div className="toolbar">
+      <div className="wide-grid">
+      <div className="toolbar page-filters">
         <div className="tabs" role="tablist">
           <button
             className="tab"
@@ -764,6 +765,11 @@ export default function OverviewPage({
               ))}
             </div>
           )}
+          {pastRows.length > 0 && (
+            <button className="ov-past-toggle" onClick={() => setShowPast((v) => !v)}>
+              {showPast ? '▲ 隱藏過去的安排' : `▼ 查看過去 ${pastRows.length} 項安排`}
+            </button>
+          )}
           {loading && <div className="people-empty">正在載入會眾資料…</div>}
 
           {!loading && allRows.length === 0 && (
@@ -774,39 +780,36 @@ export default function OverviewPage({
             <>
               <AlertPanel rows={alertRows} onGoToRow={onGoToRow} />
 
-              {futureGroups.map((g) => (
-                <MonthSection
-                  key={`${g.year}-${g.month}`}
-                  year={g.year}
-                  month={g.month}
-                  rows={g.rows}
-                  openItems={openItems}
-                  onToggle={toggleItem}
-                  onGoToRow={onGoToRow}
-                />
-              ))}
+              <div className="ag-months">
+                {futureGroups.map((g) => (
+                  <MonthSection
+                    key={`${g.year}-${g.month}`}
+                    year={g.year}
+                    month={g.month}
+                    rows={g.rows}
+                    openItems={openItems}
+                    onToggle={toggleItem}
+                    onGoToRow={onGoToRow}
+                  />
+                ))}
 
-              {pastRows.length > 0 && (
-                <button className="ov-past-toggle" onClick={() => setShowPast((v) => !v)}>
-                  {showPast ? '▲ 隱藏過去的安排' : `▼ 查看過去 ${pastRows.length} 項安排`}
-                </button>
-              )}
-
-              {showPast && pastGroups.map((g) => (
-                <MonthSection
-                  key={`past-${g.year}-${g.month}`}
-                  year={g.year}
-                  month={g.month}
-                  rows={g.rows}
-                  openItems={openItems}
-                  onToggle={toggleItem}
-                  onGoToRow={onGoToRow}
-                />
-              ))}
+                {showPast && pastGroups.map((g) => (
+                  <MonthSection
+                    key={`past-${g.year}-${g.month}`}
+                    year={g.year}
+                    month={g.month}
+                    rows={g.rows}
+                    openItems={openItems}
+                    onToggle={toggleItem}
+                    onGoToRow={onGoToRow}
+                  />
+                ))}
+              </div>
             </>
           )}
         </div>
       )}
+      </div>
 
       <OvToast toast={toast} onHide={() => setToast(null)} />
     </section>
