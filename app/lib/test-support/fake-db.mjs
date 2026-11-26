@@ -27,8 +27,12 @@ function matchField(value, cond) {
   return value === cond;
 }
 
-const whereMatch = (item, where) =>
-  Object.entries(where ?? {}).every(([k, cond]) => matchField(item[k], cond));
+const whereMatch = (item, where) => {
+  if (!where) return true;
+  if (Array.isArray(where.OR)) return where.OR.some((c) => whereMatch(item, c));
+  if (Array.isArray(where.AND)) return where.AND.every((c) => whereMatch(item, c));
+  return Object.entries(where).every(([k, cond]) => matchField(item[k], cond));
+};
 
 export function makeFakeDb(seed = {}) {
   const stores = {
@@ -93,6 +97,17 @@ export function makeFakeDb(seed = {}) {
       async findFirst({ where, include }) {
         const week = stores.weeks.find((w) => whereMatch(w, where));
         return week ? hydrateWeek(week, include) : null;
+      },
+      async create({ data }) {
+        const week = { id: (stores.weeks.reduce((m, w) => Math.max(m, w.id ?? 0), 0) + 1), ...data };
+        stores.weeks.push(week);
+        return clone(week);
+      },
+      async update({ where: { id }, data }) {
+        const week = stores.weeks.find((w) => w.id === id);
+        if (!week) return null;
+        Object.assign(week, data);
+        return clone(week);
       },
       async findMany({ where, include, orderBy }) {
         let rows = stores.weeks.filter((w) => whereMatch(w, where));

@@ -2,11 +2,13 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { parseEpub } from '../lib/epubParser';
+import { diffImport } from '../lib/reimportDiff.mjs';
 import MidweekWeek from './MidweekWeek';
 import { exportNodesJpeg, exportWeeksXlsx, getMultiWeekExportFilename } from '../lib/midweekExport';
 import { exportCapturesPdf, printCaptures } from '../lib/printPdf';
 import { isMidweekSuspended } from '../lib/weekType.mjs';
 import PdfLayoutSheet from './PdfLayoutSheet';
+import ReimportDialog from './ReimportDialog';
 import PrintStage from './PrintStage';
 import { DEFAULT_LAYOUT, normalizeLayout } from '../lib/pdfLayout.mjs';
 
@@ -106,7 +108,12 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
   const [stage, setStage] = useState('upload'); // upload | parsing | review | done
   const [parsedWeeks, setParsedWeeks] = useState([]);
   const [error, setError] = useState(null);
+  const [showReimportDialog, setShowReimportDialog] = useState(false);
+  const [reimportMode, setReimportMode] = useState('keep'); // 'keep' | 'replace'
   const [dragging, setDragging] = useState(false);
+
+  const reimportDiffs = useMemo(() => diffImport(existingWeeks, parsedWeeks), [existingWeeks, parsedWeeks]);
+  const overlappingCount = reimportDiffs.filter((d) => !d.isNew).length;
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -293,16 +300,25 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
   };
 
   const handleConfirm = async () => {
+    if (overlappingCount > 0 && !showReimportDialog) {
+      setShowReimportDialog(true);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await onImportWeeks?.(parsedWeeks);
+      await onImportWeeks?.(parsedWeeks, reimportMode);
+      setShowReimportDialog(false);
       setStage('done');
     } catch (err) {
       setError(err.message ?? '匯入失敗');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCancelReimport = () => {
+    setShowReimportDialog(false);
   };
 
   const handleReset = () => {
@@ -528,6 +544,17 @@ export default function ImportPage({ onImportWeeks, onResetWeeks, onReapplySched
           </div>
         </div>
       )}
+
+      {/* ── RE-IMPORT CONFIRM DIALOG ── */}
+      <ReimportDialog
+        open={showReimportDialog}
+        diffs={reimportDiffs}
+        mode={reimportMode}
+        onModeChange={setReimportMode}
+        onCancel={handleCancelReimport}
+        onConfirm={handleConfirm}
+        saving={saving}
+      />
 
       {/* ── DONE ── */}
       {stage === 'done' && (

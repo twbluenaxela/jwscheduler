@@ -609,16 +609,16 @@ export default function App({ initialPage = 'meetings' }) {
     }
   }, [canEdit]);
 
-  const saveImportedWeeks = useCallback(async (weeks) => {
+  const saveImportedWeeks = useCallback(async (weeks, mode = 'keep') => {
     const token = await getToken();
     const res = await fetchRetry('/api/midweek-weeks/import', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ weeks }),
+      body: JSON.stringify({ weeks, mode }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '儲存匯入資料失敗');
-    return data.weeks ?? [];
+    return { weeks: data.weeks ?? [], results: data.results ?? [] };
   }, []);
 
   const openSheet = useCallback((slotId, catKey, ctxLabel, currentName, opts) => {
@@ -921,7 +921,7 @@ export default function App({ initialPage = 'meetings' }) {
                   };
                 }));
               }}
-              onImportWeeks={async (weeks) => {
+              onImportWeeks={async (weeks, mode = 'keep') => {
                 const adjusted = weeks.map(w => {
                   const weekStart = w.date; // EPUB date is always the Monday
                   const { dayOffset, time } = getEffectiveSchedule(weekStart, congSettings);
@@ -935,7 +935,18 @@ export default function App({ initialPage = 'meetings' }) {
                     weekdayPill: `${DAY_NAMES[dayOffset]} · ${time}`,
                   };
                 });
-                const savedWeeks = await saveImportedWeeks(adjusted);
+                const savedResult = await saveImportedWeeks(adjusted, mode);
+                const savedWeeks = savedResult.weeks;
+                // Drop assignments that the server cleared (removed parts).
+                if (Array.isArray(savedResult.results)) {
+                  setAssignments((prev) => {
+                    const next = { ...prev };
+                    for (const r of savedResult.results) {
+                      for (const slotId of r.clearedSlotIds ?? []) delete next[slotId];
+                    }
+                    return next;
+                  });
+                }
                 const merged = [...midweekWeeks];
                 for (const w of savedWeeks) {
                   const idx = merged.findIndex((e) => (

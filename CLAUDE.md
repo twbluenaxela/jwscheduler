@@ -58,7 +58,13 @@ app/
     admin/congregations/ — POST create; [id] PATCH rename / DELETE (cascade) (SYSADMIN only)
     admin/users/[id]/  — PATCH: set role + congregationId / DELETE: remove user (DB + Firebase
                          auth via deleteAuthUser); SYSADMIN only, not self
-    midweek-weeks/import/ — POST: save imported weeks + parts to DB
+    midweek-weeks/import/ — POST: save imported weeks + parts to DB. Accepts
+                         `mode: 'keep' | 'replace'` (default 'keep'). 'keep' skips
+                         existing weeks entirely; 'replace' overwrites them (removes
+                         admin-added x_ parts, restores EPUB parts, resets
+                         titles/durations) while keeping assignments on surviving
+                         parts and logging cleared ones. Returns per-week
+                         { isoDate, action, clearedSlotIds }
     people/            — GET: list members, POST: create member
     people/[id]/       — PATCH: update member, DELETE: remove member
     users/me/          — PATCH: update current user's displayName
@@ -1005,6 +1011,9 @@ const base = part.cbsRef ? `${part.title}（${part.cbsRef}）` : part.title;
 
 - Do not scrape jw.org / wol.jw.org (robots-disallowed, ToS prohibits)
 - Do not auto-commit EPUB imports — always go through the review screen first
+- Never silently overwrite edited weeks on re-import: show the re-import dialog
+  (app/components/ImportPage.js) and default to 保留之前的修改; only overwrite when
+  the admin explicitly chooses 捨棄修改，以 EPUB 為準 (mode 'replace')
 - Do not remove `'use client'` from `page.js` — it owns all interactive state
 - Do not call `new PrismaClient()` without `datasourceUrl` or outside `db.js` — always import the singleton
 - Do not initialize Firebase Admin SDK at module load time — `firebase-admin.js` uses lazy init inside `verifyIdToken()` to avoid build-time crashes
